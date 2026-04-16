@@ -1,0 +1,12 @@
+{
+    "mcpServers": {
+        "mcp-gsheets": {
+            "command": "python",
+            "args": ["mcp-gsheets/main.py"]
+        },
+        "mcp-sqlite": {
+            "command": "python",
+            "args": ["mcp-sqlite/main.py"]
+        }
+    }
+}
