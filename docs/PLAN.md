@@ -193,4 +193,113 @@ Poin ini diisi setelah test jalan — fokus edge case untuk production:
 
 ※ Plan v1 is Done ※
 
-<!-- Plan v2 dst. akan di-append di bawah sini setelah v1 selesai + ada perubahan/tambahan baru -->
+## Plan v2 — CI/CD Pipeline + Switch to langchain-google-genai
+
+**Tanggal:** 2026-04-16
+**Status:** IN PROGRESS
+
+### 0. Konteks
+
+Plan v1 selesai dengan 29/30 tests pass. 1 test gagal (`test_gemini_structured_response`) karena:
+- `gemini-3-flash-preview` returns empty via OpenAI-compat endpoint
+- `gemini-3-flash-preview` requires `thought_signature` for tool use via OpenAI-compat — LangChain `ChatOpenAI` tidak support
+- Agent tests forced to use `gemini-2.5-flash` sebagai workaround
+
+**Solusi:** Switch dari `langchain-openai` + OpenAI-compat endpoint ke `langchain-google-genai` + native Gemini API, yang handles `thought_signature` secara otomatis.
+
+### 1. Phase A — CI/CD Pipeline + Initial Push (DONE)
+
+**Tanggal:** 2026-04-16
+
+#### 1.1 Security Audit (sebelum push)
+
+| # | Issue | Severity | Action |
+|---|-------|----------|--------|
+| S1 | `tests/api/gemini.curl` — real Google API key | CRITICAL | Added `tests/api/*.curl` to `.gitignore` |
+| S2 | `tests/api/groq.curl` — real Groq API key | CRITICAL | Added `tests/api/*.curl` to `.gitignore` |
+| S3 | `app_dev.db` — dev database not ignored | HIGH | Added `*.db` to `.gitignore` |
+| S4 | `docs/PRD.md` line 78 — real `AUTH_TOKEN` value | MEDIUM | Redacted to `<your-vllm-auth-token>` |
+| S5 | `docs/PRD.md` line 77 — real vLLM endpoint URL | MEDIUM | Redacted to `<your-vllm-endpoint>` |
+| S6 | `.env.template` — real vLLM URL | MEDIUM | Cleared value |
+| S7 | `sample-data/` — 200 receipt images (large binaries) | LOW | Added to `.gitignore` |
+
+#### 1.2 Repository Setup
+
+| Repo | URL | Branch | Status |
+|------|-----|--------|--------|
+| `klaudia` | https://github.com/Laoode/klaudia | `feat/initial-setup` | Pushed |
+| `mcp-sqlite` | https://github.com/Laoode/mcp-sqlite | `feat/initial-setup` | Pushed |
+| `mcp-gsheets` | https://github.com/Laoode/mcp-gsheets | `feat/initial-setup` | Pushed (updated from existing) |
+| `agentic-data-entry` | https://github.com/Laoode/agentic-data-entry | `feat/initial-setup` | Pushed (main repo + submodules) |
+
+#### 1.3 Submodule Configuration
+
+```
+[submodule "klaudia"]     → https://github.com/Laoode/klaudia.git (branch: main)
+[submodule "mcp-sqlite"]  → https://github.com/Laoode/mcp-sqlite.git (branch: main)
+[submodule "mcp-gsheets"] → https://github.com/Laoode/mcp-gsheets.git (branch: main)
+```
+
+#### 1.4 CI/CD Pipeline (`.github/workflows/ci.yml`)
+
+```
+Jobs:
+1. lint       — ruff check + ruff format (app/, klaudia/, config/, tests/)
+2. unit-test  — pytest unit/mock tests (no live API needed)
+```
+
+Triggered on: push to `main`/`feat/**`, PRs to `main`.
+
+#### 1.5 .gitignore Protections
+
+```
+*.db                    # Database files
+tests/api/*.curl        # API test files with real tokens
+sample-data/            # Large binary files
+service_account.json    # Google credentials
+.env                    # Environment variables
+.claude/                # Claude Code dev files
+CLAUDE.md               # Claude Code instructions
+```
+
+### 2. Phase B — Switch to langchain-google-genai (PENDING)
+
+**Goal:** Replace `langchain-openai` + OpenAI-compat with `langchain-google-genai` native API → enable `gemini-3-flash-preview` for all agents → 30/30 tests.
+
+#### 2.1 Rencana Perubahan
+
+| File | Dari | Ke |
+|------|------|----|
+| `klaudia/pyproject.toml` | `langchain-openai==0.3.13` | `langchain-google-genai>=4.0.0` |
+| `pyproject.toml` | `openai>=1.30.0` | `google-genai>=1.0.0` |
+| `klaudia/core/supervisor/agent.py` | `ChatOpenAI(base_url=..., api_key=...)` | `ChatGoogleGenerativeAI(model=..., google_api_key=...)` |
+| `app/services/core/llm_client.py` | `httpx` + OpenAI-compat | `google-genai` SDK native |
+| `app/services/core/container.py` | `SupervisorAgent(llm_endpoint=...)` | `SupervisorAgent(llm_api_key=...)` |
+| `config/settings.py` | `llm_provider`, `llm_endpoint` | Remove (not needed for native API) |
+| `tests/.../test_sql_agent.py` | `ChatOpenAI`, `gemini-2.5-flash` | `ChatGoogleGenerativeAI`, `gemini-3-flash-preview` |
+| `tests/.../test_data_entry_team.py` | Same | Same |
+| `tests/.../test_llm_client.py` | Adapt to new LLMClient | |
+| `.env.template` | `LLM_PROVIDER`, `LLM_ENDPOINT` | Remove |
+
+#### 2.2 Tidak Berubah
+
+- MCP tools, tool_registry, prompts, graph structure, state management
+- Guardrails prompt injection (Groq/Llama)
+- ExtractionAgent/OCRClient (uses vLLM, not Gemini)
+- All test logic — hanya swap LLM instantiation
+
+#### 2.3 Done Criteria Phase B
+
+- [ ] `langchain-google-genai` installed, `langchain-openai` removed
+- [ ] SupervisorAgent uses `ChatGoogleGenerativeAI`
+- [ ] LLMClient uses `google-genai` SDK
+- [ ] All agent tests use `gemini-3-flash-preview`
+- [ ] `test_gemini_structured_response` passes (previously failed)
+- [ ] Full `pytest tests/` → **30/30 passed**
+
+### 3. Open Questions
+
+- **Q1:** Setelah PR `feat/initial-setup` di-merge ke `main` di keempat repo, submodule refs perlu di-update di main repo. Merge order: submodules dulu (klaudia, mcp-sqlite, mcp-gsheets), baru main repo.
+- **Q2:** Phase B changes akan di-push ke branch baru (`feat/gemini-native`) setelah `feat/initial-setup` di-merge.
+
+---
