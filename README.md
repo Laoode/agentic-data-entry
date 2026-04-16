@@ -1,0 +1,3 @@
+```bash
+uv sync --active
+```
