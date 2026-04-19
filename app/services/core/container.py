@@ -60,7 +60,6 @@ class KlaudiaContainer:
 
         # Supervisor
         container.supervisor = SupervisorAgent(
-            llm_endpoint=settings.llm_endpoint,
             llm_api_key=settings.llm_api_key,
             llm_model=settings.llm_model,
             mcp_sqlite=container.mcp_sqlite,

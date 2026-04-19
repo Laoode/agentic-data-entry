@@ -16,12 +16,7 @@ class Settings(BaseSettings):
     debug: bool = Field(default=True, alias="DEBUG")
     stage: str = Field(default="development", alias="STAGE")
 
-    # LLM
-    llm_provider: str = Field(default="openai", alias="LLM_PROVIDER")
-    llm_endpoint: str = Field(
-        default="https://generativelanguage.googleapis.com/v1beta/openai/",
-        alias="LLM_ENDPOINT",
-    )
+    # LLM (Google Gemini via native google-genai SDK)
     llm_model: str = Field(default="gemini-3-flash-preview", alias="LLM_MODEL")
     llm_api_key: str = Field(default="", alias="LLM_API_KEY")
     llm_temperature: float = Field(default=0.5, alias="LLM_TEMPERATURE")

@@ -10,7 +10,6 @@ from app.models.chat import (
 )
 from app.services.core.container import KlaudiaContainer
 from app.services.core.prompts import KLAUDIA_SYSTEM_PROMPT
-from app.services.extraction.agents.base import ExtractionAgent
 from klaudia.core.supervisor.tools.context import build_extraction_context, build_session_context
 
 logger = logging.getLogger(__name__)
@@ -24,11 +23,7 @@ class KlaudiaOrchestrator:
 
     def __init__(self, container: KlaudiaContainer) -> None:
         self._c = container
-        self._extraction_agent = ExtractionAgent(
-            llm_client=container.llm_client,
-            ocr_client=container.ocr_client,
-            db_client=container.db_client,
-        )
+        self._extraction_agent = container.extraction_agent
 
     async def process(
         self,
