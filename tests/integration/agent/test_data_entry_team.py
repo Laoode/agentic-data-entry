@@ -14,7 +14,7 @@ import time
 import uuid
 
 import pytest
-from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.prebuilt import create_react_agent
 from mcp import ClientSession
 from mcp.client.sse import sse_client
@@ -34,7 +34,7 @@ from klaudia.interfaces.tool_registry import MCPToolRegistry
 
 SHEET_ID = "1sYmDi2o55tZktSbgy60rIwZa-3gPqH_b5U7iN4jTCIo"
 SSE_GSHEETS = "http://localhost:8002/sse"
-AGENT_TEST_MODEL = os.environ.get("AGENT_TEST_MODEL", "gemini-2.5-flash")
+AGENT_TEST_MODEL = os.environ.get("AGENT_TEST_MODEL", "gemini-3-flash-preview")
 
 pytestmark = pytest.mark.skipif(
     not Settings().llm_api_key,
@@ -55,10 +55,9 @@ async def registry():
 @pytest.fixture
 def llm():
     s = Settings()
-    return ChatOpenAI(
+    return ChatGoogleGenerativeAI(
         model=AGENT_TEST_MODEL,
-        base_url=s.llm_endpoint,
-        api_key=s.llm_api_key,
+        google_api_key=s.llm_api_key,
         temperature=0.0,
     )
 

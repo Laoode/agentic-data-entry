@@ -9,7 +9,7 @@ import json
 import os
 
 import pytest
-from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.prebuilt import create_react_agent
 from mcp import ClientSession
 from mcp.client.sse import sse_client
@@ -18,7 +18,7 @@ from config.settings import Settings
 from klaudia.core.supervisor.agents.sql_agent.prompts import SQL_AGENT_PROMPT
 from klaudia.core.supervisor.tools.wrappers import get_sql_tools
 from klaudia.interfaces.tool_registry import MCPToolRegistry
-
+    
 
 pytestmark = pytest.mark.skipif(
     not Settings().llm_api_key,
@@ -36,16 +36,15 @@ async def registry():
         await reg.disconnect()
 
 
-AGENT_TEST_MODEL = os.environ.get("AGENT_TEST_MODEL", "gemini-2.5-flash")
+AGENT_TEST_MODEL = os.environ.get("AGENT_TEST_MODEL", "gemini-3-flash-preview")
 
 
 @pytest.fixture
 def llm():
     s = Settings()
-    return ChatOpenAI(
+    return ChatGoogleGenerativeAI(
         model=AGENT_TEST_MODEL,
-        base_url=s.llm_endpoint,
-        api_key=s.llm_api_key,
+        google_api_key=s.llm_api_key,
         temperature=0.0,
     )
 
@@ -114,10 +113,10 @@ async def test_sql_agent_answers_store_name_question(registry, llm):
             ]
         }
     )
-    content = result["messages"][-1].content
+    raw_content = result["messages"][-1].content
+    content = raw_content if isinstance(raw_content, str) else str(raw_content)
     calls = _tool_calls(result)
     assert calls, "agent never invoked a read tool"
-    # ALFAMART must appear either in the final answer or inside the tool output.
     combined = (content + " ".join(c for _, c in calls)).upper()
     assert "ALFAMART" in combined, f"ALFAMART missing from agent trace: final={content!r}, calls={calls}"
 

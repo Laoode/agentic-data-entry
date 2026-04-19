@@ -1,4 +1,4 @@
-"""Integration tests for LLM client - real Gemini API calls."""
+"""Integration tests for LLM client - real Gemini API calls via google-genai SDK."""
 
 import pytest
 
@@ -14,6 +14,12 @@ def settings():
 @pytest.fixture
 def llm(settings):
     return LLMClient(settings)
+
+
+pytestmark = pytest.mark.skipif(
+    not get_settings().llm_api_key,
+    reason="LLM_API_KEY not set — skipping live Gemini tests",
+)
 
 
 @pytest.mark.asyncio
