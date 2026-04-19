@@ -149,10 +149,7 @@ Poin ini diisi setelah test jalan — fokus edge case untuk production:
 - [ ] Error handling kalau MCP server down (timeout, retry, circuit breaker)
 - [ ] Concurrency: multiple simultaneous file upload di session yang sama
 - [ ] Rate limit Google Sheets API (100 req/100s/user per project) — butuh backoff
-- [ ] Mock tidak leak ke prod: env flag `USE_MOCK_OCR` harus false di prod
-- [ ] Schema migration strategy kalau `EXTRACTION_SCHEMA` berkembang
 - [x] Auth: `service_account.json` sekarang ada di repo — **harus dipindah keluar / .gitignore** sebelum push publik
-- [ ] SQL Agent: guard terhadap prompt injection yang memicu tool call berbahaya
 - [ ] Observability: logging structured (request_id, session_id, file_id) untuk trace end-to-end
 - [x] **B1 FIXED**: `tool_registry.py` args_schema — semua MCP tools sekarang punya Pydantic schema
 - [x] **B2 FIXED**: Team supervisor route normalization — LLM freeform output di-sanitize ke node name valid
@@ -193,10 +190,10 @@ Poin ini diisi setelah test jalan — fokus edge case untuk production:
 
 ※ Plan v1 is Done ※
 
-## Plan v2 — CI/CD Pipeline + Switch to langchain-google-genai
+## Plan v2 — Switch to langchain-google-genai
 
-**Tanggal:** 2026-04-16
-**Status:** IN PROGRESS
+**Tanggal:** 2026-04-16 (plan) → 2026-04-19 (eksekusi + hasil)
+**Status:** DONE
 
 ### 0. Konteks
 
@@ -207,66 +204,11 @@ Plan v1 selesai dengan 29/30 tests pass. 1 test gagal (`test_gemini_structured_r
 
 **Solusi:** Switch dari `langchain-openai` + OpenAI-compat endpoint ke `langchain-google-genai` + native Gemini API, yang handles `thought_signature` secara otomatis.
 
-### 1. Phase A — CI/CD Pipeline + Initial Push (DONE)
-
-**Tanggal:** 2026-04-16
-
-#### 1.1 Security Audit (sebelum push)
-
-| # | Issue | Severity | Action |
-|---|-------|----------|--------|
-| S1 | `tests/api/gemini.curl` — real Google API key | CRITICAL | Added `tests/api/*.curl` to `.gitignore` |
-| S2 | `tests/api/groq.curl` — real Groq API key | CRITICAL | Added `tests/api/*.curl` to `.gitignore` |
-| S3 | `app_dev.db` — dev database not ignored | HIGH | Added `*.db` to `.gitignore` |
-| S4 | `docs/PRD.md` line 78 — real `AUTH_TOKEN` value | MEDIUM | Redacted to `<your-vllm-auth-token>` |
-| S5 | `docs/PRD.md` line 77 — real vLLM endpoint URL | MEDIUM | Redacted to `<your-vllm-endpoint>` |
-| S6 | `.env.template` — real vLLM URL | MEDIUM | Cleared value |
-| S7 | `sample-data/` — 200 receipt images (large binaries) | LOW | Added to `.gitignore` |
-
-#### 1.2 Repository Setup
-
-| Repo | URL | Branch | Status |
-|------|-----|--------|--------|
-| `klaudia` | https://github.com/Laoode/klaudia | `feat/initial-setup` | Pushed |
-| `mcp-sqlite` | https://github.com/Laoode/mcp-sqlite | `feat/initial-setup` | Pushed |
-| `mcp-gsheets` | https://github.com/Laoode/mcp-gsheets | `feat/initial-setup` | Pushed (updated from existing) |
-| `agentic-data-entry` | https://github.com/Laoode/agentic-data-entry | `feat/initial-setup` | Pushed (main repo + submodules) |
-
-#### 1.3 Submodule Configuration
-
-```
-[submodule "klaudia"]     → https://github.com/Laoode/klaudia.git (branch: main)
-[submodule "mcp-sqlite"]  → https://github.com/Laoode/mcp-sqlite.git (branch: main)
-[submodule "mcp-gsheets"] → https://github.com/Laoode/mcp-gsheets.git (branch: main)
-```
-
-#### 1.4 CI/CD Pipeline (`.github/workflows/ci.yml`)
-
-```
-Jobs:
-1. lint       — ruff check + ruff format (app/, klaudia/, config/, tests/)
-2. unit-test  — pytest unit/mock tests (no live API needed)
-```
-
-Triggered on: push to `main`/`feat/**`, PRs to `main`.
-
-#### 1.5 .gitignore Protections
-
-```
-*.db                    # Database files
-tests/api/*.curl        # API test files with real tokens
-sample-data/            # Large binary files
-service_account.json    # Google credentials
-.env                    # Environment variables
-.claude/                # Claude Code dev files
-CLAUDE.md               # Claude Code instructions
-```
-
-### 2. Phase B — Switch to langchain-google-genai (PENDING)
+### 1. Phase A — Switch to langchain-google-genai (DONE)
 
 **Goal:** Replace `langchain-openai` + OpenAI-compat with `langchain-google-genai` native API → enable `gemini-3-flash-preview` for all agents → 30/30 tests.
 
-#### 2.1 Rencana Perubahan
+#### 1.1 Rencana Perubahan
 
 | File | Dari | Ke |
 |------|------|----|
@@ -281,25 +223,116 @@ CLAUDE.md               # Claude Code instructions
 | `tests/.../test_llm_client.py` | Adapt to new LLMClient | |
 | `.env.template` | `LLM_PROVIDER`, `LLM_ENDPOINT` | Remove |
 
-#### 2.2 Tidak Berubah
+#### 1.2 Tidak Berubah
 
 - MCP tools, tool_registry, prompts, graph structure, state management
 - Guardrails prompt injection (Groq/Llama)
 - ExtractionAgent/OCRClient (uses vLLM, not Gemini)
 - All test logic — hanya swap LLM instantiation
 
-#### 2.3 Done Criteria Phase B
+#### 1.3 Done Criteria Phase A
 
-- [ ] `langchain-google-genai` installed, `langchain-openai` removed
-- [ ] SupervisorAgent uses `ChatGoogleGenerativeAI`
-- [ ] LLMClient uses `google-genai` SDK
-- [ ] All agent tests use `gemini-3-flash-preview`
-- [ ] `test_gemini_structured_response` passes (previously failed)
-- [ ] Full `pytest tests/` → **30/30 passed**
+- [x] `langchain-google-genai` installed, `langchain-openai` removed
+- [x] SupervisorAgent uses `ChatGoogleGenerativeAI`
+- [x] LLMClient uses `google-genai` SDK
+- [x] All agent tests use `gemini-3-flash-preview`
+- [x] `test_gemini_structured_response` passes (previously failed)
 
-### 3. Open Questions
+### 2. Hasil Test (2026-04-19)
 
-- **Q1:** Setelah PR `feat/initial-setup` di-merge ke `main` di keempat repo, submodule refs perlu di-update di main repo. Merge order: submodules dulu (klaudia, mcp-sqlite, mcp-gsheets), baru main repo.
-- **Q2:** Phase B changes akan di-push ke branch baru (`feat/gemini-native`) setelah `feat/initial-setup` di-merge.
+`uv run pytest tests/ -v` → **30 passed, 0 failed** in 149.21s.
+
+| Suite | File | Tests | Status |
+|-------|------|-------|--------|
+| Agent | `tests/integration/agent/test_data_entry_team.py` | 3 | ✅ |
+| Agent | `tests/integration/agent/test_extraction.py` | 2 | ✅ |
+| Agent | `tests/integration/agent/test_guardrails.py` | 4 | ✅ |
+| Agent | `tests/integration/agent/test_llm_client.py` | 2 | ✅ (incl. `test_gemini_structured_response`) |
+| Agent | `tests/integration/agent/test_sql_agent.py` | 2 | ✅ |
+| DB | `tests/integration/database/test_db_client.py` | 4 | ✅ |
+| MCP | `tests/integration/mcp-gsheets/test_gsheets_tools.py` | 6 | ✅ |
+| MCP | `tests/integration/mcp-gsheets/test_mcp_gsheets.py` | 1 | ✅ |
+| MCP | `tests/integration/mcp-sqlite/test_mcp_sqlite.py` | 1 | ✅ |
+| MCP | `tests/integration/mcp-sqlite/test_sqlite_tools.py` | 3 | ✅ |
+| OCR | `tests/integration/ocr/test_ocr_mock.py` | 2 | ✅ |
+| **Total** | | **30** | **✅** |
+
+### 3. Bug yang Ditemukan Saat Eksekusi Plan v2
+
+**B4 — Gemini 400 INVALID_ARGUMENT: `items` missing on nested arrays** (`klaudia/interfaces/tool_registry.py`)
+
+- **Gejala:** `test_write_agent_appends_row` gagal saat agent mencoba memanggil `tool_append_rows`/`tool_update_cells`/`tool_batch_update_cells`. Error dari Gemini: `GenerateContentRequest.tools[0].function_declarations[0].parameters.properties[data].items.items: missing field`.
+- **Root cause:**
+  1. FastMCP mengekspos `list[list[Any]]` sebagai JSON Schema `{"type": "array", "items": {"type": "array", "items": {}}}`.
+  2. `langchain-google-genai._function_utils._dict_to_genai_schema` memperlakukan dict kosong `{}` sebagai falsy (`if schema:`) dan mengembalikan `None`, sehingga `items` pada inner array di-drop sebelum dikirim ke Gemini.
+  3. Gemini menolak `type: array` tanpa `items`.
+- **Fix:** Menambah helper `_normalize_schema()` di `klaudia/interfaces/tool_registry.py` yang mengganti `items` kosong/hilang dengan `{"type": "string"}` (permissive placeholder) sebelum schema diserahkan ke `StructuredTool`. Sekaligus mengganti jalur `_args_model()` + Pydantic `create_model` dengan dict passthrough (`StructuredTool.args_schema` menerima dict JSON Schema langsung), sehingga skema MCP tidak lagi kehilangan field `items` via Pydantic roundtrip.
+- **Dampak:** Semua 3 tool GSheets dengan payload `list[list[Any]]` sekarang callable dari `gemini-3-flash-preview`.
+
+### 4. Done Criteria Plan v2
+
+- [x] Full `pytest tests/` → 30/30 passed
+- [x] `test_gemini_structured_response` passes (sebelumnya gagal di Plan v1)
+- [x] `langchain-google-genai` installed, `langchain-openai` removed
+- [x] SupervisorAgent uses `ChatGoogleGenerativeAI`
+- [x] LLMClient uses `google-genai` SDK
+- [x] All agent tests use `gemini-3-flash-preview`
+- [x] Bug B4 (Gemini tool-schema nested array) fixed
+
+#### POTENTIAL CONCERNS:                                                                                                                            
+  - Fix B4 mempertipiskan tipe inner-array menjadi string; untuk tool_append_rows(data=list[list[Any]]) aman karena GSheets menerima string.     
+  Kalau tool lain kedepannya butuh nested numeric/bool dengan ketat, bisa re-assess pilihan placeholder.                                         
+  - MCPToolRegistry.connect() masih tidak punya timeout — kalau MCP server down, pytest akan hang (dicatat di Plan v1 post-test checklist, bukan
+  regresi baru). Siap untuk Plan v3. 
+
+※ Plan v2 is Done ※
 
 ---
+
+## Plan v3 — Hotfix: FastAPI startup `TypeError` pada `ExtractionAgent`
+
+**Tanggal:** 2026-04-19
+**Status:** DONE
+
+### 1. Gejala
+
+`bash startup.sh` → FastAPI lifespan gagal:
+
+```
+File "app/services/core/orchestrator.py", line 27, in __init__
+    self._extraction_agent = ExtractionAgent(
+TypeError: ExtractionAgent.__init__() got an unexpected keyword argument 'llm_client'
+ERROR:    Application startup failed. Exiting.
+```
+
+### 2. Root Cause
+
+Saat Plan v1 Phase A, `ExtractionAgent.__init__` dikurangi jadi `(ocr_client, db_client)` — dependency `llm_client` dihapus karena GLM-OCR output JSON langsung. `container.py:48-51` sudah di-update, tapi `orchestrator.py:25-31` **masih instansiasi ulang** `ExtractionAgent` dengan kwargs lama (`llm_client=...`). Runtime path baru ke-exercise pertama kali di startup real (bukan via pytest karena test instansiasi `ExtractionAgent` langsung, tidak lewat `KlaudiaOrchestrator.__init__`).
+
+### 3. Fix
+
+`app/services/core/orchestrator.py`:
+- Hapus import `ExtractionAgent` (tidak lagi dipakai di file ini).
+- Ganti duplikasi instansiasi dengan reuse dari container:
+  ```python
+  self._extraction_agent = container.extraction_agent
+  ```
+  Container adalah single owner untuk semua service → orchestrator cukup hold reference.
+
+### 4. Verification
+
+`bash startup.sh` → `logs/fastapi.log`:
+
+```
+2026-04-19 13:04:54,281 - INFO - app.services.core.container - KlaudiaContainer initialized
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000
+```
+
+Startup clean, MCP-SQLite (11 tools) + MCP-GSheets (16 tools) ter-connect normal.
+
+### 5. Catatan Kenapa Test Tidak Menangkap Ini
+
+`tests/integration/agent/test_extraction.py` instansiasi `ExtractionAgent` langsung, bukan lewat `KlaudiaOrchestrator`. Tidak ada integration test yang boot orchestrator penuh → kwarg mismatch lolos dari suite. **Action item untuk Plan berikutnya:** tambah smoke test yang invoke `KlaudiaOrchestrator(container)` untuk catch regresi wiring seperti ini (taruh di post-test checklist, belum dikerjakan di v3).
+
+※ Plan v3 is Done ※

@@ -82,6 +82,14 @@ The application relies on a Bottom Tab Navigation structure inside the `(tabs)` 
 * **Default Size:** `24px` for tab nav and menu lists, `18px`-`20px` for utility buttons.
 * **Treatment:** Linear/Outline style.
 
+### Icon Implementation
+- **Primary Method:** Use `@expo/vector-icons`.
+- **Active Tab Style:** Background View (circle) with `#CCFF00`, Icon color `#000000`.
+- **Inactive Tab Style:** Icon color `#71717A`.
+- **Specific Icons:** - Home: `solar:home-smile-linear` -> map to `Ionicons: home-outline`
+  - Sheets: `solar:document-text-linear` -> map to `MaterialCommunityIcons: table-large`
+  - Profile: `solar:user-circle-linear` -> map to `FontAwesome5: user-circle`
+
 ## 5. Development Directives for Claude
 1. Please structure the Expo Router layout files `_layout.tsx` properly to handle the bottom tabs.
 2. Build reusable UI components (e.g., `ChatBubble`, `DataGrid`, `MenuItem`) in a `/components` folder before assembling the screens.
