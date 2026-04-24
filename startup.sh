@@ -11,36 +11,36 @@ MCP_SQLITE_PORT=8001
 MCP_GSHEETS_PORT=8002
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PYTHON="$PROJECT_DIR/.venv/bin/python"
 
-# Create logs directory
 mkdir -p "$PROJECT_DIR/logs"
 
 echo -e "${GREEN}Starting Klaudia services...${NC}"
 
-# Start MCP-SQLite server (run from its directory for correct imports)
+# Start MCP-SQLite
 echo -e "${YELLOW}Starting MCP-SQLite on port $MCP_SQLITE_PORT...${NC}"
 cd "$PROJECT_DIR/mcp-sqlite"
 FASTMCP_PORT=$MCP_SQLITE_PORT SQLITE_DB="$PROJECT_DIR/app_dev.db" \
-  uv run --project "$PROJECT_DIR" python main.py --transport sse > "$PROJECT_DIR/logs/mcp-sqlite.log" 2>&1 &
+  "$PYTHON" main.py --transport sse > "$PROJECT_DIR/logs/mcp-sqlite.log" 2>&1 &
 echo $! > "$PROJECT_DIR/logs/mcp-sqlite.pid"
 echo -e "${GREEN}MCP-SQLite started (PID: $(cat "$PROJECT_DIR/logs/mcp-sqlite.pid"))${NC}"
 
-# Start MCP-GSheets server (run from its directory for correct imports)
+# Start MCP-GSheets
 echo -e "${YELLOW}Starting MCP-GSheets on port $MCP_GSHEETS_PORT...${NC}"
 cd "$PROJECT_DIR/mcp-gsheets"
 FASTMCP_PORT=$MCP_GSHEETS_PORT \
-  uv run --project "$PROJECT_DIR" python main.py --transport sse > "$PROJECT_DIR/logs/mcp-gsheets.log" 2>&1 &
+  "$PYTHON" main.py --transport sse > "$PROJECT_DIR/logs/mcp-gsheets.log" 2>&1 &
 echo $! > "$PROJECT_DIR/logs/mcp-gsheets.pid"
 echo -e "${GREEN}MCP-GSheets started (PID: $(cat "$PROJECT_DIR/logs/mcp-gsheets.pid"))${NC}"
 
-# Wait for MCP servers to be ready
 echo -e "${YELLOW}Waiting for MCP servers to start...${NC}"
 sleep 3
 
-# Start FastAPI (run from project root)
+# Start FastAPI
 echo -e "${YELLOW}Starting FastAPI on port $FASTAPI_PORT...${NC}"
 cd "$PROJECT_DIR"
-uv run uvicorn app.main:app --host 0.0.0.0 --port $FASTAPI_PORT > "$PROJECT_DIR/logs/fastapi.log" 2>&1 &
+"$PYTHON" -m uvicorn app.main:app --host 0.0.0.0 --port $FASTAPI_PORT \
+  > "$PROJECT_DIR/logs/fastapi.log" 2>&1 &
 echo $! > "$PROJECT_DIR/logs/fastapi.pid"
 echo -e "${GREEN}FastAPI started (PID: $(cat "$PROJECT_DIR/logs/fastapi.pid"))${NC}"
 

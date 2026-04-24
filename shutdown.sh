@@ -5,12 +5,13 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-FASTAPI_PORT=${PORT:-8000}
 MCP_SQLITE_PORT=8001
 MCP_GSHEETS_PORT=8002
+FASTAPI_PORT=${PORT:-8000}
 
 echo -e "${YELLOW}Stopping Klaudia services...${NC}"
 
+# Kill by PID file
 for service in fastapi mcp-sqlite mcp-gsheets; do
     pidfile="logs/$service.pid"
     if [ -f "$pidfile" ]; then
@@ -19,11 +20,21 @@ for service in fastapi mcp-sqlite mcp-gsheets; do
             kill "$pid"
             echo -e "${GREEN}Stopped $service (PID: $pid)${NC}"
         else
-            echo -e "${YELLOW}$service already stopped${NC}"
+            echo -e "${YELLOW}$service PID $pid already gone${NC}"
         fi
         rm -f "$pidfile"
     else
         echo -e "${YELLOW}No PID file for $service${NC}"
+    fi
+done
+
+# Fallback: kill anything still holding the ports
+echo -e "${YELLOW}Checking for leftover processes on ports...${NC}"
+for port in $FASTAPI_PORT $MCP_SQLITE_PORT $MCP_GSHEETS_PORT; do
+    pids=$(lsof -ti tcp:$port 2>/dev/null | tr '\n' ' ')
+    if [ -n "$pids" ]; then
+        kill $pid 2>/dev/null
+        echo -e "${GREEN}Killed leftover on port $port (PIDs: $pids)${NC}"
     fi
 done
 
