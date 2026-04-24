@@ -10,28 +10,35 @@ The application relies on a Bottom Tab Navigation structure inside the `(tabs)` 
 * **Style:** Floating or sticky bottom bar with heavy blur/glassmorphism background (`expo-blur`).
 * **Active State:** Tab icons have an oval/pill-shaped background `#CCFF00` with the icon colored `#000000`.
 * **Inactive State:** Icons are colored `#71717A` (zinc) with no background.
-* **Tabs:** Home/Chat (left), Sheet/Data (center), Profile (right).
+* **Tabs:** Home(1), Chat (2), Sheet/Data (3), Profile (4).
 
 ### 1.2 Screens Breakdown
-**A. Chat Page (`/chat`) - AI Assistant Interface**
+**A. Home Page (/index) - The Command Center**
+* **Header:** User Avatar (top left), Notification/Status icon (top right). Greeting text (e.g., "Hello, Ryuuky").
+* **Hero Section:** Large, inviting text ("How can I help automate your data today?") followed by a prominent Primary CTA Button ("Start Data Entry Agent") utilizing the #CCFF00 accent.
+* **Quick Prompts (Horizontal Scroll):** Pill-shaped chips for common zero-shot tasks to reduce cognitive load (e.g., "Scan Receipt", "Sync to Sheets", "Monthly Report", "Manual Entry"). Tapping these routes to /chat with a pre-filled intent.
+* **Agentic Automations Section:** A 2-column grid displaying complex workflow cards (e.g., "Batch Processing", "Expense Analysis"). Dark surfaces (#0C0C0E) with distinct icons and brief descriptions.
+* **Recently Processed:** A mini-list showing the latest MCP actions (e.g., "Alfamart Receipt Extracted - 10 mins ago") providing a quick bridge to the /sheet reality.
+
+**B. Chat Page (`/chat`) - AI Assistant Interface**
 * **Header:** Back button (left), "AI Chat" title (center), Settings hamburger menu (right).
 * **Scrollable Content:** * **AI Bubble (Left):** Dark grey surface (`#161618`), text white.
   * **User Bubble (Right):** Accent surface (`#CCFF00`), text black. 
   * **Media Support:** Bubbles must support image rendering (for scanned receipts) with rounded corners.
 * **Input Area (Bottom):** * Row of utility icons on the left (camera, gallery, folder).
   * Text input field (pill-shaped, dark surface).
-  * Send/Voice button on the right with `#CCFF00` background.
+  * Send button on the right with `#CCFF00` background.
 
-**B. Sheet Laporan Page (`/sheet`) - MCP Google Sheets Visualizer**
+**C. Sheet Laporan Page (`/sheet`) - MCP Google Sheets Visualizer**
 * **Header:** Back button (left), "Laporan Struk - MCP" title (center), context icons (right).
 * **Context:** This screen visualizes data fetched/manipulated via the MCP Google Sheets integration.
 * **Content (Data Grid) Tailored with Sheet Connected in Google Sheet**
 
-**C. Profile Page (`/profile`)**
+**D. Profile Page (`/profile`)**
 * **Header:** "Profile" title (center).
 * **Hero Section:** Circular large Avatar, Username ("Ryuuky"), Email below username.
 * **List Menu Section:** Rendered as a distinct card with internal dividers.
-  * **Items:** Settings, MCP Connection (shows mini icons of GSheets/GDrive), Activity History, Contact Us, Privacy Policy.
+  * **Items:** Settings, MCP Connection (shows mini icons of GSheets,GDrive), Activity History, Contact Us, Privacy Policy.
   * **Item Layout:** Icon (left), Title, Chevron Right (right).
 
 ---

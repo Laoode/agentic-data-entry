@@ -96,3 +96,27 @@ class AppDBClient:
             "SELECT * FROM metadata_file WHERE session_id = ? ORDER BY created_at",
             (session_id,),
         )
+    
+    async def get_sessions(self, user_id: int) -> list[dict[str, Any]]:
+        return await self.fetchall(
+            """
+            SELECT session_id, session_name, created_at, updated_at
+            FROM session
+            WHERE user_id = ?
+            ORDER BY updated_at DESC
+            """,
+            (user_id,),
+        )
+    
+    async def get_session_messages(
+        self, session_id: int
+    ) -> list[dict[str, Any]]:
+        return await self.fetchall(
+            """
+            SELECT sender, message_text, file_id, timestamp
+            FROM conversation
+            WHERE session_id = ?
+            ORDER BY timestamp ASC
+            """,
+            (session_id,),
+        )

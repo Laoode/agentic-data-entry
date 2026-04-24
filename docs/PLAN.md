@@ -336,3 +336,168 @@ Startup clean, MCP-SQLite (11 tools) + MCP-GSheets (16 tools) ter-connect normal
 `tests/integration/agent/test_extraction.py` instansiasi `ExtractionAgent` langsung, bukan lewat `KlaudiaOrchestrator`. Tidak ada integration test yang boot orchestrator penuh → kwarg mismatch lolos dari suite. **Action item untuk Plan berikutnya:** tambah smoke test yang invoke `KlaudiaOrchestrator(container)` untuk catch regresi wiring seperti ini (taruh di post-test checklist, belum dikerjakan di v3).
 
 ※ Plan v3 is Done ※
+
+---
+
+## Plan v4 — SSE Streaming: Token-by-token + Agentic Progress
+
+**Tanggal:** 2026-04-19
+**Status:** DONE
+**Scope:** Backend only. Persiapan kontrak event untuk frontend di Plan v6.
+
+### 1. Tujuan
+
+Response Klaudia muncul kata-per-kata (seperti ChatGPT) plus event "agentic progress" (step routing, tool calls, extraction) sepanjang pipeline. Non-streaming endpoint (`POST /v1/chat`) tetap dipertahankan apa adanya untuk kebutuhan test & fallback.
+
+### 2. Arsitektur Streaming
+
+```
+Client ──SSE── FastAPI (/v1/chat/stream)
+                    │
+                    ▼
+        KlaudiaOrchestrator.stream()          (async generator, event dict)
+                    │
+        ┌───────────┼───────────────┐
+        │ guardrail │ extraction    │
+        │ session   │ save message  │
+        └───────────┼───────────────┘
+                    ▼
+        SupervisorAgent.stream_conversation() (wraps graph.astream)
+                    │
+                    ▼
+        LangGraph astream(stream_mode=["messages","updates"])
+                    │
+        ┌───────────┴───────────────┐
+        │ messages  : per-token     │ ← filter by tag "final_answer"
+        │ updates   : node state    │ ← emit "step" + harvest tool names
+        └───────────────────────────┘
+```
+
+Kunci desain: **tag-based filtering pada LLM call**. Supervisor punya 2 panggilan LLM:
+- routing (`with_structured_output(Router)`) — di-tag `nostream` agar tool-call chunk Gemini tidak bocor ke frontend.
+- final reply (`llm.invoke(state["messages"])`) — di-tag `final_answer` agar hanya token inilah yang di-emit sebagai `type: token` ke client.
+
+Token dari sub-agent (sql_agent ReAct loop, data_entry_team) tidak di-stream ke frontend — hanya namanya yang tampil via event `step`/`tool`.
+
+### 3. Event Schema (SSE)
+
+Frame SSE: `event: <type>\ndata: <json>\n\n`
+
+| Event       | Payload fields                                                 | Emitted by                         |
+|-------------|----------------------------------------------------------------|------------------------------------|
+| `session`   | `session_id`                                                   | orchestrator (awal)                |
+| `guardrail` | `stage` (input/output), `status` (checking/passed/rejected), `message?` | orchestrator                    |
+| `extraction`| `status`, `file_name`, `file_id?`, `pages?`, `summary?`        | orchestrator                        |
+| `step`      | `node`, `next`                                                 | supervisor (graph updates mode)     |
+| `tool`      | `name`                                                         | supervisor (harvest dari update)    |
+| `token`     | `text`                                                         | supervisor (messages mode, tag)     |
+| `done`      | `session_id`, `processing_time_ms`, `tools_used`, `content`    | orchestrator (akhir)                |
+| `error`     | `message`                                                      | orchestrator / endpoint (on error)  |
+
+Client merakit teks dari rentetan `token.text`; `done.content` dipakai untuk rekonsiliasi post-guardrail-output (karena output guardrail bisa mengganti teks setelah streaming selesai).
+
+### 4. Perubahan Kode
+
+#### 4.1 `klaudia/core/supervisor/router.py`
+Tambah tag pada 2 LLM call di `supervisor_node`:
+
+```python
+router_llm = llm.with_structured_output(Router).with_config({"tags": ["nostream"]})
+response = router_llm.invoke(messages)
+...
+final_llm = llm.with_config({"tags": ["final_answer"]})
+reply = final_llm.invoke(state["messages"])
+```
+
+#### 4.2 `klaudia/core/supervisor/agent.py`
+Tambah `async def stream_conversation(messages, extraction_data) -> AsyncIterator[dict]`:
+- panggil `self._graph.astream(state, config={"recursion_limit": 50}, stream_mode=["messages", "updates"])`
+- mode `messages`: filter `"final_answer" in tags` → yield `{"type":"token","data":{"text":…}}`
+- mode `updates`: yield `{"type":"step","data":{"node","next"}}` plus `{"type":"tool","data":{"name"}}` untuk setiap message ber-`name`
+- fallback: kalau callback streaming Gemini tidak nyala, ambil konten AIMessage terakhir dari node `supervisor`
+- terakhir yield `{"type":"final","data":{"content","tools_called","metadata":{"routed_to"}}}`
+
+`process_conversation()` tetap apa adanya (non-breaking).
+
+#### 4.3 `app/services/core/orchestrator.py`
+Tambah `async def stream(messages, session_id, user_id, user_name) -> AsyncIterator[dict]`:
+- replicate pipeline `process()` tapi yield event di setiap milestone
+- konsumsi `supervisor.stream_conversation()`; event `final` tidak diteruskan — dipakai untuk rakit `content` + `tools_used`
+- output guardrail tetap dijalankan; kalau gagal, emit `guardrail/output/rejected` dan swap `content` di event `done`
+- exception di-wrap jadi `{"type":"error","data":{"message":…}}`
+
+`process()` tetap; dipakai oleh `/v1/chat` non-streaming + test-suite lama.
+
+#### 4.4 `app/routes/v1/chat.py`
+- tambah `POST /v1/chat/stream` → `StreamingResponse(event_source(), media_type="text/event-stream", headers={Cache-Control, Connection, X-Accel-Buffering: no})`
+- `event_source()` iterasi `orchestrator.stream(...)` dan format jadi frame SSE
+- honor `req.is_disconnected()` agar client yang putus menghentikan loop
+- endpoint `POST /v1/chat` tidak berubah
+
+### 5. Testing
+
+File baru: `tests/integration/agent/test_streaming.py` (mengikuti pola `test_sql_agent.py` — skip kalau `LLM_API_KEY` kosong).
+
+- `test_stream_conversation_emits_final_event_with_content`: assert event `final` muncul terakhir, ada `step`, `final.content` tidak kosong, `routed_to ∈ {FINISH, sql_agent, data_entry_team}`.
+- `test_stream_conversation_emits_only_known_event_types`: semua event harus salah satu dari `{step, tool, token, final}`.
+
+Hasil run:
+
+```
+tests/integration/agent/test_streaming.py::test_stream_conversation_emits_final_event_with_content PASSED
+tests/integration/agent/test_streaming.py::test_stream_conversation_emits_only_known_event_types     PASSED
+2 passed in 22.29s
+```
+
+Verifikasi wiring FastAPI:
+
+```python
+>>> [r.path for r in app.routes if 'chat' in r.path]
+['/v1/chat', '/v1/chat/stream']
+```
+
+### 6. Cara Pakai dari Client
+
+```bash
+curl -N -X POST http://localhost:8000/v1/chat/stream \
+  -H 'Content-Type: application/json' \
+  -d '{"messages":[{"role":"user","content":"Hi"}],"user_id":1}'
+```
+
+Stream frame contoh:
+
+```
+event: session
+data: {"session_id": 12}
+
+event: guardrail
+data: {"stage": "input", "status": "passed"}
+
+event: step
+data: {"node": "supervisor", "next": "FINISH"}
+
+event: token
+data: {"text": "Hel"}
+
+event: token
+data: {"text": "lo"}
+
+event: done
+data: {"session_id": 12, "processing_time_ms": 1845, "tools_used": [], "content": "Hello"}
+```
+
+### 7. Catatan untuk Plan v6 (Frontend)
+
+- Parser SSE client cukup dispatch berdasarkan `event.type`; state machine: `session → guardrail → (extraction?) → step* → token* → done`.
+- Token append ke state draft; ketika `done` datang, replace draft dengan `done.content` untuk antisipasi output-guardrail swap.
+- `step` & `tool` bisa ditampilkan sebagai "Klaudia sedang memeriksa database…" / "Menulis ke GSheets…" (mapping node→label di frontend).
+- Error handling: event `error` → tampilkan toast; juga handle `EventSource` close.
+
+### 8. Risiko & Tidak-Dikerjakan
+
+- **Provider streaming dependency.** Kalau `ChatGoogleGenerativeAI` tidak memancarkan chunk via callback, fallback di `stream_conversation` memakai AIMessage terakhir dari node supervisor (tidak ada token-granular). Frontend tetap dapat `done.content`.
+- **Sub-agent tokens.** Tidak di-stream by design. Jika di masa depan ingin verbose mode, tinggal extend filter tag (mis. tambah `"subagent"` untuk read/write agent).
+- **Cancellation end-to-end.** `req.is_disconnected()` menghentikan loop SSE; namun graph di LangGraph masih menyelesaikan iteration berjalan — tidak ada hard-abort. Good enough untuk v4.
+- **Smoke test orchestrator-level** (action item Plan v3) belum ditambahkan; tetap dicatat sebagai pending untuk Plan berikutnya.
+
+※ Plan v4 is Done ※
