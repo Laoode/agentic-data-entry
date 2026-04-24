@@ -1,6 +1,7 @@
 import logging
 import re
 import time
+from contextlib import contextmanager
 from typing import Any, AsyncIterator
 
 from app.models.chat import (
@@ -15,6 +16,11 @@ from klaudia.core.supervisor.tools.context import build_extraction_context, buil
 logger = logging.getLogger(__name__)
 
 
+@contextmanager
+def _nullctx():
+    yield None
+
+
 class KlaudiaOrchestrator:
     """Main conversation orchestrator.
 
@@ -24,6 +30,7 @@ class KlaudiaOrchestrator:
     def __init__(self, container: KlaudiaContainer) -> None:
         self._c = container
         self._extraction_agent = container.extraction_agent
+        self._langfuse = container.langfuse
 
     async def process(
         self,
@@ -38,6 +45,53 @@ class KlaudiaOrchestrator:
         if session_id is None:
             session_id = await self._c.db_client.create_session(user_id)
 
+        langfuse = self._langfuse
+        trace_cm = (
+            langfuse.trace_attributes(
+                session_id=session_id, user_id=user_id, tags=["klaudia", "chat"]
+            )
+            if langfuse is not None
+            else _nullctx()
+        )
+        span_cm = (
+            langfuse.span(
+                "klaudia.process",
+                as_type="agent",
+                input={"user_text": messages[-1].content, "user_name": user_name},
+                metadata={"session_id": session_id, "user_id": user_id},
+            )
+            if langfuse is not None
+            else _nullctx()
+        )
+
+        with trace_cm, span_cm as turn_obs:
+            response = await self._process_inner(
+                messages, session_id, user_id, user_name, start
+            )
+            if turn_obs is not None:
+                try:
+                    turn_obs.update(
+                        output={
+                            "content": response.message.content,
+                            "tools_used": response.tools_used,
+                            "processing_time_ms": response.processing_time_ms,
+                        }
+                    )
+                except Exception:
+                    pass
+            if langfuse is not None:
+                langfuse.flush()
+            return response
+
+    async def _process_inner(
+        self,
+        messages: list[KlaudiaMessage],
+        session_id: int,
+        user_id: int,
+        user_name: str,
+        start: float,
+    ) -> KlaudiaResponse:
+
         # 2. Get last user message text
         user_msg = messages[-1]
         user_text = user_msg.content
@@ -45,7 +99,9 @@ class KlaudiaOrchestrator:
         # 3. Guardrails (input)
         guard_result = await self._c.guardrails.validate_input(user_text)
         if not guard_result.passed:
-            return self._rejection_response(session_id, guard_result.rejection_message, start)
+            return self._rejection_response(
+                session_id, guard_result.rejection_message, start
+            )
 
         # 4. Save user message
         await self._c.db_client.save_message(session_id, user_id, "user", user_text)
@@ -99,6 +155,8 @@ class KlaudiaOrchestrator:
         agent_response = await self._c.supervisor.process_conversation(
             messages=llm_messages,
             extraction_data=extraction_data,
+            session_id=session_id,
+            user_id=user_id,
         )
 
         # 8. Post-process: remove thinking tokens
@@ -140,6 +198,29 @@ class KlaudiaOrchestrator:
             if session_id is None:
                 session_id = await self._c.db_client.create_session(user_id)
             yield {"type": "session", "data": {"session_id": session_id}}
+
+            langfuse = self._langfuse
+            trace_cm = (
+                langfuse.trace_attributes(
+                    session_id=session_id, user_id=user_id, tags=["klaudia", "chat", "stream"]
+                )
+                if langfuse is not None
+                else _nullctx()
+            )
+            span_cm = (
+                langfuse.span(
+                    "klaudia.stream",
+                    as_type="agent",
+                    input={"user_text": messages[-1].content, "user_name": user_name},
+                    metadata={"session_id": session_id, "user_id": user_id},
+                )
+                if langfuse is not None
+                else _nullctx()
+            )
+            # Intentionally NOT using `with` as an async generator wrapper so events
+            # keep streaming; manually enter and ensure exit in finally block.
+            _entered_trace = trace_cm.__enter__()
+            turn_obs = span_cm.__enter__()
 
             user_msg = messages[-1]
             user_text = user_msg.content
@@ -214,6 +295,8 @@ class KlaudiaOrchestrator:
             async for event in self._c.supervisor.stream_conversation(
                 messages=llm_messages,
                 extraction_data=extraction_data,
+                session_id=session_id,
+                user_id=user_id,
             ):
                 if event["type"] == "final":
                     final_content = event["data"]["content"]
@@ -235,6 +318,17 @@ class KlaudiaOrchestrator:
             await self._c.db_client.update_session_timestamp(session_id)
 
             elapsed = int((time.time() - start) * 1000)
+            if turn_obs is not None:
+                try:
+                    turn_obs.update(
+                        output={
+                            "content": content,
+                            "tools_used": tools_used,
+                            "processing_time_ms": elapsed,
+                        }
+                    )
+                except Exception:
+                    pass
             yield {
                 "type": "done",
                 "data": {
@@ -244,8 +338,17 @@ class KlaudiaOrchestrator:
                     "content": content,
                 },
             }
+            span_cm.__exit__(None, None, None)
+            trace_cm.__exit__(None, None, None)
+            if langfuse is not None:
+                langfuse.flush()
         except Exception as exc:
             logger.exception("Stream pipeline error")
+            try:
+                span_cm.__exit__(type(exc), exc, exc.__traceback__)
+                trace_cm.__exit__(type(exc), exc, exc.__traceback__)
+            except Exception:
+                pass
             yield {"type": "error", "data": {"message": str(exc)}}
 
     def _rejection_response(

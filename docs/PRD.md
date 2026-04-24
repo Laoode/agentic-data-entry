@@ -859,7 +859,7 @@ class KlaudiaContainer:
 ## 10. DEVELOPMENT MODE
 
 **Dynamic Staging:**
-- In development mode, use mock OCR responses to avoid vLLM bottlenecks
+- In development mode, use mock OCR KIE responses to avoid vLLM bottlenecks
 - Apply to all services with high latency
 
 ```python

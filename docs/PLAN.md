@@ -501,3 +501,196 @@ data: {"session_id": 12, "processing_time_ms": 1845, "tools_used": [], "content"
 - **Smoke test orchestrator-level** (action item Plan v3) belum ditambahkan; tetap dicatat sebagai pending untuk Plan berikutnya.
 
 ※ Plan v4 is Done ※
+
+---
+
+## Plan v5 — Observability dengan Langfuse
+
+**Tanggal:** 2026-04-24
+**Status:** DONE
+
+### 0. Motivasi
+
+Persiapan menuju Plan v6 (frontend React Native + Expo). Sebelum antarmuka dibangun, user ingin bisa **verifikasi manual di Langfuse dashboard** bahwa:
+- routing supervisor jalan sesuai PRD (FINISH / sql_agent / data_entry_team),
+- tool-calls di sub-agent (MCP-SQLite, MCP-GSheets) benar-benar dipanggil,
+- prompt & response Gemini (chat + guardrails + OCR) visible per span,
+- trace bisa di-filter per `session_id` + `user_id` agar bisa trace bug dari sisi klien nanti.
+
+Credential sudah ada di `.env` (`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL`).
+
+### 1. Findings (State Sebelum v5)
+
+| # | Area | Kondisi | Gap |
+|---|------|---------|-----|
+| F1 | Langfuse SDK | Belum terpasang | Tambah `langfuse>=4.5.0` (v4.x pakai OpenTelemetry di bawahnya) |
+| F2 | LangChain/LangGraph tracing | Tidak ada | Butuh `CallbackHandler` di-inject ke `graph.ainvoke` / `graph.astream` |
+| F3 | Non-LangChain LLM call | `LLMClient` (google-genai), `check_prompt_injection` (Groq), `OCRClient` (vLLM) tidak tercatat | Butuh manual span (`as_type="generation"`) |
+| F4 | Top-level pipeline phase | Orchestrator `process()` / `stream()` tidak ada span wrapper | Butuh agent-level span + `trace_attributes` untuk propagate session/user id |
+| F5 | Fail-behaviour | Belum ada; risiko hard-fail kalau Langfuse down | Semua wrapper wajib fail-open (tracing failure ≠ pipeline failure) |
+
+### 2. Keputusan Desain
+
+| # | Keputusan | Alasan |
+|---|-----------|--------|
+| D1 | Satu kelas `LangfuseService` sebagai thin wrapper di `app/services/core/observability.py` | DRY — client init + CallbackHandler + `span()` context + `trace_attributes()` + `langchain_config()` di satu tempat. Komponen lain cukup terima `Optional[LangfuseService]`. |
+| D2 | **Fail-open** di semua level: kalau credential kosong → `enabled=False`, semua method no-op; kalau runtime error → log debug, lanjut | Observability tidak boleh menjatuhkan production pipeline. |
+| D3 | LangChain/LangGraph di-instrument via `CallbackHandler` + `langchain_config()` (merge ke RunnableConfig) | v4 SDK sudah support; zero-touch di dalam graph code. Supervisor routing, sub-agent ReAct loop, LLM chunks → semua auto-traced. |
+| D4 | Non-LangChain call (google-genai, Groq, vLLM) pakai `client.start_as_current_observation(as_type="generation", ...)` manual | Supaya usage tokens + prompt/response visible di dashboard sebagai proper "generation" (bukan generic span). |
+| D5 | Orchestrator wrap seluruh turn dengan `span(as_type="agent")` + `trace_attributes(session_id, user_id, tags)` | Semua sub-span otomatis ikut parent trace + bisa di-filter per session di dashboard. |
+| D6 | Pass `session_id`/`user_id` ke SupervisorAgent lewat `process_conversation` / `stream_conversation` argument, lalu di-inject ke RunnableConfig via `_graph_config()` helper | Sebelumnya supervisor buta terhadap context; sekarang trace Langfuse bisa di-filter dari dashboard. |
+| D7 | Stream orchestrator pakai **manual `__enter__` / `__exit__`** untuk contextmanager, bukan `with` block | Async generator + `with` + `yield` = exit tidak deterministik. Manual enter/exit di `try/finally` aman untuk kasus streaming. |
+| D8 | Tag trace dengan `["klaudia", "chat"]` / `["klaudia", "chat", "stream"]` / `["klaudia", "supervisor"]` | Filter cepat di dashboard antara chat vs stream vs sub-agent. |
+
+### 3. Arsitektur Trace di Langfuse
+
+```
+Trace (root — session_id + user_id propagated)
+├── klaudia.process  (agent)              ← orchestrator top-level
+│   ├── guardrail.validate_input  (guardrail)
+│   │   ├── guardrail.prompt_injection  (generation, Groq)
+│   │   └── guardrail.scope_check       (generation, Gemini)
+│   ├── extraction_agent.process  (agent, kalau ada attachment)
+│   │   └── glm-ocr.extract_image     (generation, vLLM)
+│   ├── LangGraph: klaudia.supervisor.invoke  (LangChain, auto)
+│   │   ├── supervisor node
+│   │   │   ├── router LLM call           (tag: nostream)
+│   │   │   └── final reply LLM call      (tag: final_answer)
+│   │   ├── sql_agent node               (ReAct + MCP tool calls)
+│   │   └── data_entry_team node         (per sub-agent + MCP tool calls)
+│   └── guardrail.validate_output  (guardrail)
+│       └── guardrail.output_check     (generation, Gemini)
+```
+
+Stream variant (`klaudia.stream`) mirror sama tapi di-wrap manual contextmanager karena async generator.
+
+### 4. Perubahan Kode
+
+#### 4.1 Dependency + Settings
+- `pyproject.toml`: tambah `langfuse>=4.5.0`.
+- `config/settings.py`: tambah `langfuse_public_key`, `langfuse_secret_key`, `langfuse_base_url`, `langfuse_enabled` (semua dengan default aman).
+
+#### 4.2 `app/services/core/observability.py` (baru)
+Kelas `LangfuseService`:
+- `__init__` — fail-open: return early kalau disabled atau cred kosong; init `Langfuse(...)` + `CallbackHandler()` di dalam try/except.
+- `enabled`, `client`, `callback_handler` — properties.
+- `langchain_config(session_id, user_id, tags, metadata, run_name)` — return `{}` kalau disabled; else `{"callbacks":[cb], "metadata":{"langfuse_session_id":..., "langfuse_user_id":..., "langfuse_tags":[...]}, "run_name":...}`.
+- `span(name, as_type, input, metadata)` contextmanager — yield observation atau `None`; semua exception di-swallow.
+- `trace_attributes(session_id, user_id, tags)` contextmanager — bungkus `langfuse.propagate_attributes(...)`.
+- `flush()`, `shutdown()` — safe no-op kalau disabled.
+
+#### 4.3 `app/services/core/container.py`
+- Init `LangfuseService` **paling awal** di `KlaudiaContainer.create(...)` (sebelum service lain).
+- Inject ke `LLMClient`, `OCRClient`, `ExtractionAgent`, `GuardrailsAgent`, `SupervisorAgent`.
+- Tambah `self.langfuse.shutdown()` di `shutdown()` setelah service lain close.
+
+#### 4.4 `app/services/core/llm_client.py`
+- Constructor terima `langfuse: Optional[LangfuseService]`.
+- `chat()` tambah parameter `span_name="gemini.generate_content"` supaya caller bisa rename (mis. `"guardrail.scope_check"`).
+- Bungkus panggilan `generate_content` dengan `langfuse.span(as_type="generation", input=messages, metadata={model,temperature,max_output_tokens})`.
+- Update span `output=text`, `usage_details=_extract_usage(response)` (helper yang baca `prompt_token_count` / `candidates_token_count` / `total_token_count` dari `response.usage_metadata`).
+- Error path: `obs.update(level="ERROR", status_message=...)` lalu raise.
+
+#### 4.5 `app/services/extraction/infra/ocr_client.py`
+- Constructor terima `langfuse`.
+- `extract_json_from_image` wrap di span `glm-ocr.extract_image` (`as_type="generation"`, metadata mencantumkan `model`, `mock`, `image_bytes`).
+- Mock path tetap di-log (dengan `model=glm-ocr-mock` supaya beda dari production).
+
+#### 4.6 `app/services/extraction/agents/base.py`
+- Constructor terima `langfuse`.
+- Refactor `process()` jadi outer span wrapper + `_process_inner()` agar span selalu dapat `output` (file_id, pages count, status, summary) di akhir turn.
+
+#### 4.7 `app/services/guardrails/*`
+- `agent.py`: constructor terima `langfuse`. `validate_input` + `validate_output` wrap di span `as_type="guardrail"`. Input/output diset di span untuk audit.
+- `base.py::check_prompt_injection`: wrap Groq call di span `as_type="generation"`. Fail-open pattern dipertahankan — guard down ≠ reject.
+- `scope.py` + `output.py`: tambah `span_name="guardrail.scope_check"` / `"guardrail.output_check"` ke `llm_client.chat()`.
+
+#### 4.8 `klaudia/core/supervisor/agent.py`
+- Constructor terima `langfuse`.
+- Helper baru `_graph_config(session_id, user_id, run_name)` — merge `{"recursion_limit": 50}` dengan `langfuse.langchain_config(...)`. Inilah satu-satunya tempat yang tahu bagaimana LangGraph dikonfigurasi untuk Langfuse.
+- `process_conversation` / `stream_conversation` tambah parameter `session_id`, `user_id`. Dipakai oleh `_graph_config` untuk tag trace.
+
+#### 4.9 `app/services/core/orchestrator.py`
+- Simpan `self._langfuse = container.langfuse`.
+- `process()`: bungkus dengan `trace_attributes(session_id, user_id, tags=["klaudia","chat"])` + `span("klaudia.process", as_type="agent", input={user_text, user_name})`. Span final di-update dengan `content`, `tools_used`, `processing_time_ms`. `flush()` sebelum return.
+- `stream()`: **manual `__enter__` / `__exit__`** untuk trace + span karena async generator. Cleanup di success path (setelah yield `done`) dan error path (di `except`) terpisah. Tags `["klaudia","chat","stream"]`.
+- Module-level helper `_nullctx()` untuk fallback kalau `langfuse is None`.
+
+### 5. Testing
+
+Dua lapis:
+
+**Layer A — unit (hermetic, selalu jalan):** `tests/unit/test_observability.py`
+- 6 test yang verify fail-open semantics: missing credential → disabled; `LANGFUSE_ENABLED=false` → disabled; `langchain_config()` return `{}` saat disabled; `span()` yield `None` saat disabled; `trace_attributes()` no-op; `flush/shutdown` safe.
+
+**Layer B — smoke (live, skip kalau cred kosong):** `tests/integration/observability/test_langfuse.py`
+- 4 test yang benar-benar emit trace ke Langfuse cloud: init, manual span, trace_attributes + nested span, `langchain_config()` shape saat enabled.
+- Fixture **module-scoped** (bukan function-scoped) — Langfuse 4.x pakai process-global OTel tracer, re-init setelah shutdown bisa deadlock. Satu instance per module, shutdown sekali di akhir.
+
+Hasil run:
+
+```
+tests/unit/test_observability.py .......... 6/6 PASSED (0.06s)
+tests/integration/observability/test_langfuse.py .... 4/4 PASSED (1.24s)
+tests/integration/agent/test_extraction.py .......... PASSED
+tests/integration/agent/test_guardrails.py .......... 4/4 PASSED
+============================== 16 passed in 12.04s =============================
+```
+### 6. Yang Harus Dilakukan User di Langfuse Dashboard
+
+1. Login ke `https://cloud.langfuse.com` dengan akun yang mengeluarkan `LANGFUSE_PUBLIC_KEY`.
+2. Buka project yang sama (environment = `stage` dari settings, mis. `development`).
+3. Jalankan backend lokal → kirim 1-2 chat turn via `POST /v1/chat` atau `POST /v1/chat/stream`.
+4. Buka tab **Sessions** → filter `session_id = <yang baru dibuat>` → verifikasi struktur trace sesuai §3.
+5. Review:
+   - Supervisor routing decision (`supervisor` node → `next: FINISH / sql_agent / data_entry_team`).
+   - MCP tool calls: `tool_sessions_create`, `tool_pages_update_entry`, dll. visible di sub-agent node.
+   - Generation spans Gemini: prompt + response + usage tokens.
+   - Guardrail spans: input text, `passed`/`blocked`, reason.
+
+### 7. Risiko & Tidak-Dikerjakan
+
+- **LangChain callback coverage.** Tergantung provider — `ChatGoogleGenerativeAI` umumnya OK tapi kalau Google ganti SDK, callback bisa diam. Mitigasi: manual span di `LLMClient` tetap jalan karena tidak lewat LangChain.
+- **Cost impact.** Langfuse self-host atau cloud free tier punya quota. Kalau trace terlalu banyak, set `LANGFUSE_ENABLED=false` atau sample. Belum di-implement sampling — YAGNI sampai volumenya jadi masalah.
+- **PII di trace.** Semua prompt/response user di-kirim ke Langfuse cloud. Untuk production nanti kalau ada data sensitif, perlu redaction layer (bukan scope v5).
+- **Async generator shutdown.** Kalau client disconnect di tengah stream, `span_cm.__exit__` di `finally` tidak ada (karena saya pakai success/error branch manual). Kalau butuh, bisa refactor pakai `try/finally` di generator — tapi selama ini dua branch cover semua jalur, OK.
+- **Test Gemini 503 flakiness** — bukan dari kerjaan v5, sudah ada sebelum observability. Dicatat tapi tidak di-fix di sini.
+
+※ Plan v5 is Done ※
+
+---
+
+## Plan v5.1 — Catatan Implementasi & Lessons Learned
+
+**Tanggal:** 2026-04-24
+**Status:** DONE (appendix ke v5)
+
+### 1. Bug yang Di-catch Saat Implementasi
+
+#### 1.1 `LLMClient.shutdown` hilang
+Saat refactor `llm_client.py` untuk tambah `_nullspan()` helper, method `async def shutdown(self)` tidak sengaja ikut ter-indent ke dalam generator `_nullspan()` (jadi body-nya tidak pernah jalan, dan `LLMClient` kehilangan method `shutdown`). Ini baru ketahuan waktu `KlaudiaContainer.shutdown()` call `await self.llm_client.shutdown()` — belum fail di runtime karena container shutdown path tidak di-test by default.
+
+**Fix:** pindah `_nullspan()` + `contextmanager` import ke atas module; `shutdown()` kembali jadi method `LLMClient`.
+
+#### 1.2 `_nullctx()` referenced but undefined
+`orchestrator.py` sudah pakai `_nullctx()` di `process()` dan `stream()` tapi helper-nya belum di-define di module. Python tidak complain karena baru di-evaluate saat runtime; test-lah yang expose.
+
+**Fix:** tambah `@contextmanager def _nullctx(): yield None` di atas class.
+
+### 2. Lessons
+
+| # | Observasi | Implikasi |
+|---|-----------|-----------|
+| L1 | Langfuse 4.x pakai **OpenTelemetry global tracer provider**. Multiple `Langfuse()` instances dalam satu process share state — `shutdown()` di test pertama bikin test kedua deadlock. | Semua test integrasi Langfuse harus pakai fixture **module/session-scoped**, bukan function-scoped. |
+| L2 | `tail -N` di shell pipe **tidak streaming** — menunggu EOF. Waktu test lama, output kelihatan kosong sampai selesai. | Untuk test run lama, jangan pipe ke `tail` di background. Run langsung atau pakai `--capture=no`. |
+| L3 | Async generator + `with` contextmanager + `yield` tidak reliable. `yield` di dalam `with` tidak trigger `__exit__` deterministik saat generator di-close. | Pakai manual `__enter__` / `__exit__` di try-except-finally untuk async generator yang butuh bungkus span. |
+| L4 | Fail-open **bukan optional** untuk observability. Kalau Langfuse flush timeout 30s terjadi saat production down, bisa cascade ke latency user-facing. | Semua wrapper `try/except` harus swallow + log debug, tidak pernah raise ke caller. |
+
+### 3. Siap untuk Plan v6
+
+Dengan observability jalan, Plan v6 (React Native + Expo iOS) bisa dimulai dengan confidence:
+- Semua bug di flow agent bisa di-replay dari dashboard per `session_id`.
+- Pertanyaan dari user di mobile app → trace langsung muncul di Langfuse, tinggal filter by user_id.
+- Sebelum ship ke TestFlight, sanity check visual di Langfuse sudah cukup untuk audit end-to-end.
+
+※ Plan v5.1 is Done ※

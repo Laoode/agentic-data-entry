@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.models.attachment import FileAttachment
+from app.services.core.observability import LangfuseService
 from app.services.extraction.agents.config import get_default_extraction
 from app.services.extraction.infra.db_client import AppDBClient
 from app.services.extraction.infra.ocr_client import OCRClient
@@ -43,9 +44,15 @@ class ExtractionResult:
 class ExtractionAgent:
     """GLM-OCR -> schema validation -> persistence."""
 
-    def __init__(self, ocr_client: OCRClient, db_client: AppDBClient) -> None:
+    def __init__(
+        self,
+        ocr_client: OCRClient,
+        db_client: AppDBClient,
+        langfuse: LangfuseService | None = None,
+    ) -> None:
         self._ocr = ocr_client
         self._db = db_client
+        self._langfuse = langfuse
 
     async def process(
         self,
@@ -57,6 +64,48 @@ class ExtractionAgent:
 
         file_type = "pdf" if attachment.content_type == "application/pdf" else "image"
 
+        span_cm = (
+            self._langfuse.span(
+                "extraction_agent.process",
+                as_type="agent",
+                input={
+                    "file_name": attachment.filename,
+                    "content_type": attachment.content_type,
+                    "bytes": len(attachment.data),
+                },
+                metadata={
+                    "session_id": session_id,
+                    "user_id": user_id,
+                    "file_type": file_type,
+                },
+            )
+            if self._langfuse is not None
+            else _nullspan()
+        )
+
+        with span_cm as obs:
+            result = await self._process_inner(attachment, session_id, user_id, file_type)
+            if obs is not None:
+                try:
+                    obs.update(
+                        output={
+                            "file_id": result.file_id,
+                            "pages": len(result.pages),
+                            "status": result.status,
+                            "summary": result.summary,
+                        }
+                    )
+                except Exception:
+                    pass
+            return result
+
+    async def _process_inner(
+        self,
+        attachment: FileAttachment,
+        session_id: int,
+        user_id: int,
+        file_type: str,
+    ) -> ExtractionResult:
         try:
             extractions = await self._ocr.process_file(
                 attachment.data, attachment.content_type
@@ -160,3 +209,11 @@ class ExtractionAgent:
         for k, v in template.items():
             result[k] = item.get(k, v)
         return result
+
+
+from contextlib import contextmanager
+
+
+@contextmanager
+def _nullspan():
+    yield None

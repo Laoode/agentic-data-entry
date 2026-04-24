@@ -18,6 +18,7 @@ import httpx
 import pypdfium2 as pdfium
 
 from app.exceptions import OCRError
+from app.services.core.observability import LangfuseService
 from app.services.extraction.agents.config import EXTRACTION_SCHEMA
 from config.settings import Settings
 
@@ -88,50 +89,89 @@ MOCK_EXTRACTION_JSON: dict[str, Any] = {
 class OCRClient:
     """Wraps the GLM-OCR vLLM endpoint; returns extraction JSON directly."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self, settings: Settings, langfuse: LangfuseService | None = None
+    ) -> None:
         self._base_url = settings.vllm_base_url
         self._auth_token = settings.auth_token
         self._model = settings.vllm_ocr_model
         self._use_mock = settings.use_mock_ocr
         self._client = httpx.AsyncClient(timeout=120.0)
+        self._langfuse = langfuse
 
     async def extract_json_from_image(self, image_bytes: bytes) -> dict[str, Any]:
         """Return extracted JSON for a single image."""
-        if self._use_mock:
-            logger.info("USE_MOCK_OCR=true → returning mock extraction JSON")
-            return copy.deepcopy(MOCK_EXTRACTION_JSON)
+        span_cm = (
+            self._langfuse.span(
+                "glm-ocr.extract_image",
+                as_type="generation",
+                metadata={
+                    "model": self._model,
+                    "mock": self._use_mock,
+                    "image_bytes": len(image_bytes),
+                },
+            )
+            if self._langfuse is not None
+            else _nullspan()
+        )
 
-        image_b64 = base64.b64encode(image_bytes).decode("utf-8")
-        payload = {
-            "model": self._model,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": f"data:image/png;base64,{image_b64}"},
-                        },
-                        {"type": "text", "text": _EXTRACTION_PROMPT},
-                    ],
-                }
-            ],
-            "max_tokens": 4096,
-            "temperature": 0.2,
-            "top_p": 0.9,
-        }
-        headers = {
-            "Authorization": f"Bearer {self._auth_token}",
-            "Content-Type": "application/json",
-        }
-        try:
-            resp = await self._client.post(self._base_url, json=payload, headers=headers)
-            resp.raise_for_status()
-            content = resp.json()["choices"][0]["message"]["content"]
-            return _parse_json_content(content)
-        except Exception as e:
-            logger.error(f"GLM-OCR request failed: {e}")
-            raise OCRError(f"GLM-OCR failed: {e}") from e
+        with span_cm as obs:
+            if self._use_mock:
+                logger.info("USE_MOCK_OCR=true → returning mock extraction JSON")
+                result = copy.deepcopy(MOCK_EXTRACTION_JSON)
+                if obs is not None:
+                    try:
+                        obs.update(output=result, model=f"{self._model}-mock")
+                    except Exception:
+                        pass
+                return result
+
+            image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+            payload = {
+                "model": self._model,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/png;base64,{image_b64}"
+                                },
+                            },
+                            {"type": "text", "text": _EXTRACTION_PROMPT},
+                        ],
+                    }
+                ],
+                "max_tokens": 4096,
+                "temperature": 0.2,
+                "top_p": 0.9,
+            }
+            headers = {
+                "Authorization": f"Bearer {self._auth_token}",
+                "Content-Type": "application/json",
+            }
+            try:
+                resp = await self._client.post(
+                    self._base_url, json=payload, headers=headers
+                )
+                resp.raise_for_status()
+                content = resp.json()["choices"][0]["message"]["content"]
+                parsed = _parse_json_content(content)
+                if obs is not None:
+                    try:
+                        obs.update(output=parsed, model=self._model)
+                    except Exception:
+                        pass
+                return parsed
+            except Exception as e:
+                logger.error(f"GLM-OCR request failed: {e}")
+                if obs is not None:
+                    try:
+                        obs.update(level="ERROR", status_message=str(e))
+                    except Exception:
+                        pass
+                raise OCRError(f"GLM-OCR failed: {e}") from e
 
     async def extract_json_from_pdf(self, pdf_bytes: bytes) -> list[dict[str, Any]]:
         """Return one extraction JSON per PDF page."""
@@ -159,6 +199,14 @@ class OCRClient:
 
     async def shutdown(self) -> None:
         await self._client.aclose()
+
+
+from contextlib import contextmanager
+
+
+@contextmanager
+def _nullspan():
+    yield None
 
 
 def _parse_json_content(content: str) -> dict[str, Any]:

@@ -23,6 +23,7 @@ async def check_output(
             model=config.guardrails_model,
             temperature=0.0,
             max_tokens=10,
+            span_name="guardrail.output_check",
         )
         is_blocked = result.strip().upper().startswith("YES")
         if is_blocked:

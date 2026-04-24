@@ -1,22 +1,32 @@
 import logging
-from typing import Any
+from contextlib import contextmanager
+from typing import Any, Optional
 
 from google import genai
 from google.genai import types
 
 from app.exceptions import LLMError
+from app.services.core.observability import LangfuseService
 from config.settings import Settings
 
 logger = logging.getLogger(__name__)
 
 
+@contextmanager
+def _nullspan():
+    yield None
+
+
 class LLMClient:
     """Async client for Google Gemini via the google-genai SDK."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self, settings: Settings, langfuse: Optional[LangfuseService] = None
+    ) -> None:
         self._client = genai.Client(api_key=settings.llm_api_key)
         self._model = settings.llm_model
         self._temperature = settings.llm_temperature
+        self._langfuse = langfuse
 
     # Thinking models (gemini-3-*) use output tokens for internal reasoning.
     # A low max_output_tokens budget gets exhausted by thinking, returning empty.
@@ -28,6 +38,7 @@ class LLMClient:
         model: str | None = None,
         temperature: float | None = None,
         max_tokens: int = 4096,
+        span_name: str = "gemini.generate_content",
     ) -> str:
         """Send a chat request and return the assistant message content."""
         target_model = model or self._model
@@ -36,22 +47,75 @@ class LLMClient:
 
         contents = _to_genai_contents(messages)
 
-        try:
-            response = await self._client.aio.models.generate_content(
-                model=target_model,
-                contents=contents,
-                config=types.GenerateContentConfig(
-                    temperature=temp,
-                    max_output_tokens=effective_tokens,
-                ),
+        langfuse = self._langfuse
+        span_cm = (
+            langfuse.span(
+                span_name,
+                as_type="generation",
+                input=messages,
+                metadata={
+                    "model": target_model,
+                    "temperature": temp,
+                    "max_output_tokens": effective_tokens,
+                },
             )
-            return response.text or ""
-        except Exception as e:
-            logger.error(f"LLM error: {e}")
-            raise LLMError(str(e)) from e
+            if langfuse is not None
+            else _nullspan()
+        )
+
+        try:
+            with span_cm as obs:
+                try:
+                    response = await self._client.aio.models.generate_content(
+                        model=target_model,
+                        contents=contents,
+                        config=types.GenerateContentConfig(
+                            temperature=temp,
+                            max_output_tokens=effective_tokens,
+                        ),
+                    )
+                except Exception as e:
+                    logger.error(f"LLM error: {e}")
+                    if obs is not None:
+                        try:
+                            obs.update(level="ERROR", status_message=str(e))
+                        except Exception:
+                            pass
+                    raise LLMError(str(e)) from e
+
+                text = response.text or ""
+                if obs is not None:
+                    try:
+                        obs.update(
+                            output=text,
+                            model=target_model,
+                            usage_details=_extract_usage(response),
+                        )
+                    except Exception:
+                        pass
+                return text
+        except LLMError:
+            raise
 
     async def shutdown(self) -> None:
         pass
+
+
+def _extract_usage(response: Any) -> dict[str, int]:
+    """Best-effort extraction of token usage from google-genai response."""
+    usage = getattr(response, "usage_metadata", None)
+    if not usage:
+        return {}
+    out: dict[str, int] = {}
+    for attr, key in (
+        ("prompt_token_count", "input"),
+        ("candidates_token_count", "output"),
+        ("total_token_count", "total"),
+    ):
+        val = getattr(usage, attr, None)
+        if isinstance(val, int):
+            out[key] = val
+    return out
 
 
 def _to_genai_contents(

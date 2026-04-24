@@ -3,6 +3,7 @@ from typing import Optional
 
 from config.settings import Settings
 from app.services.core.llm_client import LLMClient
+from app.services.core.observability import LangfuseService
 from app.services.extraction.infra.db_client import AppDBClient
 from app.services.extraction.infra.ocr_client import OCRClient
 from app.services.extraction.agents.base import ExtractionAgent
@@ -25,14 +26,18 @@ class KlaudiaContainer:
         self.guardrails: Optional[GuardrailsAgent] = None
         self.supervisor: Optional[SupervisorAgent] = None
         self.extraction_agent: Optional[ExtractionAgent] = None
+        self.langfuse: Optional[LangfuseService] = None
 
     @classmethod
     async def create(cls, settings: Settings) -> "KlaudiaContainer":
         container = cls()
 
+        # Observability (must be first so other services can reference it)
+        container.langfuse = LangfuseService(settings)
+
         # LLM clients
-        container.llm_client = LLMClient(settings)
-        container.ocr_client = OCRClient(settings)
+        container.llm_client = LLMClient(settings, langfuse=container.langfuse)
+        container.ocr_client = OCRClient(settings, langfuse=container.langfuse)
 
         # Database
         container.db_client = AppDBClient(settings)
@@ -48,6 +53,7 @@ class KlaudiaContainer:
         container.extraction_agent = ExtractionAgent(
             ocr_client=container.ocr_client,
             db_client=container.db_client,
+            langfuse=container.langfuse,
         )
 
         # Guardrails
@@ -56,7 +62,9 @@ class KlaudiaContainer:
             groq_model=settings.llm_guardrails_prompt_inj,
             guardrails_model=settings.llm_guardrails_model,
         )
-        container.guardrails = GuardrailsAgent(container.llm_client, guardrails_config)
+        container.guardrails = GuardrailsAgent(
+            container.llm_client, guardrails_config, langfuse=container.langfuse
+        )
 
         # Supervisor
         container.supervisor = SupervisorAgent(
@@ -64,6 +72,7 @@ class KlaudiaContainer:
             llm_model=settings.llm_model,
             mcp_sqlite=container.mcp_sqlite,
             mcp_gsheets=container.mcp_gsheets,
+            langfuse=container.langfuse,
         )
 
         logger.info("KlaudiaContainer initialized")
@@ -81,4 +90,6 @@ class KlaudiaContainer:
             await self.mcp_gsheets.disconnect()
         if self.db_client:
             await self.db_client.close()
+        if self.langfuse:
+            self.langfuse.shutdown()
         logger.info("Shutdown complete")
