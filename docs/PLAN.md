@@ -289,61 +289,11 @@ Plan v1 selesai dengan 29/30 tests pass. 1 test gagal (`test_gemini_structured_r
 
 ---
 
-## Plan v3 — Hotfix: FastAPI startup `TypeError` pada `ExtractionAgent`
+## Plan v3 — SSE Streaming: Token-by-token + Agentic Progress
 
 **Tanggal:** 2026-04-19
 **Status:** DONE
-
-### 1. Gejala
-
-`bash startup.sh` → FastAPI lifespan gagal:
-
-```
-File "app/services/core/orchestrator.py", line 27, in __init__
-    self._extraction_agent = ExtractionAgent(
-TypeError: ExtractionAgent.__init__() got an unexpected keyword argument 'llm_client'
-ERROR:    Application startup failed. Exiting.
-```
-
-### 2. Root Cause
-
-Saat Plan v1 Phase A, `ExtractionAgent.__init__` dikurangi jadi `(ocr_client, db_client)` — dependency `llm_client` dihapus karena GLM-OCR output JSON langsung. `container.py:48-51` sudah di-update, tapi `orchestrator.py:25-31` **masih instansiasi ulang** `ExtractionAgent` dengan kwargs lama (`llm_client=...`). Runtime path baru ke-exercise pertama kali di startup real (bukan via pytest karena test instansiasi `ExtractionAgent` langsung, tidak lewat `KlaudiaOrchestrator.__init__`).
-
-### 3. Fix
-
-`app/services/core/orchestrator.py`:
-- Hapus import `ExtractionAgent` (tidak lagi dipakai di file ini).
-- Ganti duplikasi instansiasi dengan reuse dari container:
-  ```python
-  self._extraction_agent = container.extraction_agent
-  ```
-  Container adalah single owner untuk semua service → orchestrator cukup hold reference.
-
-### 4. Verification
-
-`bash startup.sh` → `logs/fastapi.log`:
-
-```
-2026-04-19 13:04:54,281 - INFO - app.services.core.container - KlaudiaContainer initialized
-INFO:     Application startup complete.
-INFO:     Uvicorn running on http://0.0.0.0:8000
-```
-
-Startup clean, MCP-SQLite (11 tools) + MCP-GSheets (16 tools) ter-connect normal.
-
-### 5. Catatan Kenapa Test Tidak Menangkap Ini
-
-`tests/integration/agent/test_extraction.py` instansiasi `ExtractionAgent` langsung, bukan lewat `KlaudiaOrchestrator`. Tidak ada integration test yang boot orchestrator penuh → kwarg mismatch lolos dari suite. **Action item untuk Plan berikutnya:** tambah smoke test yang invoke `KlaudiaOrchestrator(container)` untuk catch regresi wiring seperti ini (taruh di post-test checklist, belum dikerjakan di v3).
-
-※ Plan v3 is Done ※
-
----
-
-## Plan v4 — SSE Streaming: Token-by-token + Agentic Progress
-
-**Tanggal:** 2026-04-19
-**Status:** DONE
-**Scope:** Backend only. Persiapan kontrak event untuk frontend di Plan v6.
+**Scope:** Backend only. Persiapan kontrak event untuk frontend di Plan v5.
 
 ### 1. Tujuan
 
@@ -486,40 +436,23 @@ event: done
 data: {"session_id": 12, "processing_time_ms": 1845, "tools_used": [], "content": "Hello"}
 ```
 
-### 7. Catatan untuk Plan v6 (Frontend)
+### 7. Catatan untuk Plan v5 (Frontend)
 
 - Parser SSE client cukup dispatch berdasarkan `event.type`; state machine: `session → guardrail → (extraction?) → step* → token* → done`.
 - Token append ke state draft; ketika `done` datang, replace draft dengan `done.content` untuk antisipasi output-guardrail swap.
 - `step` & `tool` bisa ditampilkan sebagai "Klaudia sedang memeriksa database…" / "Menulis ke GSheets…" (mapping node→label di frontend).
 - Error handling: event `error` → tampilkan toast; juga handle `EventSource` close.
 
-### 8. Risiko & Tidak-Dikerjakan
-
-- **Provider streaming dependency.** Kalau `ChatGoogleGenerativeAI` tidak memancarkan chunk via callback, fallback di `stream_conversation` memakai AIMessage terakhir dari node supervisor (tidak ada token-granular). Frontend tetap dapat `done.content`.
-- **Sub-agent tokens.** Tidak di-stream by design. Jika di masa depan ingin verbose mode, tinggal extend filter tag (mis. tambah `"subagent"` untuk read/write agent).
-- **Cancellation end-to-end.** `req.is_disconnected()` menghentikan loop SSE; namun graph di LangGraph masih menyelesaikan iteration berjalan — tidak ada hard-abort. Good enough untuk v4.
-- **Smoke test orchestrator-level** (action item Plan v3) belum ditambahkan; tetap dicatat sebagai pending untuk Plan berikutnya.
-
-※ Plan v4 is Done ※
+※ Plan v3 is Done ※
 
 ---
 
-## Plan v5 — Observability dengan Langfuse
+## Plan v4 — Observability dengan Langfuse
 
 **Tanggal:** 2026-04-24
 **Status:** DONE
 
-### 0. Motivasi
-
-Persiapan menuju Plan v6 (frontend React Native + Expo). Sebelum antarmuka dibangun, user ingin bisa **verifikasi manual di Langfuse dashboard** bahwa:
-- routing supervisor jalan sesuai PRD (FINISH / sql_agent / data_entry_team),
-- tool-calls di sub-agent (MCP-SQLite, MCP-GSheets) benar-benar dipanggil,
-- prompt & response Gemini (chat + guardrails + OCR) visible per span,
-- trace bisa di-filter per `session_id` + `user_id` agar bisa trace bug dari sisi klien nanti.
-
-Credential sudah ada di `.env` (`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL`).
-
-### 1. Findings (State Sebelum v5)
+### 1. Findings (State Sebelum v4)
 
 | # | Area | Kondisi | Gap |
 |---|------|---------|-----|
@@ -564,59 +497,7 @@ Trace (root — session_id + user_id propagated)
 
 Stream variant (`klaudia.stream`) mirror sama tapi di-wrap manual contextmanager karena async generator.
 
-### 4. Perubahan Kode
-
-#### 4.1 Dependency + Settings
-- `pyproject.toml`: tambah `langfuse>=4.5.0`.
-- `config/settings.py`: tambah `langfuse_public_key`, `langfuse_secret_key`, `langfuse_base_url`, `langfuse_enabled` (semua dengan default aman).
-
-#### 4.2 `app/services/core/observability.py` (baru)
-Kelas `LangfuseService`:
-- `__init__` — fail-open: return early kalau disabled atau cred kosong; init `Langfuse(...)` + `CallbackHandler()` di dalam try/except.
-- `enabled`, `client`, `callback_handler` — properties.
-- `langchain_config(session_id, user_id, tags, metadata, run_name)` — return `{}` kalau disabled; else `{"callbacks":[cb], "metadata":{"langfuse_session_id":..., "langfuse_user_id":..., "langfuse_tags":[...]}, "run_name":...}`.
-- `span(name, as_type, input, metadata)` contextmanager — yield observation atau `None`; semua exception di-swallow.
-- `trace_attributes(session_id, user_id, tags)` contextmanager — bungkus `langfuse.propagate_attributes(...)`.
-- `flush()`, `shutdown()` — safe no-op kalau disabled.
-
-#### 4.3 `app/services/core/container.py`
-- Init `LangfuseService` **paling awal** di `KlaudiaContainer.create(...)` (sebelum service lain).
-- Inject ke `LLMClient`, `OCRClient`, `ExtractionAgent`, `GuardrailsAgent`, `SupervisorAgent`.
-- Tambah `self.langfuse.shutdown()` di `shutdown()` setelah service lain close.
-
-#### 4.4 `app/services/core/llm_client.py`
-- Constructor terima `langfuse: Optional[LangfuseService]`.
-- `chat()` tambah parameter `span_name="gemini.generate_content"` supaya caller bisa rename (mis. `"guardrail.scope_check"`).
-- Bungkus panggilan `generate_content` dengan `langfuse.span(as_type="generation", input=messages, metadata={model,temperature,max_output_tokens})`.
-- Update span `output=text`, `usage_details=_extract_usage(response)` (helper yang baca `prompt_token_count` / `candidates_token_count` / `total_token_count` dari `response.usage_metadata`).
-- Error path: `obs.update(level="ERROR", status_message=...)` lalu raise.
-
-#### 4.5 `app/services/extraction/infra/ocr_client.py`
-- Constructor terima `langfuse`.
-- `extract_json_from_image` wrap di span `glm-ocr.extract_image` (`as_type="generation"`, metadata mencantumkan `model`, `mock`, `image_bytes`).
-- Mock path tetap di-log (dengan `model=glm-ocr-mock` supaya beda dari production).
-
-#### 4.6 `app/services/extraction/agents/base.py`
-- Constructor terima `langfuse`.
-- Refactor `process()` jadi outer span wrapper + `_process_inner()` agar span selalu dapat `output` (file_id, pages count, status, summary) di akhir turn.
-
-#### 4.7 `app/services/guardrails/*`
-- `agent.py`: constructor terima `langfuse`. `validate_input` + `validate_output` wrap di span `as_type="guardrail"`. Input/output diset di span untuk audit.
-- `base.py::check_prompt_injection`: wrap Groq call di span `as_type="generation"`. Fail-open pattern dipertahankan — guard down ≠ reject.
-- `scope.py` + `output.py`: tambah `span_name="guardrail.scope_check"` / `"guardrail.output_check"` ke `llm_client.chat()`.
-
-#### 4.8 `klaudia/core/supervisor/agent.py`
-- Constructor terima `langfuse`.
-- Helper baru `_graph_config(session_id, user_id, run_name)` — merge `{"recursion_limit": 50}` dengan `langfuse.langchain_config(...)`. Inilah satu-satunya tempat yang tahu bagaimana LangGraph dikonfigurasi untuk Langfuse.
-- `process_conversation` / `stream_conversation` tambah parameter `session_id`, `user_id`. Dipakai oleh `_graph_config` untuk tag trace.
-
-#### 4.9 `app/services/core/orchestrator.py`
-- Simpan `self._langfuse = container.langfuse`.
-- `process()`: bungkus dengan `trace_attributes(session_id, user_id, tags=["klaudia","chat"])` + `span("klaudia.process", as_type="agent", input={user_text, user_name})`. Span final di-update dengan `content`, `tools_used`, `processing_time_ms`. `flush()` sebelum return.
-- `stream()`: **manual `__enter__` / `__exit__`** untuk trace + span karena async generator. Cleanup di success path (setelah yield `done`) dan error path (di `except`) terpisah. Tags `["klaudia","chat","stream"]`.
-- Module-level helper `_nullctx()` untuk fallback kalau `langfuse is None`.
-
-### 5. Testing
+### 4. Testing
 
 Dua lapis:
 
@@ -636,34 +517,14 @@ tests/integration/agent/test_extraction.py .......... PASSED
 tests/integration/agent/test_guardrails.py .......... 4/4 PASSED
 ============================== 16 passed in 12.04s =============================
 ```
-### 6. Yang Harus Dilakukan User di Langfuse Dashboard
-
-1. Login ke `https://cloud.langfuse.com` dengan akun yang mengeluarkan `LANGFUSE_PUBLIC_KEY`.
-2. Buka project yang sama (environment = `stage` dari settings, mis. `development`).
-3. Jalankan backend lokal → kirim 1-2 chat turn via `POST /v1/chat` atau `POST /v1/chat/stream`.
-4. Buka tab **Sessions** → filter `session_id = <yang baru dibuat>` → verifikasi struktur trace sesuai §3.
-5. Review:
-   - Supervisor routing decision (`supervisor` node → `next: FINISH / sql_agent / data_entry_team`).
-   - MCP tool calls: `tool_sessions_create`, `tool_pages_update_entry`, dll. visible di sub-agent node.
-   - Generation spans Gemini: prompt + response + usage tokens.
-   - Guardrail spans: input text, `passed`/`blocked`, reason.
-
-### 7. Risiko & Tidak-Dikerjakan
-
-- **LangChain callback coverage.** Tergantung provider — `ChatGoogleGenerativeAI` umumnya OK tapi kalau Google ganti SDK, callback bisa diam. Mitigasi: manual span di `LLMClient` tetap jalan karena tidak lewat LangChain.
-- **Cost impact.** Langfuse self-host atau cloud free tier punya quota. Kalau trace terlalu banyak, set `LANGFUSE_ENABLED=false` atau sample. Belum di-implement sampling — YAGNI sampai volumenya jadi masalah.
-- **PII di trace.** Semua prompt/response user di-kirim ke Langfuse cloud. Untuk production nanti kalau ada data sensitif, perlu redaction layer (bukan scope v5).
-- **Async generator shutdown.** Kalau client disconnect di tengah stream, `span_cm.__exit__` di `finally` tidak ada (karena saya pakai success/error branch manual). Kalau butuh, bisa refactor pakai `try/finally` di generator — tapi selama ini dua branch cover semua jalur, OK.
-- **Test Gemini 503 flakiness** — bukan dari kerjaan v5, sudah ada sebelum observability. Dicatat tapi tidak di-fix di sini.
-
-※ Plan v5 is Done ※
+※ Plan v4 is Done ※
 
 ---
 
-## Plan v5.1 — Catatan Implementasi & Lessons Learned
+## Plan v4.1 — Catatan Implementasi & Lessons Learned
 
 **Tanggal:** 2026-04-24
-**Status:** DONE (appendix ke v5)
+**Status:** DONE (appendix ke v4)
 
 ### 1. Bug yang Di-catch Saat Implementasi
 
@@ -686,11 +547,21 @@ Saat refactor `llm_client.py` untuk tambah `_nullspan()` helper, method `async d
 | L3 | Async generator + `with` contextmanager + `yield` tidak reliable. `yield` di dalam `with` tidak trigger `__exit__` deterministik saat generator di-close. | Pakai manual `__enter__` / `__exit__` di try-except-finally untuk async generator yang butuh bungkus span. |
 | L4 | Fail-open **bukan optional** untuk observability. Kalau Langfuse flush timeout 30s terjadi saat production down, bisa cascade ke latency user-facing. | Semua wrapper `try/except` harus swallow + log debug, tidak pernah raise ke caller. |
 
-### 3. Siap untuk Plan v6
+### 3. Siap untuk Plan v5
 
-Dengan observability jalan, Plan v6 (React Native + Expo iOS) bisa dimulai dengan confidence:
+Dengan observability jalan, Plan v5 (React Native + Expo iOS) bisa dimulai dengan confidence:
 - Semua bug di flow agent bisa di-replay dari dashboard per `session_id`.
 - Pertanyaan dari user di mobile app → trace langsung muncul di Langfuse, tinggal filter by user_id.
 - Sebelum ship ke TestFlight, sanity check visual di Langfuse sudah cukup untuk audit end-to-end.
 
-※ Plan v5.1 is Done ※
+※ Plan v4.1 is Done ※
+
+## Plan v4.2 Fix Klaudia agent yang masih minta spreadsheet ID padahal SHEET_ID sudah di env
+CHANGES MADE:                                                                                                                                  
+- mcp-gsheets/app/server.py: 14 tool di-refactor. spreadsheet_id jadi Optional di semua tool. Tambah helper _resolve_sheet_id() yang pakai      SheetsContext.default_sheet_id (sudah ada, loaded dari SHEET_ID env) kalau arg kosong. tool_get_multiple_sheet_data pakai fallback per-query.   tool_copy_sheet punya 2 slot (src_, dst_), keduanya optional.
+- klaudia/core/supervisor/agents/data_entry_team/prompts.py: tambah rule eksplisit ke semua 4 prompt ("never ask for spreadsheet ID — server has default"). Read agent juga diminta default-kan ke list_sheets → get_sheet_data kalau user generic.
+- klaudia/core/supervisor/prompts.py: top-level Klaudia persona dapat aturan "JANGAN minta spreadsheet ID/URL".                                
+THINGS I DIDN'T TOUCH:                                                                                                                         
+- Internal ops (mcp-gsheets/app/tools/*.py): tetap wajib spreadsheet_id: str — fallback hanya di boundary (MCP tool layer), bukan di business logic. Good separation.
+- mcp-sqlite/*: tidak ada masalah serupa.
+- Test files: semua pakai kwargs, jadi tidak pecah meski saya re-order parameter.
