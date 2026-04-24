@@ -1,12 +1,12 @@
 [submodule "klaudia"]
 	path = klaudia
 	url = https://github.com/Laoode/klaudia.git
-	branch = main
+	branch = development
 [submodule "mcp-sqlite"]
 	path = mcp-sqlite
 	url = https://github.com/Laoode/mcp-sqlite.git
-	branch = main
+	branch = development
 [submodule "mcp-gsheets"]
 	path = mcp-gsheets
 	url = https://github.com/Laoode/mcp-gsheets.git
-	branch = main
+	branch = development
