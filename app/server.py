@@ -65,12 +65,27 @@ mcp = FastMCP(
     instructions=(
         "Google Sheets MCP Server for data entry operations. "
         "Provides tools for reading, writing, and managing Google Spreadsheets. "
-        "Use for receipt data entry, automated data input, and spreadsheet management."
+        "Use for receipt data entry, automated data input, and spreadsheet management. "
+        "A default spreadsheet is configured via the SHEET_ID environment variable; "
+        "tools will use it automatically when spreadsheet_id is omitted."
     ),
     lifespan=sheets_lifespan,
     host=HOST,
     port=PORT,
 )
+
+
+def _resolve_sheet_id(ctx: Context, spreadsheet_id: Optional[str]) -> str:
+    """Return the provided spreadsheet_id, or fall back to SHEET_ID env default."""
+    if spreadsheet_id:
+        return spreadsheet_id
+    default = ctx.request_context.lifespan_context.default_sheet_id
+    if not default:
+        raise ValueError(
+            "spreadsheet_id not provided and no SHEET_ID default is configured "
+            "on the MCP server."
+        )
+    return default
 
 
 # ============================================================================
@@ -80,84 +95,89 @@ mcp = FastMCP(
 
 @mcp.tool()
 def tool_get_sheet_data(
-    spreadsheet_id: str,
     sheet: str,
+    spreadsheet_id: Optional[str] = None,
     range: Optional[str] = None,
     include_grid_data: bool = False,
     ctx: Context = None,
 ) -> dict[str, Any]:
     """
     Get data from a specific sheet in a Google Spreadsheet.
-    
+
     Args:
-        spreadsheet_id: The ID of the spreadsheet (found in URL after /d/)
         sheet: The name of the sheet tab
+        spreadsheet_id: Optional spreadsheet ID (found in URL after /d/).
+                        If omitted, uses the server's default SHEET_ID.
         range: Optional cell range in A1 notation (e.g., 'A1:C10'). Gets all data if not provided.
         include_grid_data: If True, includes cell formatting metadata. Default False for efficiency.
-    
+
     Returns:
         Dictionary containing spreadsheet data with 'values' key
     """
     service = ctx.request_context.lifespan_context.service
-    return get_sheet_data(service, spreadsheet_id, sheet, range, include_grid_data)
+    sid = _resolve_sheet_id(ctx, spreadsheet_id)
+    return get_sheet_data(service, sid, sheet, range, include_grid_data)
 
 
 @mcp.tool()
 def tool_get_sheet_formulas(
-    spreadsheet_id: str,
     sheet: str,
+    spreadsheet_id: Optional[str] = None,
     range: Optional[str] = None,
     ctx: Context = None,
 ) -> list[list[Any]]:
     """
     Get formulas from a specific sheet in a Google Spreadsheet.
-    
+
     Args:
-        spreadsheet_id: The ID of the spreadsheet
         sheet: The name of the sheet tab
+        spreadsheet_id: Optional spreadsheet ID. If omitted, uses the server's default SHEET_ID.
         range: Optional cell range in A1 notation
-    
+
     Returns:
         2D array of formulas
     """
     service = ctx.request_context.lifespan_context.service
-    return get_sheet_formulas(service, spreadsheet_id, sheet, range)
+    sid = _resolve_sheet_id(ctx, spreadsheet_id)
+    return get_sheet_formulas(service, sid, sheet, range)
 
 
 @mcp.tool()
 def tool_list_sheets(
-    spreadsheet_id: str,
+    spreadsheet_id: Optional[str] = None,
     ctx: Context = None,
 ) -> list[dict[str, Any]]:
     """
     List all sheet tabs in a Google Spreadsheet.
-    
+
     Args:
-        spreadsheet_id: The ID of the spreadsheet
-    
+        spreadsheet_id: Optional spreadsheet ID. If omitted, uses the server's default SHEET_ID.
+
     Returns:
         List of sheet info with title, sheetId, and index
     """
     service = ctx.request_context.lifespan_context.service
-    return list_sheets(service, spreadsheet_id)
+    sid = _resolve_sheet_id(ctx, spreadsheet_id)
+    return list_sheets(service, sid)
 
 
 @mcp.tool()
 def tool_get_spreadsheet_info(
-    spreadsheet_id: str,
+    spreadsheet_id: Optional[str] = None,
     ctx: Context = None,
 ) -> dict[str, Any]:
     """
     Get basic information about a Google Spreadsheet including title and all sheets.
-    
+
     Args:
-        spreadsheet_id: The ID of the spreadsheet
-    
+        spreadsheet_id: Optional spreadsheet ID. If omitted, uses the server's default SHEET_ID.
+
     Returns:
         Dictionary with spreadsheet title and sheet information
     """
     service = ctx.request_context.lifespan_context.service
-    return get_spreadsheet_info(service, spreadsheet_id)
+    sid = _resolve_sheet_id(ctx, spreadsheet_id)
+    return get_spreadsheet_info(service, sid)
 
 
 @mcp.tool()
@@ -167,16 +187,22 @@ def tool_get_multiple_sheet_data(
 ) -> list[dict[str, Any]]:
     """
     Get data from multiple ranges across spreadsheets in one call.
-    
+
     Args:
-        queries: List of dicts with 'spreadsheet_id', 'sheet', and 'range' keys
-                Example: [{'spreadsheet_id': 'abc123', 'sheet': 'Sheet1', 'range': 'A1:B5'}]
-    
+        queries: List of dicts with 'sheet' and 'range' keys; 'spreadsheet_id' is optional
+                 and falls back to the server's default SHEET_ID when omitted.
+                 Example: [{'sheet': 'Sheet1', 'range': 'A1:B5'}]
+
     Returns:
         List of results with original query params and 'data' or 'error'
     """
     service = ctx.request_context.lifespan_context.service
-    return get_multiple_sheet_data(service, queries)
+    default_sid = ctx.request_context.lifespan_context.default_sheet_id
+    resolved = [
+        {**q, "spreadsheet_id": q.get("spreadsheet_id") or default_sid}
+        for q in queries
+    ]
+    return get_multiple_sheet_data(service, resolved)
 
 
 # ============================================================================
@@ -186,144 +212,150 @@ def tool_get_multiple_sheet_data(
 
 @mcp.tool()
 def tool_update_cells(
-    spreadsheet_id: str,
     sheet: str,
     range: str,
     data: list[list[Any]],
+    spreadsheet_id: Optional[str] = None,
     ctx: Context = None,
 ) -> dict[str, Any]:
     """
     Update cells in a Google Spreadsheet with new values.
-    
+
     Args:
-        spreadsheet_id: The ID of the spreadsheet
         sheet: The name of the sheet tab
         range: Cell range in A1 notation (e.g., 'A1:C10')
         data: 2D array of values to write
-    
+        spreadsheet_id: Optional spreadsheet ID. If omitted, uses the server's default SHEET_ID.
+
     Returns:
         Result with updatedCells, updatedRows, updatedColumns info
     """
     service = ctx.request_context.lifespan_context.service
-    return update_cells(service, spreadsheet_id, sheet, range, data)
+    sid = _resolve_sheet_id(ctx, spreadsheet_id)
+    return update_cells(service, sid, sheet, range, data)
 
 
 @mcp.tool()
 def tool_batch_update_cells(
-    spreadsheet_id: str,
     sheet: str,
     ranges: dict[str, list[list[Any]]],
+    spreadsheet_id: Optional[str] = None,
     ctx: Context = None,
 ) -> dict[str, Any]:
     """
     Update multiple ranges in a single API call for efficiency.
-    
+
     Args:
-        spreadsheet_id: The ID of the spreadsheet
         sheet: The name of the sheet tab
         ranges: Dict mapping range strings to 2D value arrays
                e.g., {'A1:B2': [[1, 2], [3, 4]], 'D1:E2': [['a', 'b'], ['c', 'd']]}
-    
+        spreadsheet_id: Optional spreadsheet ID. If omitted, uses the server's default SHEET_ID.
+
     Returns:
         Result with totalUpdatedCells info
     """
     service = ctx.request_context.lifespan_context.service
-    return batch_update_cells(service, spreadsheet_id, sheet, ranges)
+    sid = _resolve_sheet_id(ctx, spreadsheet_id)
+    return batch_update_cells(service, sid, sheet, ranges)
 
 
 @mcp.tool()
 def tool_append_rows(
-    spreadsheet_id: str,
     sheet: str,
     data: list[list[Any]],
+    spreadsheet_id: Optional[str] = None,
     range: str = "A:Z",
     ctx: Context = None,
 ) -> dict[str, Any]:
     """
     Append rows to the end of existing data in a sheet.
     Ideal for adding new receipt entries without specifying exact row numbers.
-    
+
     Args:
-        spreadsheet_id: The ID of the spreadsheet
         sheet: The name of the sheet tab
         data: 2D array of values to append (each inner list is a row)
+        spreadsheet_id: Optional spreadsheet ID. If omitted, uses the server's default SHEET_ID.
         range: Range to search for existing table (default: all columns)
-    
+
     Returns:
         Result with updates info including updatedRows
     """
     service = ctx.request_context.lifespan_context.service
-    return append_rows(service, spreadsheet_id, sheet, data, range)
+    sid = _resolve_sheet_id(ctx, spreadsheet_id)
+    return append_rows(service, sid, sheet, data, range)
 
 
 @mcp.tool()
 def tool_add_rows(
-    spreadsheet_id: str,
     sheet: str,
     count: int,
+    spreadsheet_id: Optional[str] = None,
     start_row: Optional[int] = None,
     ctx: Context = None,
 ) -> dict[str, Any]:
     """
     Add empty rows to a sheet at a specific position.
-    
+
     Args:
-        spreadsheet_id: The ID of the spreadsheet
         sheet: The name of the sheet tab
         count: Number of rows to add
+        spreadsheet_id: Optional spreadsheet ID. If omitted, uses the server's default SHEET_ID.
         start_row: 0-based row index to insert at. If None, adds at beginning.
-    
+
     Returns:
         Result of the operation
     """
     service = ctx.request_context.lifespan_context.service
-    return add_rows(service, spreadsheet_id, sheet, count, start_row)
+    sid = _resolve_sheet_id(ctx, spreadsheet_id)
+    return add_rows(service, sid, sheet, count, start_row)
 
 
 @mcp.tool()
 def tool_add_columns(
-    spreadsheet_id: str,
     sheet: str,
     count: int,
+    spreadsheet_id: Optional[str] = None,
     start_column: Optional[int] = None,
     ctx: Context = None,
 ) -> dict[str, Any]:
     """
     Add empty columns to a sheet at a specific position.
-    
+
     Args:
-        spreadsheet_id: The ID of the spreadsheet
         sheet: The name of the sheet tab
         count: Number of columns to add
+        spreadsheet_id: Optional spreadsheet ID. If omitted, uses the server's default SHEET_ID.
         start_column: 0-based column index to insert at. If None, adds at beginning.
-    
+
     Returns:
         Result of the operation
     """
     service = ctx.request_context.lifespan_context.service
-    return add_columns(service, spreadsheet_id, sheet, count, start_column)
+    sid = _resolve_sheet_id(ctx, spreadsheet_id)
+    return add_columns(service, sid, sheet, count, start_column)
 
 
 @mcp.tool()
 def tool_clear_range(
-    spreadsheet_id: str,
     sheet: str,
     range: str,
+    spreadsheet_id: Optional[str] = None,
     ctx: Context = None,
 ) -> dict[str, Any]:
     """
     Clear values from a range while keeping formatting intact.
-    
+
     Args:
-        spreadsheet_id: The ID of the spreadsheet
         sheet: The name of the sheet tab
         range: Cell range in A1 notation to clear
-    
+        spreadsheet_id: Optional spreadsheet ID. If omitted, uses the server's default SHEET_ID.
+
     Returns:
         Result of the clear operation
     """
     service = ctx.request_context.lifespan_context.service
-    return clear_range(service, spreadsheet_id, sheet, range)
+    sid = _resolve_sheet_id(ctx, spreadsheet_id)
+    return clear_range(service, sid, sheet, range)
 
 
 # ============================================================================
@@ -333,111 +365,117 @@ def tool_clear_range(
 
 @mcp.tool()
 def tool_create_sheet(
-    spreadsheet_id: str,
     title: str,
+    spreadsheet_id: Optional[str] = None,
     ctx: Context = None,
 ) -> dict[str, Any]:
     """
     Create a new sheet tab in an existing spreadsheet.
-    
+
     Args:
-        spreadsheet_id: The ID of the spreadsheet
         title: Title for the new sheet tab
-    
+        spreadsheet_id: Optional spreadsheet ID. If omitted, uses the server's default SHEET_ID.
+
     Returns:
         Information about the new sheet including sheetId and title
     """
     service = ctx.request_context.lifespan_context.service
-    return create_sheet(service, spreadsheet_id, title)
+    sid = _resolve_sheet_id(ctx, spreadsheet_id)
+    return create_sheet(service, sid, title)
 
 
 @mcp.tool()
 def tool_rename_sheet(
-    spreadsheet_id: str,
     sheet: str,
     new_name: str,
+    spreadsheet_id: Optional[str] = None,
     ctx: Context = None,
 ) -> dict[str, Any]:
     """
     Rename a sheet tab in a spreadsheet.
-    
+
     Args:
-        spreadsheet_id: The ID of the spreadsheet
         sheet: Current sheet name
         new_name: New name for the sheet
-    
+        spreadsheet_id: Optional spreadsheet ID. If omitted, uses the server's default SHEET_ID.
+
     Returns:
         Result of the operation
     """
     service = ctx.request_context.lifespan_context.service
-    return rename_sheet(service, spreadsheet_id, sheet, new_name)
+    sid = _resolve_sheet_id(ctx, spreadsheet_id)
+    return rename_sheet(service, sid, sheet, new_name)
 
 
 @mcp.tool()
 def tool_copy_sheet(
-    src_spreadsheet: str,
     src_sheet: str,
-    dst_spreadsheet: str,
     dst_sheet: str,
+    src_spreadsheet: Optional[str] = None,
+    dst_spreadsheet: Optional[str] = None,
     ctx: Context = None,
 ) -> dict[str, Any]:
     """
     Copy a sheet from one spreadsheet to another.
-    
+
     Args:
-        src_spreadsheet: Source spreadsheet ID
         src_sheet: Source sheet name
-        dst_spreadsheet: Destination spreadsheet ID
         dst_sheet: Name for the copied sheet in destination
-    
+        src_spreadsheet: Optional source spreadsheet ID. If omitted, uses the server's default SHEET_ID.
+        dst_spreadsheet: Optional destination spreadsheet ID. If omitted, uses the server's default SHEET_ID.
+
     Returns:
         Result of the copy operation
     """
     service = ctx.request_context.lifespan_context.service
-    return copy_sheet(service, src_spreadsheet, src_sheet, dst_spreadsheet, dst_sheet)
+    src_sid = _resolve_sheet_id(ctx, src_spreadsheet)
+    dst_sid = _resolve_sheet_id(ctx, dst_spreadsheet)
+    return copy_sheet(service, src_sid, src_sheet, dst_sid, dst_sheet)
 
 
 @mcp.tool()
 def tool_delete_sheet(
-    spreadsheet_id: str,
     sheet: str,
+    spreadsheet_id: Optional[str] = None,
     ctx: Context = None,
 ) -> dict[str, Any]:
     """
     Delete a sheet tab from a spreadsheet.
     WARNING: This operation is destructive and cannot be undone.
-    
+
     Args:
-        spreadsheet_id: The ID of the spreadsheet
         sheet: Name of the sheet to delete
-    
+        spreadsheet_id: Optional spreadsheet ID. If omitted, uses the server's default SHEET_ID.
+
     Returns:
         Result of the delete operation
     """
     service = ctx.request_context.lifespan_context.service
-    return delete_sheet(service, spreadsheet_id, sheet)
+    sid = _resolve_sheet_id(ctx, spreadsheet_id)
+    return delete_sheet(service, sid, sheet)
 
 
 @mcp.tool()
 def tool_batch_update(
-    spreadsheet_id: str,
     requests: list[dict[str, Any]],
+    spreadsheet_id: Optional[str] = None,
     ctx: Context = None,
 ) -> dict[str, Any]:
     """
     Execute advanced batch operations on a spreadsheet.
     For complex operations like formatting, conditional rules, or multiple structural changes.
-    
+
     Args:
-        spreadsheet_id: The ID of the spreadsheet
         requests: List of batchUpdate request objects
                  See Google Sheets API docs for available request types
-    
+        spreadsheet_id: Optional spreadsheet ID. If omitted, uses the server's default SHEET_ID.
+
     Returns:
         Result with replies for each request
     """
     service = ctx.request_context.lifespan_context.service
-    return batch_update(service, spreadsheet_id, requests)
+    sid = _resolve_sheet_id(ctx, spreadsheet_id)
+    return batch_update(service, sid, requests)
 
 
 def main() -> None:
