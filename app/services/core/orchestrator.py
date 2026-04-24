@@ -1,7 +1,7 @@
 import logging
 import re
 import time
-from typing import Any
+from typing import Any, AsyncIterator
 
 from app.models.chat import (
     ChatMetadata,
@@ -121,6 +121,132 @@ class KlaudiaOrchestrator:
             tools_used=agent_response.tools_called,
             metadata=meta,
         )
+
+    async def stream(
+        self,
+        messages: list[KlaudiaMessage],
+        session_id: int | None,
+        user_id: int,
+        user_name: str = "User",
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Stream the pipeline as structured SSE-ready events.
+
+        Event shape: {"type": <name>, "data": <payload>}
+        Types: session, guardrail, extraction, step, tool, token, done, error.
+        """
+        start = time.time()
+
+        try:
+            if session_id is None:
+                session_id = await self._c.db_client.create_session(user_id)
+            yield {"type": "session", "data": {"session_id": session_id}}
+
+            user_msg = messages[-1]
+            user_text = user_msg.content
+
+            yield {"type": "guardrail", "data": {"stage": "input", "status": "checking"}}
+            guard_result = await self._c.guardrails.validate_input(user_text)
+            if not guard_result.passed:
+                rejection = guard_result.rejection_message
+                yield {
+                    "type": "guardrail",
+                    "data": {"stage": "input", "status": "rejected", "message": rejection},
+                }
+                yield {"type": "token", "data": {"text": rejection}}
+                elapsed = int((time.time() - start) * 1000)
+                yield {
+                    "type": "done",
+                    "data": {
+                        "session_id": session_id,
+                        "processing_time_ms": elapsed,
+                        "tools_used": [],
+                        "content": rejection,
+                    },
+                }
+                return
+            yield {"type": "guardrail", "data": {"stage": "input", "status": "passed"}}
+
+            await self._c.db_client.save_message(session_id, user_id, "user", user_text)
+
+            extraction_data: dict[str, Any] | None = None
+            has_attachment = user_msg.attachments and len(user_msg.attachments) > 0
+            if has_attachment:
+                for att in user_msg.attachments:
+                    yield {
+                        "type": "extraction",
+                        "data": {
+                            "status": "processing",
+                            "file_name": getattr(att, "file_name", None),
+                        },
+                    }
+                    result = await self._extraction_agent.process(att, session_id, user_id)
+                    extraction_data = {
+                        "file_id": result.file_id,
+                        "file_name": result.file_name,
+                        "pages": result.pages,
+                        "status": result.status,
+                        "summary": result.summary,
+                    }
+                    yield {"type": "extraction", "data": extraction_data}
+
+            history = await self._c.db_client.get_conversation_history(session_id, limit=10)
+            session_files_raw = await self._c.db_client.get_session_files(session_id)
+
+            meta = ChatMetadata(user_name=user_name)
+            session_files_ctx = build_session_context(session_files_raw)
+            system_prompt = KLAUDIA_SYSTEM_PROMPT.format(
+                session_files=session_files_ctx,
+                date=meta.date,
+                time=meta.time,
+                timezone=meta.timezone,
+            )
+
+            llm_messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
+            for row in reversed(history):
+                llm_messages.append({"role": row["sender"], "content": row["message_text"]})
+            if extraction_data:
+                extraction_ctx = build_extraction_context(extraction_data)
+                llm_messages.append({"role": "user", "content": extraction_ctx})
+            llm_messages.append({"role": "user", "content": user_text})
+
+            final_content = ""
+            tools_used: list[str] = []
+            async for event in self._c.supervisor.stream_conversation(
+                messages=llm_messages,
+                extraction_data=extraction_data,
+            ):
+                if event["type"] == "final":
+                    final_content = event["data"]["content"]
+                    tools_used = event["data"]["tools_called"]
+                    continue
+                yield event
+
+            content = re.sub(r"<think>.*?</think>", "", final_content, flags=re.DOTALL).strip()
+
+            output_guard = await self._c.guardrails.validate_output(content)
+            if not output_guard.passed:
+                content = output_guard.rejection_message
+                yield {
+                    "type": "guardrail",
+                    "data": {"stage": "output", "status": "rejected", "message": content},
+                }
+
+            await self._c.db_client.save_message(session_id, user_id, "assistant", content)
+            await self._c.db_client.update_session_timestamp(session_id)
+
+            elapsed = int((time.time() - start) * 1000)
+            yield {
+                "type": "done",
+                "data": {
+                    "session_id": session_id,
+                    "processing_time_ms": elapsed,
+                    "tools_used": tools_used,
+                    "content": content,
+                },
+            }
+        except Exception as exc:
+            logger.exception("Stream pipeline error")
+            yield {"type": "error", "data": {"message": str(exc)}}
 
     def _rejection_response(
         self, session_id: int, message: str, start: float
