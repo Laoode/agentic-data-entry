@@ -21,6 +21,31 @@ logger = logging.getLogger(__name__)
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
+def _ensure_gcp_credentials(settings: Settings) -> None:
+    """Resolve GOOGLE_APPLICATION_CREDENTIALS to an absolute path and export it.
+
+    The Google SDKs (google-genai, google-auth used by langchain-google-vertexai)
+    read this env var directly. A relative path breaks for MCP subprocesses that
+    chdir into mcp-sqlite/ or mcp-gsheets/. Resolving once at startup keeps the
+    file discoverable regardless of CWD and lets subprocesses inherit it.
+    """
+    raw = settings.google_application_credentials
+    if not raw:
+        return
+    candidate = Path(raw)
+    if not candidate.is_absolute():
+        candidate = (_PROJECT_ROOT / raw).resolve()
+    if not candidate.is_file():
+        logger.warning(
+            "GOOGLE_APPLICATION_CREDENTIALS=%s does not exist (resolved=%s)",
+            raw,
+            candidate,
+        )
+        return
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(candidate)
+    logger.info("GOOGLE_APPLICATION_CREDENTIALS resolved to %s", candidate)
+
+
 def _build_mcp_registries(settings: Settings) -> tuple[MCPToolRegistry, MCPToolRegistry]:
     """Construct (mcp_sqlite, mcp_gsheets) registries based on configured transport.
 
@@ -85,6 +110,10 @@ class KlaudiaContainer:
     async def create(cls, settings: Settings) -> "KlaudiaContainer":
         container = cls()
 
+        # Resolve GCP creds path before any SDK touches it (MCP subprocesses
+        # spawned later inherit os.environ).
+        _ensure_gcp_credentials(settings)
+
         # Observability (must be first so other services can reference it)
         container.langfuse = LangfuseService(settings)
 
@@ -126,6 +155,10 @@ class KlaudiaContainer:
             mcp_sqlite=container.mcp_sqlite,
             mcp_gsheets=container.mcp_gsheets,
             langfuse=container.langfuse,
+            use_vertexai=settings.google_genai_use_vertexai,
+            google_cloud_project=settings.google_cloud_project,
+            google_cloud_location=settings.google_cloud_location,
+            temperature=settings.llm_temperature,
         )
 
         logger.info("KlaudiaContainer initialized")

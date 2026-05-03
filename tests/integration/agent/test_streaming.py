@@ -21,9 +21,14 @@ AGENT_TEST_MODEL = os.environ.get("AGENT_TEST_MODEL", "gemini-3-flash-preview")
 SSE_SQLITE = "http://localhost:8001/sse"
 SSE_GSHEETS = "http://localhost:8002/sse"
 
+
+def _have_llm_creds(s: Settings) -> bool:
+    return bool(s.google_cloud_project) if s.google_genai_use_vertexai else bool(s.llm_api_key)
+
+
 pytestmark = pytest.mark.skipif(
-    not Settings().llm_api_key,
-    reason="LLM_API_KEY not set — skipping live supervisor streaming tests",
+    not _have_llm_creds(Settings()),
+    reason="No Gemini credentials (set LLM_API_KEY or GOOGLE_GENAI_USE_VERTEXAI=True + GOOGLE_CLOUD_PROJECT)",
 )
 
 
@@ -55,6 +60,9 @@ def supervisor(mcp_sqlite, mcp_gsheets):
         llm_model=AGENT_TEST_MODEL,
         mcp_sqlite=mcp_sqlite,
         mcp_gsheets=mcp_gsheets,
+        use_vertexai=s.google_genai_use_vertexai,
+        google_cloud_project=s.google_cloud_project,
+        google_cloud_location=s.google_cloud_location,
     )
 
 

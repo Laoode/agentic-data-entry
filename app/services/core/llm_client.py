@@ -23,7 +23,28 @@ class LLMClient:
     def __init__(
         self, settings: Settings, langfuse: Optional[LangfuseService] = None
     ) -> None:
-        self._client = genai.Client(api_key=settings.llm_api_key)
+        if settings.google_genai_use_vertexai:
+            if not settings.google_cloud_project:
+                raise ValueError(
+                    "GOOGLE_GENAI_USE_VERTEXAI=True but GOOGLE_CLOUD_PROJECT is empty"
+                )
+            self._client = genai.Client(
+                vertexai=True,
+                project=settings.google_cloud_project,
+                location=settings.google_cloud_location or "global",
+            )
+            logger.info(
+                "LLMClient: Vertex AI mode (project=%s, location=%s)",
+                settings.google_cloud_project,
+                settings.google_cloud_location or "global",
+            )
+        else:
+            if not settings.llm_api_key:
+                raise ValueError(
+                    "LLM_API_KEY is required when GOOGLE_GENAI_USE_VERTEXAI=False"
+                )
+            self._client = genai.Client(api_key=settings.llm_api_key)
+            logger.info("LLMClient: Gemini Developer API mode")
         self._model = settings.llm_model
         self._temperature = settings.llm_temperature
         self._langfuse = langfuse

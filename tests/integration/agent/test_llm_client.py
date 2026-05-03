@@ -16,9 +16,14 @@ def llm(settings):
     return LLMClient(settings)
 
 
+def _have_llm_creds() -> bool:
+    s = get_settings()
+    return bool(s.google_cloud_project) if s.google_genai_use_vertexai else bool(s.llm_api_key)
+
+
 pytestmark = pytest.mark.skipif(
-    not get_settings().llm_api_key,
-    reason="LLM_API_KEY not set — skipping live Gemini tests",
+    not _have_llm_creds(),
+    reason="No Gemini credentials (set LLM_API_KEY or GOOGLE_GENAI_USE_VERTEXAI=True + GOOGLE_CLOUD_PROJECT)",
 )
 
 

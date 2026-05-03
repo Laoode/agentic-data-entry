@@ -196,9 +196,7 @@ docs/PLAN.md. Kamu scan codebase ku dulu ini agar kamu paham flow dan codenya.
 Disini saya lagi nemmu 1 issue masalah, yang saya coba saat      
 convo dengan Klaudia, seperti ini:  
 
-Ini saya lagi buat project Agentic AI Otomatisasi Data Entry Struk Pembelian Hieararki Agent Teams dengan MCP. Kamu bisa baca versi awal prd  
-  ku sebelumnya docs/PRD.md, dan sebelumnya saya sudah koding dengan claude code untuk apply fitur-fitur kamu bisa baca recapnya disini          
-  docs/PRD.md. Kamu scan codebase ku dulu ini agar kamu paham flow dan codenya. Disini saya lagi nemmu 1 issue masalah, yang saya coba saat      
+Ini saya lagi buat project Agentic AI Otomatisasi Data Entry Struk Pembelian Hieararki Agent Teams dengan MCP. Kamu bisa baca versi awal prd ku sebelumnya docs/PRD.md, dan sebelumnya saya sudah koding dengan claude code untuk apply fitur-fitur kamu bisa baca recapnya disini docs/PLAN.md. Kamu scan codebase ku dulu ini agar kamu paham flow dan codenya. Disini saya lagi nemmu 1 issue masalah, yang saya coba saat      
   convo dengan Klaudia, seperti ini (saya pakai Langfuse untuk liat):                                                                            
   Input:                                                                                                                                         
   [Pasted text #7 +3 lines]                                                                                                                      

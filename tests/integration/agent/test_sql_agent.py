@@ -9,20 +9,24 @@ import json
 import os
 
 import pytest
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.prebuilt import create_react_agent
 from mcp import ClientSession
 from mcp.client.sse import sse_client
 
 from config.settings import Settings
 from klaudia.core.supervisor.agents.sql_agent.prompts import SQL_AGENT_PROMPT
+from klaudia.core.supervisor.llm import build_chat_llm
 from klaudia.core.supervisor.tools.wrappers import get_sql_tools
 from klaudia.interfaces.tool_registry import MCPToolRegistry
-    
+
+
+def _have_llm_creds(s: Settings) -> bool:
+    return bool(s.google_cloud_project) if s.google_genai_use_vertexai else bool(s.llm_api_key)
+
 
 pytestmark = pytest.mark.skipif(
-    not Settings().llm_api_key,
-    reason="LLM_API_KEY not set — skipping live-LLM SQL agent tests",
+    not _have_llm_creds(Settings()),
+    reason="No Gemini credentials (set LLM_API_KEY or GOOGLE_GENAI_USE_VERTEXAI=True + GOOGLE_CLOUD_PROJECT)",
 )
 
 
@@ -42,10 +46,13 @@ AGENT_TEST_MODEL = os.environ.get("AGENT_TEST_MODEL", "gemini-3-flash-preview")
 @pytest.fixture
 def llm():
     s = Settings()
-    return ChatGoogleGenerativeAI(
+    return build_chat_llm(
         model=AGENT_TEST_MODEL,
-        google_api_key=s.llm_api_key,
         temperature=0.0,
+        use_vertexai=s.google_genai_use_vertexai,
+        llm_api_key=s.llm_api_key,
+        google_cloud_project=s.google_cloud_project,
+        google_cloud_location=s.google_cloud_location,
     )
 
 

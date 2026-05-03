@@ -21,6 +21,18 @@ class Settings(BaseSettings):
     llm_api_key: str = Field(default="", alias="LLM_API_KEY")
     llm_temperature: float = Field(default=0.5, alias="LLM_TEMPERATURE")
 
+    # Vertex AI (when google_genai_use_vertexai=True, all Gemini calls route
+    # through GCP Vertex AI instead of the Gemini Developer API. ADC is read
+    # from google_application_credentials).
+    google_cloud_project: str = Field(default="", alias="GOOGLE_CLOUD_PROJECT")
+    google_cloud_location: str = Field(default="global", alias="GOOGLE_CLOUD_LOCATION")
+    google_genai_use_vertexai: bool = Field(
+        default=False, alias="GOOGLE_GENAI_USE_VERTEXAI"
+    )
+    google_application_credentials: str = Field(
+        default="", alias="GOOGLE_APPLICATION_CREDENTIALS"
+    )
+
     # OCR (vLLM - GLM-OCR direct JSON extraction)
     vllm_base_url: str = Field(default="", alias="VLLM_BASE_URL")
     auth_token: str = Field(default="", alias="AUTH_TOKEN")

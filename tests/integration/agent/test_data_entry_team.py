@@ -14,7 +14,6 @@ import time
 import uuid
 
 import pytest
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.prebuilt import create_react_agent
 from mcp import ClientSession
 from mcp.client.sse import sse_client
@@ -25,6 +24,7 @@ from klaudia.core.supervisor.agents.data_entry_team.prompts import (
     READ_AGENT_PROMPT,
     WRITE_AGENT_PROMPT,
 )
+from klaudia.core.supervisor.llm import build_chat_llm
 from klaudia.core.supervisor.tools.wrappers import (
     get_read_tools,
     get_sheet_tools,
@@ -37,9 +37,14 @@ SHEET_ID = "1sYmDi2o55tZktSbgy60rIwZa-3gPqH_b5U7iN4jTCIo"
 SSE_GSHEETS = "http://localhost:8002/sse"
 AGENT_TEST_MODEL = os.environ.get("AGENT_TEST_MODEL", "gemini-3-flash-preview")
 
+
+def _have_llm_creds(s: Settings) -> bool:
+    return bool(s.google_cloud_project) if s.google_genai_use_vertexai else bool(s.llm_api_key)
+
+
 pytestmark = pytest.mark.skipif(
-    not Settings().llm_api_key,
-    reason="LLM_API_KEY not set",
+    not _have_llm_creds(Settings()),
+    reason="No Gemini credentials (set LLM_API_KEY or GOOGLE_GENAI_USE_VERTEXAI=True + GOOGLE_CLOUD_PROJECT)",
 )
 
 
@@ -56,10 +61,13 @@ async def registry():
 @pytest.fixture
 def llm():
     s = Settings()
-    return ChatGoogleGenerativeAI(
+    return build_chat_llm(
         model=AGENT_TEST_MODEL,
-        google_api_key=s.llm_api_key,
         temperature=0.0,
+        use_vertexai=s.google_genai_use_vertexai,
+        llm_api_key=s.llm_api_key,
+        google_cloud_project=s.google_cloud_project,
+        google_cloud_location=s.google_cloud_location,
     )
 
 

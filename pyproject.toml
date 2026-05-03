@@ -23,6 +23,7 @@ dependencies = [
     "mcp-sqlite",
     "mcp-gsheets",
     "langfuse>=4.5.0",
+    "langchain-google-vertexai>=3.2.3",
 ]
 
 [tool.uv.sources]

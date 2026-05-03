@@ -21,7 +21,7 @@ from typing import Any
 
 import pytest
 from langchain_core.messages import HumanMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
+from klaudia.core.supervisor.llm import build_chat_llm
 from langgraph.graph import END
 from mcp import ClientSession
 from mcp.client.sse import sse_client
@@ -280,9 +280,15 @@ def test_team_supervisor_deterministic_finish_on_clarify():
 # --------------------------------------------------------------------------- #
 
 _settings = Settings()
+
+
+def _have_llm_creds(s: Settings) -> bool:
+    return bool(s.google_cloud_project) if s.google_genai_use_vertexai else bool(s.llm_api_key)
+
+
 _skip_live = pytest.mark.skipif(
-    not _settings.llm_api_key,
-    reason="LLM_API_KEY not set — live integration tests skipped",
+    not _have_llm_creds(_settings),
+    reason="No Gemini credentials (set LLM_API_KEY or GOOGLE_GENAI_USE_VERTEXAI=True + GOOGLE_CLOUD_PROJECT)",
 )
 
 
@@ -311,10 +317,13 @@ async def registry():
 
 @pytest.fixture
 def llm():
-    return ChatGoogleGenerativeAI(
+    return build_chat_llm(
         model=AGENT_TEST_MODEL,
-        google_api_key=_settings.llm_api_key,
         temperature=0.0,
+        use_vertexai=_settings.google_genai_use_vertexai,
+        llm_api_key=_settings.llm_api_key,
+        google_cloud_project=_settings.google_cloud_project,
+        google_cloud_location=_settings.google_cloud_location,
     )
 
 
