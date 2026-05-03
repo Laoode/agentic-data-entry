@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     # Database
     sqlite_db: str = Field(default="app_dev.db", alias="SQLITE_DB")
 
+    # MCP transport: "stdio" spawns servers as subprocesses (no idle SSE drop);
+    # "sse" connects to already-running mcp-sqlite/mcp-gsheets on 8001/8002.
+    mcp_transport: str = Field(default="stdio", alias="MCP_TRANSPORT")
+
     # Langfuse Observability
     langfuse_public_key: str = Field(default="", alias="LANGFUSE_PUBLIC_KEY")
     langfuse_secret_key: str = Field(default="", alias="LANGFUSE_SECRET_KEY")

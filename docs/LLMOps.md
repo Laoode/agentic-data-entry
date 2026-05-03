@@ -80,10 +80,11 @@ Contoh: `pint_GAMBAR_0042.jpg`, `cord_GAMBAR_0001.jpg`
 - Metrics tracked:
   - `ANLS*` (Average Normalized Levenshtein Similarity)
   - `KIEval` (Key Information Extraction Evaluation)
+  - `Digit Accuracy` (Normalize price value, Exatch Match)
 
-### 2.3 Hyperparameter Optimization
-- Method: **TPE** (Tree-structured Parzen Estimator)
-- Tool: **Optuna**
+### 2.3 Hyperparameter Tuning
+- Method: Search Heuristic
+- Rule of thumb: lora_rank = [8, 16, 32], lora_alpha = r*2
 
 ### 2.4 Output
 - Best Model selected → registered to **Model Registry**

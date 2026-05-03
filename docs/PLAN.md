@@ -538,16 +538,7 @@ Saat refactor `llm_client.py` untuk tambah `_nullspan()` helper, method `async d
 
 **Fix:** tambah `@contextmanager def _nullctx(): yield None` di atas class.
 
-### 2. Lessons
-
-| # | Observasi | Implikasi |
-|---|-----------|-----------|
-| L1 | Langfuse 4.x pakai **OpenTelemetry global tracer provider**. Multiple `Langfuse()` instances dalam satu process share state — `shutdown()` di test pertama bikin test kedua deadlock. | Semua test integrasi Langfuse harus pakai fixture **module/session-scoped**, bukan function-scoped. |
-| L2 | `tail -N` di shell pipe **tidak streaming** — menunggu EOF. Waktu test lama, output kelihatan kosong sampai selesai. | Untuk test run lama, jangan pipe ke `tail` di background. Run langsung atau pakai `--capture=no`. |
-| L3 | Async generator + `with` contextmanager + `yield` tidak reliable. `yield` di dalam `with` tidak trigger `__exit__` deterministik saat generator di-close. | Pakai manual `__enter__` / `__exit__` di try-except-finally untuk async generator yang butuh bungkus span. |
-| L4 | Fail-open **bukan optional** untuk observability. Kalau Langfuse flush timeout 30s terjadi saat production down, bisa cascade ke latency user-facing. | Semua wrapper `try/except` harus swallow + log debug, tidak pernah raise ke caller. |
-
-### 3. Siap untuk Plan v5
+### 2. Siap untuk Plan v5
 
 Dengan observability jalan, Plan v5 (React Native + Expo iOS) bisa dimulai dengan confidence:
 - Semua bug di flow agent bisa di-replay dari dashboard per `session_id`.
@@ -565,3 +556,126 @@ THINGS I DIDN'T TOUCH:
 - Internal ops (mcp-gsheets/app/tools/*.py): tetap wajib spreadsheet_id: str — fallback hanya di boundary (MCP tool layer), bukan di business logic. Good separation.
 - mcp-sqlite/*: tidak ada masalah serupa.
 - Test files: semua pakai kwargs, jadi tidak pecah meski saya re-order parameter.
+
+※ Plan v4.2 is Done ※
+
+## Plan v4.3
+ CHANGES MADE:                                                                                                                                  
+  - klaudia/core/supervisor/agents/data_entry_team/agents.py: forward full state["messages"] to team subgraph (Bug 1 — multi-turn context loss)  
+  - klaudia/core/supervisor/agents/data_entry_team/prompts.py: Pattern C rewritten non-destructive (add_rows start_row=0 → update_cells A1) +    
+  DESTRUCTIVE-WRITE GUARDRAIL section                                                                                                            
+  - klaudia/core/supervisor/agent.py: _content_to_text + _strip_internal_markers + _resolve_final_content; both process_conversation and         
+  stream_conversation use them so empty AIMessage no longer leaks "[]"                                                                           
+  - tests/integration/agent/test_data_entry_team.py: + test_team_resolves_sheet_from_prior_turn (Bug 1), +
+  test_team_adds_header_without_wiping_data (Bug 2 F3)                                                                                           
+                                                            
+  THINGS I DIDN'T TOUCH:                                                                                                                         
+  - router/state/wrappers — bugs were prompt + delegation + content extraction, not routing
+  - tests/integration/agent/test_hitl_and_idempotency.py (untracked) — orthogonal                                                                
+                                                                                                                                                 
+  POTENTIAL CONCERNS:                                                                                                                            
+  - The two new integration tests need MCP-GSheets on :8002 + LLM_API_KEY + the real default spreadsheet to run; they will skip without          
+  LLM_API_KEY but still hit live Google Sheets when run.                                                                                         
+  - Pattern C correctness depends on the model picking add_rows over the destructive chain. The guardrail is prompt-side; only live runs prove it
+   sticks. Worth a manual retry of the original "indomaret" scenario before declaring victory.                                                   
+                                                                                                                        
+※ recap: Goal is fixing two Klaudia bugs (multi-turn sheet context loss and destructive header writes that leaked "[]" replies); all three code  
+  fixes and two regression tests are in place.
+※ Plan v4.3 is Done ※
+
+ CHANGES MADE                                                                                                                                   
+                                                                                                                                                 
+  - klaudia/interfaces/tool_registry.py — MCPToolRegistry sekarang dual-transport. Positional ctor (name, url) tetap SSE (backwards-compat untuk 
+  test). Factory baru MCPToolRegistry.from_stdio(name, command, args, cwd, env) untuk stdio. _run routing ke sse_client atau stdio_client sesuai 
+  params yang di-set.                                                                                                                            
+  - config/settings.py — tambah mcp_transport: str (alias MCP_TRANSPORT), default "stdio".                                                     
+  - app/services/core/container.py — _build_mcp_registries(settings) factory: kalau stdio → spawn subprocess dengan cwd ke folder server-nya +   
+  env (override SQLITE_DB jadi absolute path supaya gak ke-resolve relative ke cwd subprocess); kalau sse → URL lama.                            
+  - startup.sh — env MCP_TRANSPORT (default stdio); skip spawn mcp-sqlite & mcp-gsheets standalone kalau stdio (FastAPI yang spawn). Forward env 
+  ke uvicorn.                                                                                                                                    
+  - klaudia/core/supervisor/agents/data_entry_team/prompts.py — tambah Pattern D ("Add a NEW COLUMN of values to the right of existing data") di
+  _COMPOSITION_GUIDE. Pattern D eksplisit:                                                                                                       
+    a. baca dulu pakai tool_get_sheet_data untuk tahu kolom & jumlah baris                                                                     
+    b. target column = kolom kosong pertama setelah yang berisi                                                                                  
+    c. payload literal [[header],[v1],...,[vN]], bukan ARRAYFORMULA                                                                              
+    d. range tepat <col>1:<col><N+1>                                                                                                             
+  Plus contoh persis kasus kamu (sari laut + quantity), dan extension ke DESTRUCTIVE-WRITE GUARDRAIL (clear_range tidak boleh dipakai untuk add  
+  column).                                                                                                                                       
+                                                                                                                                                 
+  THINGS I DIDN'T TOUCH                                                                                                                          
+                                                                                                                                               
+  - shutdown.sh — gracefully handle missing pid file, jadi stdio mode aman tanpa perubahan                                                       
+  - mcp-config.json / mcp-config-stdio.json — masih cuma dokumentasi (tidak di-load runtime), saya keep apa adanya
+  - Test files yang pakai MCPToolRegistry("name", "url") positional — masih jalan (legacy ctor preserved)                                        
+  - agent.py (Gemini 3.1 Pro) — itu Fix #5 dari rekomendasi awal, kamu cuma minta #1 dan #3                                                      
+                                                                                                                                                 
+  VERIFIKASI                                                                                                                                     
+                                                                                                                                                 
+  - Stdio handshake mcp-gsheets: ✅ 16 tools discovered, credentials loaded, SHEET_ID resolved                                                 
+  - Stdio handshake mcp-sqlite: ✅ 11 tools discovered
+  - Backwards-compat SSE ctor: ✅ tetap valid
+  - Reject ctor tanpa url & tanpa command: ✅ ValueError jelas                                                                                                
+
+  Default sudah stdio. Kalau mau rollback ke SSE: MCP_TRANSPORT=sse ./startup.sh.                                                                
+  
+  POTENTIAL CONCERNS                                                                                                                             
+                                                                                                                                               
+  1. MCP server log pindah ke fastapi.log — di stdio, MCP server stderr di-pipe ke parent (FastAPI). Jadi logs/mcp-gsheets.log &                 
+  logs/mcp-sqlite.log tidak akan ter-update di stdio mode; log MCP server muncul campuran di logs/fastapi.log. Tradeoff yang masuk akal untuk  
+  debugging end-to-end, tapi flag aja kalau kamu lebih suka file terpisah — bisa saya redirect.                                                  
+  2. Test integration test_data_entry_team.py & friends — masih asumsi SSE 8002 hidup. Mereka tidak break (ctor preserved), tapi butuh         
+  ./startup.sh dengan MCP_TRANSPORT=sse untuk mereka run. Saya tidak ubah test karena itu di luar scope yang kamu minta.                         
+  3. Pattern D belum diuji live — saya yakin prompt-nya kuat (literal value, eksplisit "tidak ARRAYFORMULA", range exact + contoh sari laut),
+  tapi unverified sampai kamu coba lagi. Worth validating dengan ulangi message ke-3 setelah restart.                                            
+                                                                                                                                               
+  Saran lanjutan kalau habis ini masih lambat: Fix #5 (worker agent pakai model lebih cepat seperti gemini-2.5-flash untuk write/read/sheet,     
+  reserve Gemini 3 Pro hanya untuk top supervisor). Tapi tunggu instruksi kamu.                                                                
+                                                                                                                                                 
+✻ Crunched for 6m 22s                                                                                                                          
+                                                                                          
+※ recap: Tujuan: fix Klaudia data-entry agent yang broken pipe + 4 menit response. Sudah implementasi Fix #1 (MCP stdio transport) dan Fix #3    
+  (Pattern D di write_agent prompt). Next action: jalankan ./shutdown.sh lalu ./startup.sh, lalu retry message ketiga di Klaudia untuk           
+  verifikasi. (disable recaps in /config) 
+
+  CHANGES MADE                                                                                                                                   
+   
+  - klaudia/core/supervisor/tools/wrappers.py — get_write_tools() sekarang include tool_get_sheet_data + tool_list_sheets. Comment-nya           
+  menjelaskan kenapa ada overlap dengan read_agent (Pattern B/D dependency).
+                                                                                                                                                 
+  THINGS I DIDN'T TOUCH                                                                                                                          
+   
+  - Architecture team (3 worker tetap: read/sheet/write) — tidak saya ubah jadi 2-fase routing. Trade-off saya jelaskan di atas; kalau kamu mau  
+  Option B-style routing tetap bilang.                      
+  - DATA_ENTRY_SUPERVISOR_PROMPT — sudah benar (compound → write_agent). Tidak perlu diubah.                                                     
+  - READ_AGENT_PROMPT & SHEET_AGENT_PROMPT — bukan jalur masalah ini.                                                                            
+  - Pattern D yang saya tambah turn lalu — tetap. Sekarang baru aktual bisa dieksekusi.                                                          
+                                                                                                                                                 
+  YANG HARUS KAMU LAKUKAN SEKARANG                                                                                                               
+                                                                                                                                                 
+  ./shutdown.sh                                                                                                                                  
+  ./startup.sh                                              
+                                                                                                                                                 
+  Lalu coba ulang message yang sama: "Halo Klaudia, di sheet sari laut ku, bisa kamu tambahkan kolom untuk quantity? dan isikan semua itu dengan 
+  1"                                                                                                                                             
+                                                                                                                                                 
+  Yang harus kamu liat di Langfuse trace + logs/fastapi.log:                                                                                     
+  1. Top supervisor → data_entry_team
+  2. Team supervisor → write_agent                                                                                                               
+  3. write_agent: tool_get_sheet_data(sheet='sari laut') → returns rows
+  4. write_agent: tool_update_cells(sheet='sari laut', range='C1:C6', data=[['quantity'],[1],[1],[1],[1],[1]])                                   
+  5. write_agent emits [WRITE_DONE] kolom quantity ditambahkan di Sari Laut, 5 baris diisi 1                                                     
+  6. Team supervisor: deterministic FINISH                                                                                                       
+                                                                                                                                                 
+  Total tool call: 2 (1 read + 1 write). Total LLM hops di write_agent: 3 (think → call read → think → call write → think → final marker).       
+  Latensi target: ~60-90s untuk Gemini 3.1 Pro (masih lambat tapi ini bottleneck modelnya, bukan arsitektur).                                    
+                                                            
+  POTENTIAL CONCERNS                                                                                                                             
+                                                            
+  1. tool_get_sheet_data arg range: kalau Gemini iseng kasih range=None (mau full sheet), MCP server treat None sebagai "ambil semua". Cek       
+  read_ops.py:get_sheet_data — saya tidak modifikasi, asumsi kerja. Kalau ternyata error, kasih tau error message-nya.
+  2. tool_update_cells arg range: agent harus konsisten pakai 'C1:C6' (sheet name DI LUAR range) karena server dalam update_cells melakukan      
+  f"{sheet}!{range_notation}". Pattern D di prompt sudah konsisten dengan ini.                                                                   
+  3. Latensi tetap 60-90s karena Gemini 3.1 Pro Preview reasoning. Kalau kamu mau drop ke <30s, perlu Fix #5 (worker pakai gemini-2.5-flash).
+  Tapi out of scope kamu sekarang.                                                                                                               
+  4. Kalau write_agent malah pakai Pattern B (clear_range + update) padahal cuma diminta tambah kolom: kemungkinan kecil karena Pattern D dan
+  DESTRUCTIVE-WRITE GUARDRAIL eksplisit larang clear_range untuk add column. Tapi kalau terjadi, kasih tau, saya tighten lagi.                   

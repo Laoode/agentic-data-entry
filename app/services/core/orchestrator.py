@@ -103,10 +103,7 @@ class KlaudiaOrchestrator:
                 session_id, guard_result.rejection_message, start
             )
 
-        # 4. Save user message
-        await self._c.db_client.save_message(session_id, user_id, "user", user_text)
-
-        # 5. Check for attachments
+        # 4. Check for attachments
         extraction_data = None
         has_attachment = user_msg.attachments and len(user_msg.attachments) > 0
         if has_attachment:
@@ -120,7 +117,11 @@ class KlaudiaOrchestrator:
                     "summary": result.summary,
                 }
 
-        # 6. Build context
+        # 5. Build context
+        # NOTE: history is fetched BEFORE saving the current user msg so the
+        # current msg is appended exactly once at the tail of llm_messages.
+        # Saving first would double the user turn (history + explicit append),
+        # which confuses the LLM (two identical consecutive user messages).
         history = await self._c.db_client.get_conversation_history(session_id, limit=10)
         session_files_raw = await self._c.db_client.get_session_files(session_id)
 
@@ -150,6 +151,9 @@ class KlaudiaOrchestrator:
 
         # Add current user message
         llm_messages.append({"role": "user", "content": user_text})
+
+        # 6. Persist the current user message NOW that history has been read.
+        await self._c.db_client.save_message(session_id, user_id, "user", user_text)
 
         # 7. Invoke supervisor
         agent_response = await self._c.supervisor.process_conversation(
@@ -247,7 +251,8 @@ class KlaudiaOrchestrator:
                 return
             yield {"type": "guardrail", "data": {"stage": "input", "status": "passed"}}
 
-            await self._c.db_client.save_message(session_id, user_id, "user", user_text)
+            # User msg is persisted AFTER llm_messages is built (see the
+            # equivalent step in process()) so history doesn't double-count it.
 
             extraction_data: dict[str, Any] | None = None
             has_attachment = user_msg.attachments and len(user_msg.attachments) > 0
@@ -289,6 +294,8 @@ class KlaudiaOrchestrator:
                 extraction_ctx = build_extraction_context(extraction_data)
                 llm_messages.append({"role": "user", "content": extraction_ctx})
             llm_messages.append({"role": "user", "content": user_text})
+
+            await self._c.db_client.save_message(session_id, user_id, "user", user_text)
 
             final_content = ""
             tools_used: list[str] = []

@@ -20,6 +20,7 @@ from mcp import ClientSession
 from mcp.client.sse import sse_client
 
 from config.settings import Settings
+from klaudia.core.supervisor.agents.data_entry_team.agents import make_data_entry_team
 from klaudia.core.supervisor.agents.data_entry_team.prompts import (
     READ_AGENT_PROMPT,
     WRITE_AGENT_PROMPT,
@@ -160,3 +161,106 @@ async def test_read_agent_reads_seeded_data(registry, llm, temp_sheet):
 
     joined = " ".join(str(getattr(m, "content", "")) for m in result["messages"]).upper()
     assert "ALFAMART" in joined, f"read_agent didn't surface seeded value: {joined[:400]}"
+
+
+# --- Test 4: Multi-turn sheet resolution (regression) ---
+
+
+@pytest.mark.asyncio
+async def test_team_resolves_sheet_from_prior_turn(registry, llm, temp_sheet):
+    """Team subgraph must remember the sheet referenced in earlier turns.
+
+    Regression for context loss bug: data_entry_team_node previously forwarded
+    only state["messages"][-1] to the team subgraph. Multi-turn requests like
+    "recap sheet X" → "tambahkan header" landed on the wrong (default) sheet
+    because the team had no memory of which sheet "X" was.
+    """
+    await _sheet_call(
+        "tool_append_rows",
+        {
+            "spreadsheet_id": SHEET_ID,
+            "sheet": temp_sheet,
+            "data": [["INDOMARET", "Indomie", "15540"]],
+        },
+    )
+
+    team = make_data_entry_team(llm, registry)
+
+    conversation = [
+        ("user", f"Hi, bisa kamu recap isi sheet '{temp_sheet}' itu apa?"),
+        (
+            "assistant",
+            f"Sheet '{temp_sheet}' berisi 1 baris: INDOMARET, Indomie, 15540.",
+        ),
+        ("user", "Tolong rapikan, tambahkan header Merchant, Nama Barang, Harga di baris paling atas."),
+    ]
+
+    await team.ainvoke({"messages": conversation})
+
+    got = await _sheet_call(
+        "tool_get_sheet_data",
+        {"spreadsheet_id": SHEET_ID, "sheet": temp_sheet, "range": "A1:C2"},
+    )
+    values = got.get("values") or []
+    assert values, f"sheet '{temp_sheet}' is empty after team turn: {got}"
+
+    header = [str(c).strip().lower() for c in values[0]]
+    assert header == ["merchant", "nama barang", "harga"], (
+        f"header not written to '{temp_sheet}' (got {values[0]!r}). "
+        "Team likely wrote to the wrong sheet — context from earlier turn was lost."
+    )
+
+
+# --- Test 5: Non-destructive header addition (regression) ---
+
+
+@pytest.mark.asyncio
+async def test_team_adds_header_without_wiping_data(registry, llm, temp_sheet):
+    """Adding a header above existing data must preserve the data row.
+
+    Regression for the destructive-write bug: write_agent previously chained
+    tool_clear_range + tool_update_cells with a header-only payload and wiped
+    the existing rows. The fix is Pattern C — add_rows(start_row=0) followed
+    by update_cells('A1', header) — which inserts a blank top row instead of
+    clearing the sheet. The original data must remain at A2 untouched.
+    """
+    await _sheet_call(
+        "tool_append_rows",
+        {
+            "spreadsheet_id": SHEET_ID,
+            "sheet": temp_sheet,
+            "data": [["INDOMARET", "Indomie", "15540"]],
+        },
+    )
+
+    team = make_data_entry_team(llm, registry)
+
+    conversation = [
+        (
+            "user",
+            f"Tolong tambahkan header Merchant, Nama Barang, Harga di baris paling "
+            f"atas sheet '{temp_sheet}'. Jangan hapus data yang sudah ada.",
+        ),
+    ]
+
+    await team.ainvoke({"messages": conversation})
+
+    got = await _sheet_call(
+        "tool_get_sheet_data",
+        {"spreadsheet_id": SHEET_ID, "sheet": temp_sheet, "range": "A1:C2"},
+    )
+    values = got.get("values") or []
+    assert len(values) >= 2, (
+        f"sheet '{temp_sheet}' lost data after header add (got {values!r}). "
+        "Team likely used clear_range + update_cells with a header-only payload."
+    )
+
+    header = [str(c).strip().lower() for c in values[0]]
+    data_row = [str(c).strip() for c in values[1]]
+    assert header == ["merchant", "nama barang", "harga"], (
+        f"header row missing or wrong (got {values[0]!r})"
+    )
+    assert data_row == ["INDOMARET", "Indomie", "15540"], (
+        f"original data row was wiped or shifted (got {values[1]!r}). "
+        "Pattern C (add_rows + update_cells) should preserve existing data at A2."
+    )

@@ -403,7 +403,7 @@ GLM-OCR merupakan model OCR multimodal untuk pemahaman dokumen kompleks yang dib
 Page 32
 <page_number>29</page_number>
 
-Arsitektur GLM-V
+1. Arsitektur GLM-V
 Keluarga model GLM-V (GLM-4.1V-Thinking, GLM-4.5V, dan GLM-4.6V) menggunakan AIMv2-Huge sebagai inisialisasi vision encoder. Untuk memungkinkan ViT (Vision Transformer) mendukung resolusi gambar dan rasio aspek yang arbitrer, dua adaptasi diperkenalkan. Pertama, 2D-RoPE diintegrasikan ke dalam lapisan self-attention ViT, memungkinkan model untuk memproses gambar dengan rasio aspek ekstrem (lebih dari 200:1) atau resolusi tinggi (di atas 4K). Kedua, position embedding absolut yang dapat dipelajari dari ViT pre-trained dipertahahkan dan diadaptasi secara dinamis ke masukan resolusi variabel melalui interpolasi bikubik. Untuk patch masukan pada grid H_p × W_p, koordinat integer g = (w, h) dari setiap patch dinormalisasi ke grid kontinu g_{nr} yang mencakup [-1,1]:
 
 g_{nr} = (w_{norm}, h_{norm}) = 2 · (w + 0.5 / W_p, h + 0.5 / H_p) - 1 (2. 6)
@@ -419,7 +419,7 @@ Seperti pada Gambar 2.5 yang menunjukkan arsitektur GLM-V yang terdiri dari tiga
 Page 33
 <page_number>30</page_number>
 
-Multi-Token Prediction (MTP)
+2. Multi-Token Prediction (MTP)
 GLM-OCR memperkenalkan loss Multi-Token Prediction (MTP) untuk meningkatkan efisiensi pelatihan dan akurasi pengenalan. Berbeda dari pemodelan bahasa standar yang mempelajari prediksi next-token dengan objektif cross-entropy L₁ = −Σₜ log Pθ(xₜ₊₁ | xₜ:₁), MTP menggeneralisasi pendekatan ini dengan menginstruksikan model untuk memprediksi n token masa depan secara bersamaan di setiap posisi dalam korpus pelatihan:
 
 Lₙ = −Σₜ log Pθ(xₜ₊ⁿ:ₜ₊₁ | xₜ:₁) (2. 8)
@@ -430,7 +430,7 @@ Pθ(xₜ₊ᵢ | xₜ:₁) = softmax(fᵤ(fₕᵢ(fₛ(xₜ:₁)))) (2. 9) untuk
 
 Pendekatan MTP mengurangi diskrepansi distribusional antara teacher forcing pada saat pelatihan dan pembangkitan autoregressif pada saat inferensi, serta secara implisit memberikan bobot lebih tinggi pada token-token yang merupakan titik keputusan (choice points) yang berkorelasi erat dengan kelanjutan teks. Eksperimen menunjukkan bahwa model prediksi 4-token memecahkan 12% lebih banyak masalah pada HumanEval dan 17% lebih banyak pada MBPP dibandingkan model next-token yang sebanding, dan inferensi dapat dipercepat hingga 3× melalui self-speculative decoding (Gloeckle dkk., 2024).
 
-Reinforcement Learning untuk OCR
+3. Reinforcement Learning untuk OCR
 GLM-OCR menerapkan reinforcement learning (RL) yang stabil untuk seluruh tugas guna meningkatkan generalisasi. Proses RL menggunakan GRPO (Group Relative Policy Optimization) sebagai algoritma optimisasi dan merancang sistem reward spesifik-domain untuk setiap subdomain multimodal. Untuk domain OCR secara khusus, desain reward menggunakan edit distance yang diformulasikan sebagai:
 
 Page 34
@@ -442,7 +442,7 @@ dengan (d_{edit}(ans,gt)) adalah jarak edit antara jawaban model dan ground trut
 
 Selain itu, GLM-OCR menggunakan Reinforcement Learning with Curriculum Sampling (RLCS) yang menerapkan wawasan curriculum learning pada pengambilan sampel daring. RLCS menggunakan kurikulum adaptif yang secara kontinu menyesuaikan tingkat kesulitan sampel pelatihan untuk mencocokkan kemampuan model yang terus berkembang, memastikan setiap pembaruan memberikan informasi yang maksimal. Pendekatan ini mendownsample contoh yang terlalu mudah maupun yang saat ini terlalu sulit, dan meningkatkan paparan pada tingkat kesulitan menengah di mana model memperoleh manfaat terbesar.
 
-Pipeline Analisis Dokumen
+4. Pipeline Analisis Dokumen
 Untuk pemrosesan dokumen end-to-end, GLM-OCR dikombinasikan dengan PP-DocLayoutV3 untuk analisis tata letak dan pengenalan paralel. PP-DocLayoutV3 merupakan evolusi arsitektural signifikan yang bertransisi dari deteksi persegi panjang standar ke kerangka segmentasi instansi yang robust, sambil secara simultan mengintegrasikan prediksi urutan baca (reading order prediction) ke dalam arsitektur Transformer terpadu secara end-to-end (Cui dkk., 2026). Model ini memprediksi mask yang presisi pada tingkat piksel untuk elemen tata letak, yang krusial untuk mengisolasi komponen dokumen dalam skenario non-ideal seperti halaman miring atau melengkung. Urutan baca diturunkan dari skor presedens berpasangan (pairwise precedence score) (S_{i,j}) yang dihitung dari query embedding yang telah diperhalus melalui global pointer mechanism:
 
 (S_{i,j} = \frac{f(q_i, q_j) - f(q_j, q_i)}{\sqrt{d_h}}, \quad \text{di mana } f(q_i, q_j) = (W_q q_i)^T (W_k q_j)) (2. 11)
