@@ -1,4 +1,4 @@
-<h1 align="center"><img src="https://readme-typing-svg.demolab.com?font=Chakra+Petch&weight=500&size=29&duration=1&pause=1000&color=000000&background=CCFF00&vCenter=true&repeat=false&width=941&lines=Agentic+Processing+Receipt+&+Data+Entry+System" alt="Typing SVG" /></h1>
+<h1 align="center"><img src="https://readme-typing-svg.demolab.com?font=Chakra+Petch&weight=500&size=29&duration=1&pause=1000&color=000000&background=CCFF00&vCenter=true&repeat=false&width=928&lines=Klaudia+Agentic+AI+for+Processing+Receipt+and+Data+Entry+Automation" alt="Typing SVG" /></h1>
 
 <div align="center">
   <img src="https://github.com/Laoode/agentic-data-entry/blob/development/docs/LLMOps.png" alt="LLM Ops Pipeline">
