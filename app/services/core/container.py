@@ -8,7 +8,10 @@ from config.settings import Settings
 from app.services.core.llm_client import LLMClient
 from app.services.core.observability import LangfuseService
 from app.services.extraction.infra.db_client import AppDBClient
-from app.services.extraction.infra.ocr_client import OCRClient
+from app.services.extraction.infra.dedup_cache import DedupCache
+from app.services.extraction.infra.kie_client import KIEClient
+from app.services.extraction.infra.object_store import MinIOClient
+from app.services.extraction.ingest import IngestService
 from app.services.extraction.agents.base import ExtractionAgent
 from app.services.guardrails import GuardrailsAgent, GuardrailsConfig
 from klaudia.core.supervisor.agent import SupervisorAgent
@@ -96,9 +99,13 @@ class KlaudiaContainer:
     """Service container - manages lifecycle of all services."""
 
     def __init__(self) -> None:
+        self.settings: Optional[Settings] = None
         self.llm_client: Optional[LLMClient] = None
-        self.ocr_client: Optional[OCRClient] = None
+        self.kie_client: Optional[KIEClient] = None
         self.db_client: Optional[AppDBClient] = None
+        self.dedup_cache: Optional[DedupCache] = None
+        self.object_store: Optional[MinIOClient] = None
+        self.ingest_service: Optional[IngestService] = None
         self.mcp_sqlite: Optional[MCPToolRegistry] = None
         self.mcp_gsheets: Optional[MCPToolRegistry] = None
         self.guardrails: Optional[GuardrailsAgent] = None
@@ -109,6 +116,7 @@ class KlaudiaContainer:
     @classmethod
     async def create(cls, settings: Settings) -> "KlaudiaContainer":
         container = cls()
+        container.settings = settings
 
         # Resolve GCP creds path before any SDK touches it (MCP subprocesses
         # spawned later inherit os.environ).
@@ -119,11 +127,32 @@ class KlaudiaContainer:
 
         # LLM clients
         container.llm_client = LLMClient(settings, langfuse=container.langfuse)
-        container.ocr_client = OCRClient(settings, langfuse=container.langfuse)
+        container.kie_client = KIEClient(settings, langfuse=container.langfuse)
 
         # Database
         container.db_client = AppDBClient(settings)
         await container.db_client.connect()
+
+        # Dedup cache (Redis) — fail-soft so dev can run without Redis
+        container.dedup_cache = DedupCache(settings)
+        try:
+            await container.dedup_cache.connect()
+        except Exception as e:
+            logger.warning(
+                "Redis unavailable (%s). Dedup cache disabled; SQLite-only fallback.",
+                e,
+            )
+            container.dedup_cache = None
+
+        # Object store (MinIO) — required; uploads have nowhere to go without it
+        container.object_store = MinIOClient(settings)
+        try:
+            await container.object_store.ensure_bucket()
+        except Exception as e:
+            logger.error(
+                "MinIO unavailable (%s). Image/PDF uploads will fail.", e
+            )
+            # Keep instance; calls will surface specific errors at upload time
 
         # MCP registries (transport selected via MCP_TRANSPORT setting)
         container.mcp_sqlite, container.mcp_gsheets = _build_mcp_registries(settings)
@@ -131,10 +160,26 @@ class KlaudiaContainer:
         await container.mcp_sqlite.connect()
         await container.mcp_gsheets.connect()
 
-        # Extraction agent (no LLM dep — GLM-OCR returns JSON directly)
+        # Ingest service — drives dedup pipeline. ExtractionAgent is now a thin
+        # observability facade over this.
+        if container.dedup_cache is None:
+            from app.services.extraction.infra.dedup_cache import DedupCache as _DC
+            # Provide a minimal in-memory shim so IngestService works without
+            # Redis. Cache misses always; persistence still goes to SQLite.
+            container.dedup_cache = _NullDedupCache()  # type: ignore[assignment]
+
+        container.ingest_service = IngestService(
+            settings=settings,
+            db=container.db_client,
+            cache=container.dedup_cache,  # type: ignore[arg-type]
+            store=container.object_store,
+            ocr=container.kie_client,
+            langfuse=container.langfuse,
+        )
+
+        # Extraction agent (now a facade)
         container.extraction_agent = ExtractionAgent(
-            ocr_client=container.ocr_client,
-            db_client=container.db_client,
+            ingest_service=container.ingest_service,
             langfuse=container.langfuse,
         )
 
@@ -168,14 +213,42 @@ class KlaudiaContainer:
         logger.info("Starting graceful shutdown...")
         if self.llm_client:
             await self.llm_client.shutdown()
-        if self.ocr_client:
-            await self.ocr_client.shutdown()
+        if self.kie_client:
+            await self.kie_client.shutdown()
         if self.mcp_sqlite:
             await self.mcp_sqlite.disconnect()
         if self.mcp_gsheets:
             await self.mcp_gsheets.disconnect()
+        if isinstance(self.dedup_cache, DedupCache):
+            await self.dedup_cache.close()
         if self.db_client:
             await self.db_client.close()
         if self.langfuse:
             self.langfuse.shutdown()
         logger.info("Shutdown complete")
+
+
+class _NullDedupCache:
+    """Null-object replacement for DedupCache when Redis is down.
+
+    Every read misses, every write is a no-op. IngestService keeps working
+    against SQLite alone — slower, but no functional regression.
+    """
+
+    async def get_blob(self, *_a, **_kw):  # noqa: D401
+        return None
+
+    async def set_blob(self, *_a, **_kw):
+        return None
+
+    async def get_extraction(self, *_a, **_kw):
+        return None
+
+    async def set_extraction(self, *_a, **_kw):
+        return None
+
+    async def queue_depth(self, *_a, **_kw):
+        return 0
+
+    async def close(self):
+        return None

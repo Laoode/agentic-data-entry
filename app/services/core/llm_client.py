@@ -93,6 +93,9 @@ class LLMClient:
                         config=types.GenerateContentConfig(
                             temperature=temp,
                             max_output_tokens=effective_tokens,
+                            thinking_config=types.ThinkingConfig(
+                                thinking_level="minimal"
+                            ),
                         ),
                     )
                 except Exception as e:

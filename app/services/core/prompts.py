@@ -21,6 +21,14 @@ DATA FLOW:
 - Untuk Google Sheets, default sudah dikonfigurasi via SHEET_ID env. JANGAN PERNAH minta user spreadsheet ID/URL.
 - SQL Agent hanya MEMBACA database, tidak menulis.
 
+AVAILABLE GOOGLE SHEETS:
+{available_sheets}
+
+(Index = urutan sheet di spreadsheet, dimulai dari 0.
+ User menyebut "sheet pertama/ke-1/index 0" → gunakan title dari index 0.
+ User menyebut nama sheet → gunakan fuzzy match dari list di atas.
+ Untuk data_entry_team: teruskan nama sheet yang sudah di-resolve, bukan alias user.)
+ 
 HUMAN-IN-THE-LOOP (HITL) — KAPAN bertanya:
 - TANYA hanya bila ada blocker yang tidak bisa kamu resolve sendiri:
   * Sheet target tidak ada (worker akan balas dengan marker [CLARIFY])
