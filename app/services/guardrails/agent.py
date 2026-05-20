@@ -10,7 +10,7 @@ from app.services.guardrails.base import check_prompt_injection
 from app.services.guardrails.config import GuardrailsConfig
 from app.services.guardrails.output import check_output
 from app.services.guardrails.prompts import REJECTION_MESSAGES
-from app.services.guardrails.scope import check_scope
+from app.services.guardrails.scope import ScopeViolation, check_scope
 
 logger = logging.getLogger(__name__)
 
@@ -40,10 +40,7 @@ class GuardrailsAgent:
         self._langfuse = langfuse
 
     async def validate_input(self, text: str) -> GuardrailResult:
-        """Run prompt injection and scope checks in parallel.
-
-        Raises GuardrailError if rejected.
-        """
+        """Run prompt injection and scope checks in parallel."""
         span_cm = (
             self._langfuse.span(
                 "guardrail.validate_input",
@@ -55,11 +52,10 @@ class GuardrailsAgent:
         )
 
         with span_cm as obs:
-            # Run both checks concurrently
             injection_task = check_prompt_injection(text, self._config, self._langfuse)
             scope_task = check_scope(text, self._llm_client, self._config)
 
-            is_injection, is_blacklisted = await asyncio.gather(
+            is_injection, scope_result = await asyncio.gather(
                 injection_task, scope_task
             )
 
@@ -73,12 +69,13 @@ class GuardrailsAgent:
                         pass
                 return GuardrailResult(passed=False, rejection_message=msg)
 
-            if is_blacklisted:
-                msg = REJECTION_MESSAGES["blacklisted_topic"]
-                logger.warning("Input rejected: blacklisted topic")
+            if scope_result.violated:
+                policy = scope_result.policy or "blacklisted_topic"
+                msg = REJECTION_MESSAGES.get(policy, REJECTION_MESSAGES["blacklisted_topic"])
+                logger.warning(f"Input rejected: {policy}")
                 if obs is not None:
                     try:
-                        obs.update(output={"passed": False, "reason": "blacklisted_topic"})
+                        obs.update(output={"passed": False, "reason": policy})
                     except Exception:
                         pass
                 return GuardrailResult(passed=False, rejection_message=msg)
