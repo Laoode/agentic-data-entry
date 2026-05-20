@@ -52,11 +52,26 @@ Membangun sistem AI-assisted data entry untuk receipt/struk pembelian berbasis d
 
 | Component | Model | Endpoint | Purpose |
 |-----------|-------|----------|---------|
-| **Extraction Agent** | `zai-org/GLM-OCR` | vLLM endpoint | **Direct JSON extraction from images/PDF** |
+| **Extraction Agent (KIE)** | `gemini-3-flash-preview` (default) or `zai-org/GLM-OCR` (fine-tune, future) | Google Generative AI / vLLM | **Image → structured receipt JSON** |
+| **Text OCR (optional)** | `zai-org/GLM-OCR` base | vLLM endpoint | Plain-text recognition when `OCR_MODE=true` |
 | **Supervisor Agent (Klaudia)** | `gemini-3.1-pro-preview` | Google Generative AI | Orchestration & conversation |
-| **Guardrails Agent** | `gemini-3-flash-preview` | Google Generative AI | Input validation |
+| **Guardrails Agent** | `gemini-2.5-flash` | Google Generative AI | Input validation |
 | **SQL Agent** | `gemini-3-flash-preview` | Google Generative AI | Database operations |
 | **Data Entry Team** | `gemini-3-flash-preview` | Google Generative AI | Google Sheets operations |
+
+#### KIE Routing Modes
+
+Selected via env (`MOCK_KIE`, `OCR_MODE`, `KIE_MODEL`):
+
+| `MOCK_KIE` | `OCR_MODE` | Pipeline                                                         | Use when            |
+|------------|------------|------------------------------------------------------------------|---------------------|
+| `true`     | (ignored)  | Content-keyed fixture from `sample-data/labels/`                 | Dev / tests offline |
+| `false`    | `false`    | Image → `KIE_MODEL` (Gemini) → JSON (single multimodal call)     | Default production  |
+| `false`    | `true`     | Image → GLM-OCR (vLLM) text → `KIE_MODEL` → JSON (two-stage)     | After GLM-OCR fine-tune ships or for redundancy testing |
+
+The single seam is `app/services/extraction/infra/kie_client.py::KIEClient`.
+IngestService + Taskiq workers never branch on mode themselves; they call
+`extract_from_image(jpg_bytes)` and the client picks the path.
 
 ### 3.2 Environment Configuration
 

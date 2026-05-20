@@ -379,6 +379,7 @@ store_contacts:
 - Example: "Tel.: 07-123" → {"type": "Tel.", "value": "07-123"}
 - Example: "Fax: -" (no value) → {"type": "Fax", "value": "-"}
 - Example: "www.store.com" (no "Website" label) → {"type": "", "value": "www.store.com"}
+- Example: "Fb/Ig: @ayam_kicau" (multi type) → {"type": "Fb", "value": "@ayam_kicau"}, {"type": "Ig", "value": "@ayam_kicau"}
 
 payment_time & time_unit:
 - payment_time: Copy only numbers/colon (e.g., "15:34:15", "02:44").
@@ -972,94 +973,7 @@ oxen_push("feat(recipe-db): final LLaMA-Factory dataset — train=785 test=40")
 
 ---
 
-## 13. Fine-Tuning LoRA
-
-### LLaMA-Factory Config (`glm_ocr_lora_sft.yaml`)
-
-```yaml
-### model
-model_name_or_path: zai-org/GLM-OCR
-trust_remote_code: true
-
-### method
-stage: sft
-do_train: true
-finetuning_type: lora
-lora_rank: 8         # Recommended: 8 untuk domain adaptation
-lora_target: all     # Apply ke semua linear layers
-
-### dataset
-dataset: recipe_db_train
-template: glm_ocr    # HARUS glm_ocr untuk GLM-OCR
-cutoff_len: 4096     # Dinaikkan dari 2048 karena schema JSON panjang
-preprocessing_num_workers: 8
-
-### output
-output_dir: saves/glm-ocr/lora/recipe_db
-logging_steps: 10
-save_steps: 100
-plot_loss: true
-overwrite_output_dir: true
-
-### train (tuned untuk L4 24GB)
-per_device_train_batch_size: 4
-gradient_accumulation_steps: 4     # Effective batch = 16
-learning_rate: 1.0e-4
-num_train_epochs: 3
-lr_scheduler_type: cosine
-warmup_ratio: 0.1
-bf16: true
-```
-
-### Apa yang Difreeze
-
-Per GLM-OCR fine-tuning guide, untuk LoRA:
-
-```yaml
-# Untuk LoRA: freeze tidak perlu karena LoRA hanya inject ke LM
-# Vision tower (CogViT) dan projector tetap intact
-# LoRA hanya modifikasi language model weights
-```
-
-### Merge LoRA Weights
-
-```bash
-llamafactory-cli export \
-  --model_name_or_path zai-org/GLM-OCR \
-  --adapter_name_or_path saves/glm-ocr/lora/recipe_db \
-  --template glm_ocr \
-  --export_dir saves/glm-ocr/lora/recipe_db/merged \
-  --trust_remote_code true
-```
-
-### Expected Outcomes
-
-Setelah fine-tuning berhasil, model bisa dipanggil dengan:
-
-```python
-from openai import OpenAI
-
-client = OpenAI(api_key="EMPTY", base_url="http://localhost:8000/v1")
-
-response = client.chat.completions.create(
-    model="glm-ocr-finetuned",
-    messages=[{
-        "role": "user",
-        "content": [
-            {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,..."}},
-            {"type": "text",      "text": "请按下列JSON格式输出图中信息:\n{schema}"}
-        ]
-    }],
-    max_tokens=2048,
-    temperature=0.0
-)
-
-# Output: valid JSON langsung dari gambar, tanpa Gemini di tengah
-```
-
----
-
-## 14. Design Decisions & Trade-offs
+## 13. Design Decisions & Trade-offs
 
 ### Keputusan ku: Synthetic Annotation vs Human Annotation
 

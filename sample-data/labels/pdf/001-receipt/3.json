@@ -1,0 +1,145 @@
+{
+  "info": {
+    "store_name": "",
+    "store_location": "JL SINGOSARI NO 26",
+    "store_contacts": [],
+    "tax_id": "",
+    "receipt_id": "S-251127-AGDQNJL",
+    "payment_date": "",
+    "payment_time": "",
+    "time_unit": ""
+  },
+  "items": [
+    {
+      "item_name": "Chiki Balls Makanan Ringan Crafty Cheese 55 g",
+      "quantity": "1",
+      "unit_price": "7,300",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "7,300"
+    },
+    {
+      "item_name": "Pop Mie Lapeer Time Mi Instan Cup Soto Ayam 75 g",
+      "quantity": "1",
+      "unit_price": "5,600",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "5,600"
+    },
+    {
+      "item_name": "Pop Mie Mi Instan Premium Tori Miso Japanese Ramen Cup 77 g",
+      "quantity": "1",
+      "unit_price": "6,300",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "6,300"
+    },
+    {
+      "item_name": "Oishi Sponge Crunch Cokelat 100 g",
+      "quantity": "1",
+      "unit_price": "15,500",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "15,500"
+    },
+    {
+      "item_name": "Salonpas Koyo Pereda Nyeri 20 Lembar",
+      "quantity": "2",
+      "unit_price": "16,800",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "33,600"
+    },
+    {
+      "item_name": "Cheetos Puffs Makanan Ringan Rasa Keju 60 g",
+      "quantity": "1",
+      "unit_price": "16,500",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "16,500"
+    },
+    {
+      "item_name": "Oishi Sponge Crunch Stroberi 100 g",
+      "quantity": "1",
+      "unit_price": "15,100",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "15,100"
+    },
+    {
+      "item_name": "Big Minuman Karbonasi Rasa Nipis Madu Pet 350 ml",
+      "quantity": "1",
+      "unit_price": "3,600",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "3,600"
+    },
+    {
+      "item_name": "Sinde Larutan Penyegar Cap Badak Jambu 320 ml",
+      "quantity": "2",
+      "unit_price": "8,600",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "17,200"
+    },
+    {
+      "item_name": "Cap Lang Minyak Kayu Putih 30 ml",
+      "quantity": "1",
+      "unit_price": "15,500",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "15,500"
+    },
+    {
+      "item_name": "L-Men 2 Go Kopi Cappuccino Protein Rendah Lemak 190 ml",
+      "quantity": "1",
+      "unit_price": "15,900",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "15,900"
+    }
+  ],
+  "returned_items": [],
+  "payment": {
+    "total_items": "13",
+    "currency": "",
+    "subtotal_price": "152,100",
+    "discounts": [
+      {
+        "discount_name": "Total Diskon",
+        "amount": "23,700"
+      },
+      {
+        "discount_name": "Voucher",
+        "amount": "125,000"
+      },
+      {
+        "discount_name": "A-Point",
+        "amount": "1,581"
+      }
+    ],
+    "taxes": [],
+    "additional_charges": [
+      {
+        "charge_name": "Biaya Pengiriman",
+        "amount": "0"
+      }
+    ],
+    "grand_total": "1,819",
+    "rounding": "",
+    "payment_method": "",
+    "tendered": "",
+    "change": ""
+  }
+}

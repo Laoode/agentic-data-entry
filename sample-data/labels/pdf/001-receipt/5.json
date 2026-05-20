@@ -1,0 +1,231 @@
+{
+  "info": {
+    "store_name": "Nusr-et Steakhouse",
+    "store_location": "101 Knightsbridge London, SW1X 7RN",
+    "store_contacts": [],
+    "tax_id": "323585011",
+    "receipt_id": "10755",
+    "payment_date": "23 Sep'21",
+    "payment_time": "21:16",
+    "time_unit": "PM"
+  },
+  "items": [
+    {
+      "item_name": "Buratta",
+      "quantity": "1",
+      "unit_price": "",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "25.00"
+    },
+    {
+      "item_name": "Nusret Salad",
+      "quantity": "1",
+      "unit_price": "",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "23.00"
+    },
+    {
+      "item_name": "Nusret Sushi",
+      "quantity": "2",
+      "unit_price": "",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "46.00"
+    },
+    {
+      "item_name": "Prawn Tempura Roll",
+      "quantity": "2",
+      "unit_price": "",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "60.00"
+    },
+    {
+      "item_name": "Giant Tomahawk",
+      "quantity": "1",
+      "unit_price": "",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "630.00"
+    },
+    {
+      "item_name": "Kafes",
+      "quantity": "1",
+      "unit_price": "",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "200.00"
+    },
+    {
+      "item_name": "Onion Flower",
+      "quantity": "1",
+      "unit_price": "",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "18.00"
+    },
+    {
+      "item_name": "Herb Crusted Fries",
+      "quantity": "1",
+      "unit_price": "",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "10.00"
+    },
+    {
+      "item_name": "Sweet Corn",
+      "quantity": "1",
+      "unit_price": "",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "12.00"
+    },
+    {
+      "item_name": "Golden Burger",
+      "quantity": "1",
+      "unit_price": "",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "100.00"
+    },
+    {
+      "item_name": "Asado for 2",
+      "quantity": "1",
+      "unit_price": "",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "120.00"
+    },
+    {
+      "item_name": "Nusret Baklava",
+      "quantity": "2",
+      "unit_price": "",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "44.00"
+    },
+    {
+      "item_name": "DBL Patron Coffee",
+      "quantity": "4",
+      "unit_price": "",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "80.00"
+    },
+    {
+      "item_name": "DBL Grey Goose",
+      "quantity": "4",
+      "unit_price": "",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "72.00"
+    },
+    {
+      "item_name": "Turkish Tea",
+      "quantity": "6",
+      "unit_price": "",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "0.00"
+    },
+    {
+      "item_name": "Coca Cola",
+      "quantity": "2",
+      "unit_price": "",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "18.00"
+    },
+    {
+      "item_name": "Virgin Mojito",
+      "quantity": "1",
+      "unit_price": "",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "11.00"
+    },
+    {
+      "item_name": "Red Bull",
+      "quantity": "4",
+      "unit_price": "",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "44.00"
+    },
+    {
+      "item_name": "Eira Still",
+      "quantity": "1",
+      "unit_price": "",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "9.00"
+    },
+    {
+      "item_name": "Coca Cola Light",
+      "quantity": "2",
+      "unit_price": "",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "18.00"
+    },
+    {
+      "item_name": "Nusret Godfather",
+      "quantity": "1",
+      "unit_price": "",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "18.00"
+    },
+    {
+      "item_name": "Elvira",
+      "quantity": "1",
+      "unit_price": "",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "18.00"
+    }
+  ],
+  "returned_items": [],
+  "payment": {
+    "total_items": "",
+    "currency": "£",
+    "subtotal_price": "1,576.00",
+    "discounts": [],
+    "taxes": [],
+    "additional_charges": [
+      {
+        "charge_name": "15% Sevice Charge",
+        "amount": "236.40"
+      }
+    ],
+    "grand_total": "1,812.40",
+    "rounding": "",
+    "payment_method": "",
+    "tendered": "",
+    "change": ""
+  }
+}

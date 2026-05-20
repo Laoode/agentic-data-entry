@@ -1,0 +1,81 @@
+{
+  "info": {
+    "store_name": "PT. SARI AGUNG BARU PLOSO BOGEN",
+    "store_location": "JL. PLOSO BOGEN NO.71, KEL. P TAMBAKSARI",
+    "store_contacts": [
+      {
+        "type": "",
+        "value": "08159142498"
+      },
+      {
+        "type": "Telp",
+        "value": "021-1500959"
+      },
+      {
+        "type": "Sms",
+        "value": "0817111234"
+      },
+      {
+        "type": "",
+        "value": "WWW.ALFAMARTKU.COM"
+      }
+    ],
+    "tax_id": "73.590.078.9-619.000",
+    "receipt_id": "U661-602-2612WU45",
+    "payment_date": "26-12-2016",
+    "payment_time": "00:48:01",
+    "time_unit": ""
+  },
+  "items": [
+    {
+      "item_name": "PULSA XL 300K",
+      "quantity": "1",
+      "unit_price": "300,300",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "300,300"
+    },
+    {
+      "item_name": "FF UHT PF CONU",
+      "quantity": "1",
+      "unit_price": "6,200",
+      "discount_label": "Disc.",
+      "discount_price": "-6,200",
+      "tax_label": "",
+      "total_price": "6,200"
+    },
+    {
+      "item_name": "FF UHT PF CKT",
+      "quantity": "2",
+      "unit_price": "16,900",
+      "discount_label": "Disc.",
+      "discount_price": "-25,900",
+      "tax_label": "",
+      "total_price": "33,800"
+    }
+  ],
+  "returned_items": [],
+  "payment": {
+    "total_items": "3",
+    "currency": "",
+    "subtotal_price": "",
+    "discounts": [
+      {
+        "discount_name": "Total Disc.",
+        "amount": "32,100"
+      },
+      {
+        "discount_name": "Voucher",
+        "amount": "300,000"
+      }
+    ],
+    "taxes": [],
+    "additional_charges": [],
+    "grand_total": "308,200",
+    "rounding": "",
+    "payment_method": "Tunai",
+    "tendered": "8,200",
+    "change": "0"
+  }
+}

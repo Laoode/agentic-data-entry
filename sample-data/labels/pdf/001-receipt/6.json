@@ -1,0 +1,87 @@
+{
+  "info": {
+    "store_name": "",
+    "store_location": "",
+    "store_contacts": [],
+    "tax_id": "",
+    "receipt_id": "",
+    "payment_date": "",
+    "payment_time": "",
+    "time_unit": ""
+  },
+  "items": [
+    {
+      "item_name": "Royale - Grandeur Prayer Robe - Onyx",
+      "quantity": "",
+      "unit_price": "975.000,00",
+      "discount_label": "12.12 - 12% OFF (12%)",
+      "discount_price": "-117.000,00",
+      "tax_label": "",
+      "total_price": "975.000,00"
+    },
+    {
+      "item_name": "Deux.02 Sunglasses - White",
+      "quantity": "",
+      "unit_price": "1.575.000,00",
+      "discount_label": "12.12 - 12% OFF (12%)",
+      "discount_price": "-189.000,00",
+      "tax_label": "",
+      "total_price": "1.575.000,00"
+    },
+    {
+      "item_name": "Halo Sling Bag - Black",
+      "quantity": "",
+      "unit_price": "2.675.000,00",
+      "discount_label": "12.12 - 12% OFF (12%)",
+      "discount_price": "-321.000,00",
+      "tax_label": "",
+      "total_price": "2.675.000,00"
+    },
+    {
+      "item_name": "Foldable Box - Halo Slingbag",
+      "quantity": "",
+      "unit_price": "0,00",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "0,00"
+    },
+    {
+      "item_name": "Booklet Leather Bag - Viva Magenta",
+      "quantity": "",
+      "unit_price": "0,00",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "0,00"
+    },
+    {
+      "item_name": "Paperbag - L",
+      "quantity": "",
+      "unit_price": "5.000,00",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "5.000,00"
+    }
+  ],
+  "returned_items": [],
+  "payment": {
+    "total_items": "",
+    "currency": "Rp",
+    "subtotal_price": "4.603.000,00",
+    "discounts": [],
+    "taxes": [
+      {
+        "tax_name": "VAT (12%) Included in product price",
+        "amount": "456.153,15"
+      }
+    ],
+    "additional_charges": [],
+    "grand_total": "4.603.000,00",
+    "rounding": "",
+    "payment_method": "Balikpapan Payment",
+    "tendered": "4.603.000,00",
+    "change": ""
+  }
+}

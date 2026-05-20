@@ -1,0 +1,60 @@
+{
+  "info": {
+    "store_name": "MR D.I.Y.",
+    "store_location": "Gedung AIA Central, Lantai 30 Jalan Jenderal Sudirman Kav.48A Jakarta Selatan - 12930 (MAL CIJANTUNG)",
+    "store_contacts": [
+      {
+        "type": "CUSTOMER CARE",
+        "value": "021-30022789"
+      },
+      {
+        "type": "WEBSITE",
+        "value": "WWW.MRDIY.COM/ID"
+      }
+    ],
+    "tax_id": "081.777.846.7-012.000",
+    "receipt_id": "R000243523",
+    "payment_date": "05-11-24",
+    "payment_time": "13:17",
+    "time_unit": ""
+  },
+  "items": [
+    {
+      "item_name": "ASTON STRIPES PLASTIC CUP L-032",
+      "quantity": "1",
+      "unit_price": "5,000",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "5,000"
+    },
+    {
+      "item_name": "HAWAII MANGKOK CLOVER 6802 M",
+      "quantity": "1",
+      "unit_price": "11,500",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "11,500"
+    }
+  ],
+  "returned_items": [],
+  "payment": {
+    "total_items": "2",
+    "currency": "Rp",
+    "subtotal_price": "",
+    "discounts": [],
+    "taxes": [
+      {
+        "tax_name": "PPN @11% included in total",
+        "amount": "1,635"
+      }
+    ],
+    "additional_charges": [],
+    "grand_total": "16,500",
+    "rounding": "",
+    "payment_method": "GO-MOBILE (E-WALLET)",
+    "tendered": "16,500",
+    "change": ""
+  }
+}

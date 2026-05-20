@@ -1,0 +1,56 @@
+{
+  "info": {
+    "store_name": "ALFAMART JAMPANG KULON",
+    "store_location": "TERMINAL JAMPANG KULON",
+    "store_contacts": [
+      {
+        "type": "",
+        "value": "081288481"
+      }
+    ],
+    "tax_id": "01.336.238.9-402.000",
+    "receipt_id": "U807-307-09036DX2",
+    "payment_date": "09-03-2025",
+    "payment_time": "22:35:24",
+    "time_unit": ""
+  },
+  "items": [
+    {
+      "item_name": "ROMA KLP CK189G",
+      "quantity": "1",
+      "unit_price": "16,000",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "16,000"
+    },
+    {
+      "item_name": "UBM PUF 350G",
+      "quantity": "1",
+      "unit_price": "18,000",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "18,000"
+    }
+  ],
+  "returned_items": [],
+  "payment": {
+    "total_items": "2",
+    "currency": "Rp",
+    "subtotal_price": "",
+    "discounts": [],
+    "taxes": [
+      {
+        "tax_name": "PPN",
+        "amount": "3,389"
+      }
+    ],
+    "additional_charges": [],
+    "grand_total": "34,000",
+    "rounding": "",
+    "payment_method": "Tunai",
+    "tendered": "34,000",
+    "change": "0"
+  }
+}

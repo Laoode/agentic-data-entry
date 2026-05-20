@@ -13,10 +13,13 @@
 | Model | `gemini-3-flash-preview` (agents) |
 | Gemini Transport | Toggle via env: `GOOGLE_GENAI_USE_VERTEXAI=True` → Vertex AI; `False` → Developer API (`LLM_API_KEY`) |
 | Guardrails | Groq/Llama (prompt injection) + Gemini via `LLMClient` (scope check, output check) |
-| OCR | `GLM-OCR` via vLLM — saat ini `USE_MOCK_OCR=true` (mock JSON, GLM belum selesai training) |
-| DB | SQLite via `mcp-sqlite` (11 tools) |
+| KIE (Extraction) | Routing via `MOCK_KIE` + `OCR_MODE` + `KIE_MODEL` (default `gemini-3-flash-preview` direct image→JSON). `OCR_MODE=true` reserved for GLM-OCR text + Gemini KIE two-stage path. |
+| DB | SQLite via `mcp-sqlite` (11 tools) + private blob registry (`file_blob`, `file_blob_page`, `blob_extraction`, `metadata_file_blob`) hidden from LLM |
 | Sheets | Google Sheets via `mcp-gsheets` (16 tools, `SHEET_ID` dari env) |
+| Cache + Queue | Redis (L1 dedup cache + Taskiq broker) — fail-soft when unreachable |
+| Object Store | MinIO (S3-compatible) — content-addressed via BLAKE3, per-user prefix |
 | MCP Transport | **stdio** (default). Rollback ke SSE: `MCP_TRANSPORT=sse ./startup.sh` |
+| Extraction Mode | `EXTRACTION_MODE=sync` (inline, default) atau `async` (Taskiq workers + Redis pubsub progress) |
 | Observability | Langfuse v4 (OpenTelemetry), fail-open |
 
 ---
@@ -30,7 +33,11 @@
 | `GOOGLE_CLOUD_PROJECT` | GCP project ID (Vertex) |
 | `GOOGLE_CLOUD_LOCATION` | Region, mis. `global` atau `us-central1` |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Path ke service account JSON, mis. `gcp_service_account.json` |
-| `USE_MOCK_OCR` | `true` = skip vLLM, pakai mock extraction JSON |
+| `MOCK_KIE` | `true` = return content-keyed fixture from `sample-data/labels/`. (Old `USE_MOCK_OCR` still honored as fallback.) |
+| `OCR_MODE` | `false` (default) = single-call image→JSON via `KIE_MODEL`. `true` = vLLM GLM-OCR text recog → `KIE_MODEL` → JSON. |
+| `KIE_MODEL` | KIE provider: `gemini-3-flash-preview` (current) or `zai-org/GLM-OCR` (future fine-tune). |
+| `EXTRACTION_MODE` | `sync` (inline) or `async` (Taskiq queue + workers + Redis pubsub). |
+| `REDIS_URL`, `MINIO_*`, `TASKIQ_*` | Cache, object store, queue. See `docs/OPERATIONS.md`. |
 | `MCP_TRANSPORT` | `stdio` (default) atau `sse` |
 | `SHEET_ID` | Google Sheets default spreadsheet ID |
 
@@ -82,7 +89,14 @@ Orchestrator.process() / .stream()
 | B4 | `tool_registry.py` | Gemini 400: nested `list[list[Any]]` — `items` kosong di-drop → schema invalid | `_normalize_schema()` helper, ganti `items: {}` → `items: {type: string}` |
 | B5 | `llm_client.py` | `shutdown()` ter-indent ke dalam generator → hilang | Pindah ke level method yang benar |
 | B6 | `orchestrator.py` | `_nullctx()` dipanggil tapi tidak didefinisikan | Tambah `@contextmanager def _nullctx()` |
-
+| B7 | `guardrails/scope.py` + `prompts.py` | `SCOPE_CHECK_PROMPT` generic → false positive: "harga nasi kuning 16 ribu" ter-flag Financial Advice | Pisah ke `SARA_CHECK_PROMPT` + `FINANCIAL_ADVICE_CHECK_PROMPT` dengan definisi eksplisit + counterexample; `check_scope()` return `ScopeViolation` dataclass, twin-check jalan parallel via `asyncio.gather()` |
+| B8 | `orchestrator.py` | `langfuse.flush()` di hot path → ~5s overhead per request (OTLP timeout ke Langfuse cloud) | Hapus `flush()` dari `process()` dan `stream()`; flush hanya di `container.shutdown()` |
+| B9 | `orchestrator.py` | `get_conversation_history` + `get_session_files` sequential → buang ~50ms | Parallelkan keduanya via `asyncio.gather()` |
+| B10 | `router.py` | `supervisor_node` sync → jalan di ThreadPoolExecutor, sync HTTP client, streaming tag tidak proper | Refactor `supervisor_node` + `_emit_final_reply` ke `async def`, ganti `.invoke()` → `.ainvoke()` |
+| B11 | `agents.py` | `team_supervisor` sync → overhead ThreadPoolExecutor sama seperti B10 | Refactor ke `async def` + `.ainvoke()` (Fix E) |
+| B12 | `router.py` + `agents.py` | `thinking_config` di `llm_client.py` tidak efek ke supervisor path — salah client (`google.genai` vs `langchain-google-genai`). `supervisor_final` tetap ~8s karena thinking token ~1000 | `_MINIMAL_THINK` dict via `.bind()` ke `_emit_final_reply`, routing call, dan `team_supervisor` — path yang benar (Fix G) |
+| B13 | `agent.py` | `get_available_sheets()` JSON parse error — `tool_list_sheets` return space-separated objects, bukan array → `json.loads()` "Extra data", cache tidak pernah populate | `_parse_tool_json_output()` helper yang handle format MCP actual; cache TTL turun ke 60s |
+| B14 | `agent.py` | Sheet cache stale setelah `sheet_agent` create/rename/delete sheet — TTL-only, tidak ada invalidation | `invalidate_sheets_cache()` public method; `make_data_entry_team_node` terima `on_sheet_mutation` callback, fire on `[SHEET_DONE]` |
 ---
 
 ## Keputusan Desain Penting
@@ -100,6 +114,12 @@ Orchestrator.process() / .stream()
 | D9 | Vertex AI toggle global — tidak ada hybrid mode. Semua Gemini call (guardrails + supervisor + sub-agents) ikut flag yang sama |
 | D10 | `ChatVertexAI` dari `langchain-google-vertexai` **deprecated** sejak v3.2 — pakai `ChatGoogleGenerativeAI` dengan `vertexai=True` |
 | D11 | `_ensure_gcp_credentials()` di `container.py` resolve path ke absolute dan export ke `os.environ` supaya MCP subprocesses inherit |
+| D12 | Guardrails scope check pakai twin-prompt policy-based (SARA + Financial Advice terpisah), bukan generic topic string. `check_scope()` return `ScopeViolation(violated, policy)` — rejection message di-route per policy. `base.py` (Groq injection) tidak disentuh. |
+| D13 | `langfuse.flush()` **tidak boleh** di hot path (`process()`/`stream()`) — SDK background thread sudah handle export. `flush()` hanya di `container.shutdown()`. |
+| D14 | `supervisor_node` harus `async def` + `.ainvoke()` — LangGraph native support async node, jangan pakai sync `.invoke()` di ThreadPoolExecutor. |
+| D15 | Thinking disable (`_MINIMAL_THINK` / `thinking_budget=0`) harus di-apply via `.bind()` ke `ChatGoogleGenerativeAI` path (`langchain-google-genai`), bukan ke `llm_client.py` (`google.genai` SDK). Dua code path yang berbeda. Workers (write/read/sheet/sql agent) **tidak** di-disable thinking — mereka butuh reasoning untuk composition patterns. |
+| D16 | Sheet list cache di `SupervisorAgent` TTL=60s + event-driven invalidation via `on_sheet_mutation` callback. Cache parse pakai `_parse_tool_json_output()` karena MCP return space-separated JSON objects, bukan array. |
+| D17 | `SUPERVISOR_ROUTING_PROMPT` pakai `RouterWithResponse` TypedDict — combined routing + inline response untuk conversational FINISH path, eliminasi satu LLM call. Jika `response` kosong meski `next==FINISH`, fallback ke `_emit_final_reply()`. |
 
 ---
 
@@ -141,8 +161,10 @@ Orchestrator.process() / .stream()
 | # | Item |
 |---|------|
 | O1 | Error handling kalau MCP server down (timeout, retry, circuit breaker) |
-| O2 | Concurrency: multiple simultaneous file upload di session yang sama |
-| O3 | Rate limit Google Sheets API (100 req/100s) — butuh backoff |
-| O4 | Observability: structured logging (request_id, session_id, file_id) |
-| O5 | `MCPToolRegistry.connect()` tidak ada timeout — pytest hang kalau MCP down |
-| O6 | Vertex token usage metadata shape sudah match dev API di google-genai SDK — monitor kalau ada perubahan |
+| O2 | Rate limit Google Sheets API (100 req/100s) — butuh backoff |
+| O3 | Observability: structured logging (request_id, session_id, file_id) |
+| O4 | `MCPToolRegistry.connect()` tidak ada timeout — pytest hang kalau MCP down |
+| O5 | GLM-OCR fine-tune masih training — `OCR_MODE=true` belum diuji end-to-end, akan dilakukan saat vLLM di Lightning AI aktif |
+| O6 | Frontend mobile (Klaudia native app) — next phase |
+| O7 | `output.py` guardrail belum direfactor ke twin-prompt approach — masih generic `{topics}` string. Kandidat next jika false positive output check muncul. |
+| O7 | Refactor thinking config to single source of truth into .env so easyly to maintain and testing in different level thinking as well as the type of agents aka which agent should use level thinking mode. |

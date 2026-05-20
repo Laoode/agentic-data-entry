@@ -27,6 +27,9 @@ venv.bak/
 
 # Database
 *.db
+*.db-shm
+*.db-wal
+*.rdb
 
 # IDE / Editor
 .vscode/
@@ -41,9 +44,6 @@ CLAUDE.md
 .coverage
 .pytest_cache/
 tests/api/*.curl
-
-# Sample data (large binary files)
-sample-data/
 
 # Credentials (defense in depth)
 service_account.json

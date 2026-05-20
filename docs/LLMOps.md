@@ -60,7 +60,7 @@ Contoh: `pint_GAMBAR_0042.jpg`, `cord_GAMBAR_0001.jpg`
 
 ### 1.5 Human Correction Loop
 - Platform: **Label Studio** (annotation & review UI)
-- Approval: Human reviewer accepts ✅ or rejects ❌ extracted JSON
+- Approval: Human reviewer accepts ✓ or rejects ✗ extracted JSON
 - Storage: **Oxen.ai** (versioned dataset storage)
 - Sharing: **ShareGPT** (data sharing/export)
 
@@ -84,7 +84,7 @@ Contoh: `pint_GAMBAR_0042.jpg`, `cord_GAMBAR_0001.jpg`
 
 ### 2.3 Hyperparameter Tuning
 - Method: Search Heuristic
-- Rule of thumb: lora_rank = [8, 16, 32], lora_alpha = r*2
+- Rule of thumb: lora_rank = [8, 16, 32, 64], lora_alpha = r*2
 
 ### 2.4 Output
 - Best Model selected → registered to **Model Registry**
@@ -188,7 +188,7 @@ Queue membuat:
         ↓
 [Data Annotation Pipeline: GLM-OCR → Gemini 3.1 Pro → JSON → Human Correction]
         ↓
-[Training Pipeline: LLaMA-Factory + GLM-OCR+LoRA → Optuna HPO → Best Model]
+[Training Pipeline: LLaMA-Factory + GLM-OCR+LoRA → Best Model]
         ↓
 [Model Registry → Inference Pipeline: Docker (Klaudia + GLM-OCR Servers) → Queue → REST API]
         ↓
@@ -214,7 +214,6 @@ Queue membuat:
 | Annotation | Label Studio, ShareGPT |
 | Fine-Tuning | LLaMA-Factory, GLM-OCR, LoRA |
 | Experiment Tracking | MLflow |
-| HPO | Optuna (TPE) |
 | Serving | Docker, Fast API |
 | Orchestration | Klaudia Server (custom agentic framework) |
 | Agent Tools | MCP Server, SQLite, Google Sheets |
