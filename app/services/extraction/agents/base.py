@@ -1,17 +1,25 @@
-"""Extraction Agent: GLM-OCR direct JSON -> validate -> persist."""
+"""ExtractionAgent: thin facade over IngestService.
+
+The agent existed before dedup/queue/MinIO. We keep it as the orchestrator's
+entrypoint so the rest of the pipeline doesn't need to know about Redis,
+MinIO, or BLAKE3 — those stay sealed inside the ingest layer. The agent's
+job here is purely:
+    - Run a Langfuse span around the ingest call (observability boundary)
+    - Translate IngestOutcome -> ExtractionResult so the orchestrator's
+      existing context-builder format stays unchanged.
+"""
 
 from __future__ import annotations
 
-import json
 import logging
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.exceptions import IngestRejectedError
 from app.models.attachment import FileAttachment
 from app.services.core.observability import LangfuseService
-from app.services.extraction.agents.config import get_default_extraction
-from app.services.extraction.infra.db_client import AppDBClient
-from app.services.extraction.infra.ocr_client import OCRClient
+from app.services.extraction.ingest import IngestOutcome, IngestService
 
 logger = logging.getLogger(__name__)
 
@@ -42,16 +50,14 @@ class ExtractionResult:
 
 
 class ExtractionAgent:
-    """GLM-OCR -> schema validation -> persistence."""
+    """Facade — delegates to IngestService, exposes legacy ExtractionResult."""
 
     def __init__(
         self,
-        ocr_client: OCRClient,
-        db_client: AppDBClient,
+        ingest_service: IngestService,
         langfuse: LangfuseService | None = None,
     ) -> None:
-        self._ocr = ocr_client
-        self._db = db_client
+        self._ingest = ingest_service
         self._langfuse = langfuse
 
     async def process(
@@ -60,9 +66,7 @@ class ExtractionAgent:
         session_id: int,
         user_id: int,
     ) -> ExtractionResult:
-        logger.info(f"Processing attachment: {attachment.filename}")
-
-        file_type = "pdf" if attachment.content_type == "application/pdf" else "image"
+        logger.info("Processing attachment: %s", attachment.filename)
 
         span_cm = (
             self._langfuse.span(
@@ -73,18 +77,35 @@ class ExtractionAgent:
                     "content_type": attachment.content_type,
                     "bytes": len(attachment.data),
                 },
-                metadata={
-                    "session_id": session_id,
-                    "user_id": user_id,
-                    "file_type": file_type,
-                },
+                metadata={"session_id": session_id, "user_id": user_id},
             )
             if self._langfuse is not None
             else _nullspan()
         )
 
         with span_cm as obs:
-            result = await self._process_inner(attachment, session_id, user_id, file_type)
+            try:
+                outcome = await self._ingest.ingest(
+                    attachment, session_id=session_id, user_id=user_id
+                )
+            except IngestRejectedError as e:
+                logger.warning("Ingest rejected: %s", e)
+                if obs is not None:
+                    try:
+                        obs.update(level="WARNING", status_message=str(e))
+                    except Exception:
+                        pass
+                # Surface a synthetic ExtractionResult so orchestrator can
+                # respond gracefully without dropping the user message.
+                return ExtractionResult(
+                    file_id=0,
+                    file_name=attachment.filename,
+                    pages=[],
+                    status="rejected",
+                )
+
+            result = _outcome_to_result(outcome)
+
             if obs is not None:
                 try:
                     obs.update(
@@ -93,125 +114,32 @@ class ExtractionAgent:
                             "pages": len(result.pages),
                             "status": result.status,
                             "summary": result.summary,
+                            "cache_hits": outcome.cache_hits,
+                            "cache_misses": outcome.cache_misses,
                         }
                     )
                 except Exception:
                     pass
             return result
 
-    async def _process_inner(
-        self,
-        attachment: FileAttachment,
-        session_id: int,
-        user_id: int,
-        file_type: str,
-    ) -> ExtractionResult:
-        try:
-            extractions = await self._ocr.process_file(
-                attachment.data, attachment.content_type
-            )
-        except Exception as e:
-            logger.error(f"OCR pipeline failed: {e}")
-            file_id = await self._db.execute(
-                """
-                INSERT INTO metadata_file (session_id, user_id, type, file_name, total_pages, status, status_message)
-                VALUES (?, ?, ?, ?, 0, 'failed', ?)
-                """,
-                (session_id, user_id, file_type, attachment.filename, str(e)),
-            )
-            return ExtractionResult(
-                file_id=file_id, file_name=attachment.filename, pages=[], status="failed"
-            )
 
-        total_pages = len(extractions)
-        file_id = await self._db.execute(
-            """
-            INSERT INTO metadata_file (session_id, user_id, type, file_name, total_pages, status)
-            VALUES (?, ?, ?, ?, ?, 'pending')
-            """,
-            (session_id, user_id, file_type, attachment.filename, total_pages),
-        )
-
-        pages_result: list[dict[str, Any]] = []
-        failed_count = 0
-
-        for page_num, raw_extraction in enumerate(extractions, 1):
-            try:
-                validated = self._validate_schema(raw_extraction)
-                page_id = await self._db.execute(
-                    """
-                    INSERT INTO pages (metadata_file_id, page, agent_extracted, status, status_message)
-                    VALUES (?, ?, ?, 'extracted', 'extracted')
-                    """,
-                    (file_id, page_num, json.dumps(validated, ensure_ascii=False)),
-                )
-                pages_result.append(
-                    {"page_id": page_id, "page": page_num, "extraction": validated, "status": "extracted"}
-                )
-            except Exception as e:
-                logger.error(f"Page {page_num} validation/persist failed: {e}")
-                failed_count += 1
-                await self._db.execute(
-                    """
-                    INSERT INTO pages (metadata_file_id, page, status, status_message)
-                    VALUES (?, ?, 'failed', ?)
-                    """,
-                    (file_id, page_num, str(e)),
-                )
-                pages_result.append(
-                    {"page": page_num, "extraction": get_default_extraction(), "status": "failed"}
-                )
-
-        if failed_count == 0:
-            status, status_msg = "completed", f"All {total_pages} page(s) extracted"
-        elif failed_count < total_pages:
-            status, status_msg = "partial", f"{total_pages - failed_count}/{total_pages} page(s) extracted"
-        else:
-            status, status_msg = "failed", "All pages failed"
-
-        await self._db.execute(
-            "UPDATE metadata_file SET status = ?, status_message = ? WHERE id = ?",
-            (status, status_msg, file_id),
-        )
-
-        return ExtractionResult(
-            file_id=file_id, file_name=attachment.filename, pages=pages_result, status=status
-        )
-
-    def _validate_schema(self, data: dict[str, Any]) -> dict[str, Any]:
-        """Fill missing fields with schema defaults; coerce obvious type mismatches."""
-        default = get_default_extraction()
-        out: dict[str, Any] = {}
-
-        info = dict(data.get("info") or {})
-        for key, default_val in default["info"].items():
-            info.setdefault(key, default_val)
-        out["info"] = info
-
-        items_in = data.get("items") or []
-        out["items"] = [self._fill_defaults(item, default["items"][0]) for item in items_in]
-
-        returned_in = data.get("returned_items") or []
-        out["returned_items"] = [
-            self._fill_defaults(item, default["returned_items"][0]) for item in returned_in
-        ]
-
-        payment = dict(data.get("payment") or {})
-        for key, default_val in default["payment"].items():
-            payment.setdefault(key, default_val)
-        out["payment"] = payment
-
-        return out
-
-    @staticmethod
-    def _fill_defaults(item: dict[str, Any], template: dict[str, Any]) -> dict[str, Any]:
-        result = {}
-        for k, v in template.items():
-            result[k] = item.get(k, v)
-        return result
-
-
-from contextlib import contextmanager
+def _outcome_to_result(outcome: IngestOutcome) -> ExtractionResult:
+    pages_payload = [
+        {
+            "page_id": page.page_id,
+            "page": page.page,
+            "extraction": page.extraction,
+            "status": page.status,
+            "from_cache": page.cache_layer is not None,
+        }
+        for page in outcome.pages
+    ]
+    return ExtractionResult(
+        file_id=outcome.file_id,
+        file_name=outcome.file_name,
+        pages=pages_payload,
+        status=outcome.status,
+    )
 
 
 @contextmanager

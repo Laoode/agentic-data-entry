@@ -32,3 +32,15 @@ class DatabaseError(KlaudiaError):
 
 class MCPConnectionError(KlaudiaError):
     """MCP server connection failed."""
+
+
+class IngestRejectedError(KlaudiaError):
+    """File-shape guardrail rejected the upload (size, type, page count, count).
+
+    Distinct from GuardrailError (which targets text input) so the orchestrator
+    can return a tailored response.
+    """
+
+    def __init__(self, message: str, *, reason: str) -> None:
+        super().__init__(message)
+        self.reason = reason
