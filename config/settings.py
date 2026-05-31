@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     llm_model: str = Field(default="gemini-3-flash-preview", alias="LLM_MODEL")
     llm_api_key: str = Field(default="", alias="LLM_API_KEY")
     llm_temperature: float = Field(default=0.5, alias="LLM_TEMPERATURE")
+    # Thinking level for Gemini 3 models (gemini-3-*).
+    # Valid values: "none", "minimal", "low", "medium", "high" (model default = "high").
+    # routing = supervisor router + team_supervisor + _emit_final_reply (classification / summarization)
+    # worker  = write_agent, read_agent, sheet_agent, sql_agent (tool-augmented reasoning)
+    llm_thinking_level_routing: str = Field(default="minimal", alias="LLM_THINKING_LEVEL_ROUTING")
+    llm_thinking_level_worker: str = Field(default="minimal", alias="LLM_THINKING_LEVEL_WORKER")
 
     # Vertex AI (when google_genai_use_vertexai=True, all Gemini calls route
     # through GCP Vertex AI instead of the Gemini Developer API. ADC is read

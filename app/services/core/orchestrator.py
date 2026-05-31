@@ -406,6 +406,7 @@ class KlaudiaOrchestrator:
             last_extraction = extraction_results[-1] if extraction_results else None
             final_content = ""
             tools_used: list[str] = []
+            any_token_emitted = False  # track whether supervisor emitted token events
             async for event in self._c.supervisor.stream_conversation(
                 messages=llm_messages,
                 extraction_data=last_extraction,
@@ -416,11 +417,30 @@ class KlaudiaOrchestrator:
                     final_content = event["data"]["content"]
                     tools_used = event["data"]["tools_called"]
                     continue
+                if event["type"] == "token":
+                    any_token_emitted = True
                 yield event
 
             content = re.sub(r"<think>.*?</think>", "", final_content, flags=re.DOTALL).strip()
 
-            output_guard = await self._c.guardrails.validate_output(content)
+            if not any_token_emitted and content:
+                # RouterWithResponse inline FINISH path: supervisor assembled the
+                # complete answer in one LLM call and emitted no token events.
+                # Stream the content word-by-word now, running output_guard
+                # concurrently so the guard adds zero latency to token delivery.
+                output_guard_task = asyncio.create_task(
+                    self._c.guardrails.validate_output(content)
+                )
+                words = content.split(" ")
+                for i, word in enumerate(words):
+                    token_text = word if i == len(words) - 1 else word + " "
+                    yield {"type": "token", "data": {"text": token_text}}
+                output_guard = await output_guard_task
+            else:
+                # final_llm path: tokens already streamed by supervisor.
+                # Run output_guard sequentially (guard delay is post-stream, acceptable).
+                output_guard = await self._c.guardrails.validate_output(content)
+
             if not output_guard.passed:
                 content = output_guard.rejection_message
                 yield {

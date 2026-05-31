@@ -204,6 +204,8 @@ class KlaudiaContainer:
             google_cloud_project=settings.google_cloud_project,
             google_cloud_location=settings.google_cloud_location,
             temperature=settings.llm_temperature,
+            thinking_level_routing=settings.llm_thinking_level_routing,
+            thinking_level_worker=settings.llm_thinking_level_worker,
         )
 
         logger.info("KlaudiaContainer initialized")
