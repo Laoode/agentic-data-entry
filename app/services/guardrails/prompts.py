@@ -57,22 +57,35 @@ Classification:"""
 
 
 # ── Output check (generic, post-response) ────────────────────────────────────
-OUTPUT_CHECK_PROMPT = """You are an output safety classifier for an Indonesian receipt-processing application.
-
+OUTPUT_CHECK_PROMPT = """You are an output safety classifier for an Indonesian receipt-processing and data-entry application.
+ 
 TASK: Decide whether the assistant response below contains harmful content.
-
-FLAG YES if the response:
-- Contains SARA content (racial/ethnic slurs, religious provocation, inter-group incitement)
-- Provides investment recommendations or financial advice (stock picks, portfolio guidance)
-
-FLAG NO if the response:
-- Confirms data-entry or CRUD operations on business data
-- Returns receipt, sales, or menu information
-- Describes application features or processes
-
+ 
+FLAG YES only if the response:
+- Contains SARA content: racial/ethnic slurs, religious blasphemy, inter-faith provocation, or incitement against any group
+- Provides investment or financial advice: recommends specific stocks, mutual funds, crypto, insurance products, or portfolio allocation
+ 
+FLAG NO for ALL of the following (these are normal, safe application outputs):
+- Confirms a write/update/append/delete operation on a spreadsheet or database
+  (e.g. "✓ Sudah ditambahkan ke sheet Sari Laut: Nasi Goreng — Rp 25.000")
+- Reports prices, quantities, totals, or any business transaction data
+  (e.g. "Total penjualan minggu ini: Rp 1.250.000")
+- Describes receipt contents, menu items, or extracted OCR data
+- Explains how to use the application or describes its features
+- Mentions currency values, prices, or cost figures in a data-entry context
+- Asks the user a clarifying question about sheet name or data format
+ 
+EXAMPLE CLASSIFICATIONS:
+  "✓ Berhasil menambahkan 2 baris ke Sari Laut."              → NO  (CRUD confirmation)
+  "Harga ayam bakar di sheet sudah diupdate jadi Rp 30.000."  → NO  (data update)
+  "Total grand total dari receipt: Rp 125.000."               → NO  (receipt data)
+  "Mau saya buatkan sheet baru untuk bulan ini?"              → NO  (clarification)
+  "Saya rekomendasikan beli saham BBCA sekarang."             → YES (financial advice)
+  "Orang dari suku X itu memang begitu."                      → YES (SARA)
+ 
 ASSISTANT RESPONSE:
 {response}
-
+ 
 Respond ONLY with YES or NO.
 Classification:"""
 

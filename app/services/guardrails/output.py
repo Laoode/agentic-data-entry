@@ -13,9 +13,10 @@ async def check_output(
     """Check if assistant output contains blacklisted content.
 
     Returns True if blacklisted content is detected.
+    OUTPUT_CHECK_PROMPT is hardcoded with SARA + Financial Advice policy — no
+    dynamic topic injection needed.
     """
-    topics_str = ", ".join(config.blacklisted_topics)
-    prompt = OUTPUT_CHECK_PROMPT.format(topics=topics_str, response=response_text)
+    prompt = OUTPUT_CHECK_PROMPT.format(response=response_text)
 
     try:
         result = await llm_client.chat(
