@@ -40,6 +40,8 @@
 | `REDIS_URL`, `MINIO_*`, `TASKIQ_*` | Cache, object store, queue. See `docs/OPERATIONS.md`. |
 | `MCP_TRANSPORT` | `stdio` (default) atau `sse` |
 | `SHEET_ID` | Google Sheets default spreadsheet ID |
+| `LLM_THINKING_LEVEL_ROUTING` | Thinking level untuk routing nodes (supervisor_node, team_supervisor, final_reply). Default: `minimal` |
+| `LLM_THINKING_LEVEL_WORKER` | Thinking level untuk worker agents (write/read/sheet/sql agent). Default: `low` |
 
 > **Keamanan:** `gcp_service_account.json` & `service_account.json` **sudah di .gitignore**. Jangan di-commit.
 
@@ -52,13 +54,13 @@ Orchestrator.process() / .stream()
   ├── Guardrail (input)
   ├── ExtractionAgent  (kalau ada file attachment)
   ├── SupervisorAgent (LangGraph)
-  │   ├── router_llm  [tag: nostream]  → routing
-  │   ├── final_llm   [tag: final_answer] → token stream ke client
-  │   ├── sql_agent   (ReAct + MCP-SQLite tools)
+  │   ├── router_llm  [tag: nostream]  → routing        
+  │   ├── final_llm   [tag: final_answer] → token stream 
+  │   ├── sql_agent   (ReAct + MCP-SQLite tools)         
   │   └── data_entry_team
-  │       ├── read_agent
-  │       ├── sheet_agent
-  │       └── write_agent  ← juga punya tool_get_sheet_data + tool_list_sheets
+  │       ├── read_agent                                  
+  │       ├── sheet_agent                                
+  │       └── write_agent                                
   └── Guardrail (output)
 ```
 
@@ -97,6 +99,9 @@ Orchestrator.process() / .stream()
 | B12 | `router.py` + `agents.py` | `thinking_config` di `llm_client.py` tidak efek ke supervisor path — salah client (`google.genai` vs `langchain-google-genai`). `supervisor_final` tetap ~8s karena thinking token ~1000 | `_MINIMAL_THINK` dict via `.bind()` ke `_emit_final_reply`, routing call, dan `team_supervisor` — path yang benar (Fix G) |
 | B13 | `agent.py` | `get_available_sheets()` JSON parse error — `tool_list_sheets` return space-separated objects, bukan array → `json.loads()` "Extra data", cache tidak pernah populate | `_parse_tool_json_output()` helper yang handle format MCP actual; cache TTL turun ke 60s |
 | B14 | `agent.py` | Sheet cache stale setelah `sheet_agent` create/rename/delete sheet — TTL-only, tidak ada invalidation | `invalidate_sheets_cache()` public method; `make_data_entry_team_node` terima `on_sheet_mutation` callback, fire on `[SHEET_DONE]` |
+| B15 | `router.py` + `agents.py` | `_MINIMAL_THINK` hardcoded — tidak bisa tuning per agent type tanpa code change | Pindah ke `settings.py` sebagai `llm_thinking_level_routing` + `llm_thinking_level_worker`; `llm.py` terima `thinking_level` param, apply via `.bind()` di factory; `agent.py` build `_routing_llm` + `_worker_llm` terpisah; `_MINIMAL_THINK` dihapus dari router/agents (Fix H) |
+| B16 | `output.py` + `config.py` | `topics_str` + `blacklisted_topics` dead code — `OUTPUT_CHECK_PROMPT` tidak punya `{topics}` placeholder, Python silently ignore extra kwarg, field tidak pernah dipakai | Hapus `topics_str` + `.format(topics=...)` dari `output.py`; hapus `blacklisted_topics` dari `GuardrailsConfig`; tambah explicit counterexample ke `OUTPUT_CHECK_PROMPT` |
+
 ---
 
 ## Keputusan Desain Penting
@@ -120,6 +125,8 @@ Orchestrator.process() / .stream()
 | D15 | Thinking disable (`_MINIMAL_THINK` / `thinking_budget=0`) harus di-apply via `.bind()` ke `ChatGoogleGenerativeAI` path (`langchain-google-genai`), bukan ke `llm_client.py` (`google.genai` SDK). Dua code path yang berbeda. Workers (write/read/sheet/sql agent) **tidak** di-disable thinking — mereka butuh reasoning untuk composition patterns. |
 | D16 | Sheet list cache di `SupervisorAgent` TTL=60s + event-driven invalidation via `on_sheet_mutation` callback. Cache parse pakai `_parse_tool_json_output()` karena MCP return space-separated JSON objects, bukan array. |
 | D17 | `SUPERVISOR_ROUTING_PROMPT` pakai `RouterWithResponse` TypedDict — combined routing + inline response untuk conversational FINISH path, eliminasi satu LLM call. Jika `response` kosong meski `next==FINISH`, fallback ke `_emit_final_reply()`. |
+| D18 | Thinking level adalah single source of truth di `.env` — `LLM_THINKING_LEVEL_ROUTING=minimal` untuk classification/summarization nodes, `LLM_THINKING_LEVEL_WORKER=low` untuk tool-augmented agents. Workers pakai `low` bukan `minimal` — butuh reasoning untuk Pattern B/C/D compound writes. Tuning cukup ubah env var, restart, tanpa code change. |
+| D19 | Output guardrail **tidak** direfactor ke twin-prompt — assistant output lebih controlled dari user input, false positive jauh lebih kecil. Twin-prompt hanya untuk input scope. `OUTPUT_CHECK_PROMPT` sudah spesifik dengan counterexample eksplisit. Jika false positive muncul di Langfuse (`output_check=YES` pada CRUD response normal), baru revisit. |
 
 ---
 
@@ -166,5 +173,3 @@ Orchestrator.process() / .stream()
 | O4 | `MCPToolRegistry.connect()` tidak ada timeout — pytest hang kalau MCP down |
 | O5 | GLM-OCR fine-tune masih training — `OCR_MODE=true` belum diuji end-to-end, akan dilakukan saat vLLM di Lightning AI aktif |
 | O6 | Frontend mobile (Klaudia native app) — next phase |
-| O7 | `output.py` guardrail belum direfactor ke twin-prompt approach — masih generic `{topics}` string. Kandidat next jika false positive output check muncul. |
-| O7 | Refactor thinking config to single source of truth into .env so easyly to maintain and testing in different level thinking as well as the type of agents aka which agent should use level thinking mode. |

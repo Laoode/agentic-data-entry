@@ -120,3 +120,14 @@ LLM in the system):
 
 The agent only ever sees `metadata_file` and `pages` (which contain the
 validated extraction JSON, never the hash or storage key).
+
+
+### Usage
+```
+redis-server
+redis-cli shutdown
+```
+
+```
+minio server /Users/yudhypr/Codex/minio/data
+```

@@ -1,7 +1,25 @@
 <h1 align="center"><img src="https://readme-typing-svg.demolab.com?font=Chakra+Petch&weight=500&size=29&duration=1&pause=1000&color=000000&background=CCFF00&vCenter=true&repeat=false&width=928&lines=Klaudia+Agentic+AI+for+Processing+Receipt+and+Data+Entry+Automation" alt="Typing SVG" /></h1>
 
 <div align="center">
-  <img src="https://github.com/Laoode/agentic-data-entry/blob/development/docs/LLMOps.png" alt="LLM Ops Pipeline">
+  <img src="https://github.com/Laoode/agentic-data-entry/blob/development/docs/LLMOpsv2.png" alt="LLM Ops Pipeline">
+</div>
+
+
+<div align="center">
+  <img src="https://github.com/Laoode/agentic-data-entry/blob/development/docs/FineTuning.png" alt="Fine-Tuning">
+</div>
+
+
+> [!WARNING]
+> The dataset and fine-tuned model will be released soon after the paper is published. They are currently archived in my oxen.ai repository.
+
+<div align="center">
+  <img src="https://github.com/Laoode/agentic-data-entry/blob/development/docs/DatasetsModel.png" alt="Datasets & Model">
+</div>
+
+
+<div align="center">
+  <img src="https://github.com/Laoode/agentic-data-entry/blob/development/docs/UIApp.png" alt="UI App">
 </div>
 
 ```
@@ -250,13 +268,4 @@ yudhypr@MacBook-Air-La Big-Thesis-S1 % lt
 │       ├──  test_schema_and_parser.py
 │       └──  test_supervisor_resolve.py
 └──  uv.lock
-```
-
-```
-redis-server
-redis-cli shutdown
-```
-
-```
-minio server /Users/yudhypr/Codex/minio/data
 ```
