@@ -288,14 +288,6 @@ EXTRACTION_SCHEMA = {
             "total_price": ""
         }
     ],
-    "returned_items": [
-        {
-            "item_name": "",
-            "quantity": "",
-            "unit_price": "",
-            "total_refund": ""
-        }
-    ],
     "payment": {
         "total_items": "",
         "currency": "",

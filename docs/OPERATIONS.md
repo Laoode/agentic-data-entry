@@ -45,7 +45,7 @@ mc ilm rule add local/klaudia-blobs \
 |-------------------------|----------------------------------|
 | `LLM_API_KEY`           | Gemini Developer API (when Vertex disabled) |
 | `gcp_service_account.json` | Vertex AI + Google Sheets MCP — not in git |
-| `AUTH_TOKEN`            | Bearer for vLLM GLM-OCR endpoint  |
+| `AUTH_TOKEN`            | Bearer for vLLM Qwen3.5-4B endpoint  |
 | `MINIO_*`               | Set non-default values for any prod-ish deploy |
 | `GROQ_API_KEY`          | Prompt-injection guard            |
 | `LANGFUSE_*`            | Observability — optional          |
@@ -84,10 +84,10 @@ surfaced to the UI.
 |------------|------------|-------------------------------------------------------|
 | true       | (ignored)  | Return fixture from `sample-data/labels/`             |
 | false      | false      | KIE_MODEL handles image → JSON in one call (Gemini)   |
-| false      | true       | GLM-OCR (vLLM) text recog → KIE_MODEL → JSON          |
+| false      | true       | Qwen3.5-4B (vLLM) text recog → KIE_MODEL → JSON          |
 
-Set `KIE_MODEL=gemini-3-flash-preview` for the default. Once GLM-OCR
-fine-tune ships, swap to `KIE_MODEL=zai-org/GLM-OCR` and set
+Set `KIE_MODEL=gemini-3-flash-preview` for the default. Once Qwen3.5-4B
+fine-tune ships, swap to `KIE_MODEL=Qwen/Qwen3.5-4B` and set
 `OCR_LORA_NAME` to the trained adapter name.
 
 ## 7. Smoke Tests

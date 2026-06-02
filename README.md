@@ -98,7 +98,6 @@ yudhypr@MacBook-Air-La Big-Thesis-S1 % lt
 │   └──  settings.py
 ├──  docs
 │   ├──  FRONT_END.md
-│   ├──  GLMOCR_DOC.md
 │   ├──  HAT.md
 │   ├──  LANGCHAIN.md
 │   ├──  LLMOps.md

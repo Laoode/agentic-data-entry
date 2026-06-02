@@ -142,7 +142,7 @@ Figure 1: Tree Structure Decomposition for ANLS* Evaluation:
 
 ---
 **Figure 1:** Examples of how the ground truth, as well as predictions, are decomposed into a tree structure. A correct prediction is shown in Figure 1b, while Figure 1c visualizes a partially incorrect prediction. It's worth mentioning that any hallucination as well as incorrect types are penalized as well. More examples are given in **Table 1**.
-```
+
 
 It is worth mentioning that all combinations of the above types are supported as well. For example, a dictionary may contain lists of strings or the elements of a list may be dictionaries. The implementation of the ANLS* metric maps those complex structures into a tree and compares the ground truth tree against the predicted tree from the model. [0(a)](https://arxiv.org/html/2402.03848v3#S3.F0.sf1) visualizes how the ground truth is decomposed into a tree structure that can then be compared against predictions for an example.
 

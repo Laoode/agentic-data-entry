@@ -52,8 +52,8 @@ Membangun sistem AI-assisted data entry untuk receipt/struk pembelian berbasis d
 
 | Component | Model | Endpoint | Purpose |
 |-----------|-------|----------|---------|
-| **Extraction Agent (KIE)** | `gemini-3-flash-preview` (default) or `zai-org/GLM-OCR` (fine-tune, future) | Google Generative AI / vLLM | **Image → structured receipt JSON** |
-| **Text OCR (optional)** | `zai-org/GLM-OCR` base | vLLM endpoint | Plain-text recognition when `OCR_MODE=true` |
+| **Extraction Agent (KIE)** | `gemini-3-flash-preview` (default) or `Qwen/Qwen3.5-4B` (fine-tune, future) | Google Generative AI / vLLM | **Image → structured receipt JSON** |
+| **Text OCR (optional)** | `Qwen/Qwen3.5-4B` base | vLLM endpoint | Plain-text recognition when `OCR_MODE=true` |
 | **Supervisor Agent (Klaudia)** | `gemini-3.1-pro-preview` | Google Generative AI | Orchestration & conversation |
 | **Guardrails Agent** | `gemini-2.5-flash` | Google Generative AI | Input validation |
 | **SQL Agent** | `gemini-3-flash-preview` | Google Generative AI | Database operations |
@@ -67,7 +67,7 @@ Selected via env (`MOCK_KIE`, `OCR_MODE`, `KIE_MODEL`):
 |------------|------------|------------------------------------------------------------------|---------------------|
 | `true`     | (ignored)  | Content-keyed fixture from `sample-data/labels/`                 | Dev / tests offline |
 | `false`    | `false`    | Image → `KIE_MODEL` (Gemini) → JSON (single multimodal call)     | Default production  |
-| `false`    | `true`     | Image → GLM-OCR (vLLM) text → `KIE_MODEL` → JSON (two-stage)     | After GLM-OCR fine-tune ships or for redundancy testing |
+| `false`    | `true`     | Image → Qwen3.5-4B (vLLM) text → `KIE_MODEL` → JSON (two-stage)     | After Qwen3.5-4B fine-tune ships or for redundancy testing |
 
 The single seam is `app/services/extraction/infra/kie_client.py::KIEClient`.
 IngestService + Taskiq workers never branch on mode themselves; they call
@@ -88,10 +88,10 @@ LLM_MODEL=gemini-3-flash-preview
 LLM_API_KEY=<your-gemini-key>
 LLM_TEMPERATURE=0.5
 
-# OCR Configuration (vLLM endpoint - GLM-OCR)
+# OCR Configuration (vLLM endpoint - Qwen3.5-4B)
 VLLM_BASE_URL=<your-vllm-endpoint>
 AUTH_TOKEN=<your-vllm-auth-token>
-VLLM_OCR_MODEL=zai-org/GLM-OCR
+VLLM_OCR_MODEL=Qwen/Qwen3.5-4B
 
 # Database
 SQLITE_DB=app_dev.db
@@ -104,7 +104,7 @@ LOG_PATH=logs
 
 **Architecture :**
 ```
-PDF/Image → GLM-OCR (vLLM) → Structured JSON (Direct)
+PDF/Image → Qwen3.5-4B (vLLM) → Structured JSON (Direct)
 ```
 
 #### **Implementation: Extraction Agent**
@@ -144,14 +144,6 @@ EXTRACTION_SCHEMA = {
             "total_price": ""
         }
     ],
-    "returned_items": [
-        {
-            "item_name": "",
-            "quantity": "",
-            "unit_price": "",
-            "total_refund": ""
-        }
-    ],
     "payment": {
         "total_items": "",
         "currency": "",
@@ -175,7 +167,7 @@ EXTRACTION_SCHEMA = {
 
 class ExtractionAgent:
     """
-    Simplified Extraction Agent using GLM-OCR
+    Simplified Extraction Agent using Qwen3.5-4B
     Directly extracts structured JSON from receipt images/PDFs
     """
     
@@ -183,7 +175,7 @@ class ExtractionAgent:
         self,
         vllm_endpoint: str,
         auth_token: str,
-        model: str = "zai-org/GLM-OCR",
+        model: str = "Qwen/Qwen3.5-4B",
         db_client = None
     ):
         self.endpoint = vllm_endpoint
@@ -203,7 +195,7 @@ class ExtractionAgent:
         
         Flow:
         1. Convert PDF/Image to base64
-        2. Send to GLM-OCR with JSON schema prompt
+        2. Send to Qwen3.5-4B with JSON schema prompt
         3. Parse JSON response
         4. Validate against schema
         5. Save to database (pages table)
@@ -315,7 +307,7 @@ class ExtractionAgent:
     
     async def _extract_json(self, image_base64: str) -> Dict:
         """
-        Call GLM-OCR with structured prompt
+        Call Qwen3.5-4B with structured prompt
         Returns JSON directly from model
         """
         import json
@@ -355,7 +347,7 @@ class ExtractionAgent:
         content = response.json()['choices'][0]['message']['content']
         
         # Parse JSON from response
-        # GLM-OCR might wrap JSON in markdown code blocks
+        # Qwen3.5-4B might wrap JSON in markdown code blocks
         if "```json" in content:
             content = content.split("```json")[1].split("```")[0].strip()
         elif "```" in content:
@@ -533,7 +525,7 @@ else:
     │ [4A] EXTRACTION      │  │ [4B] SUPERVISOR      │
     │      AGENT           │  │      AGENT           │
     │                      │  │                      │
-    │ • GLM-OCR (vLLM)     │  │ • Klaudia            │
+    │ • Qwen3.5-4B (vLLM)     │  │ • Klaudia            │
     │ • Direct JSON output │  │ • Conversational AI  │
     │ • Schema validation  │  │ • Task routing       │
     └──────────────────────┘  └──────────────────────┘
@@ -582,7 +574,7 @@ else:
 WITH attachment:
 User Request (PDF/Image)
   → Guardrails (validation)
-    → Extraction Agent (GLM-OCR) → structured JSON
+    → Extraction Agent (Qwen3.5-4B) → structured JSON
       → Supervisor Agent "Klaudia" (orchestration)
         ├→ Data Entry Team (Google Sheets via MCP)
         └→ SQL Agent (SQLite via MCP)

@@ -50,7 +50,7 @@ Contoh: `pint_GAMBAR_0042.jpg`, `cord_GAMBAR_0001.jpg`
 ### 1.3 OCR Stage
 - Input: Selected receipt images
 - Process: Raw OCR extraction → produces `Image + Raw OCR` output
-- Model: GLM-OCR 0.9b
+- Model: Qwen3.5-4B
 
 ### 1.4 Structured Extraction
 - Model: **Gemini 3.1 Pro**
@@ -69,14 +69,14 @@ Contoh: `pint_GAMBAR_0042.jpg`, `cord_GAMBAR_0001.jpg`
 ## 2. TRAINING PIPELINE
 
 ### 2.1 Fine-Tuning Framework
-- Framework: **LLaMA-Factory** (Easy and Efficient LLM Fine-Tuning)
-- Base Architecture: **GLM-OCR + LoRA**
+- Framework: **Unsloth** (Easy and Efficient LLM Fine-Tuning)
+- Base Architecture: **Qwen3.5-4B + LoRA**
   - Techniques: Adapter layers, Add & Norm, Feed Forward, Multi-Head Attention
   - PEFT Method: LoRA (Low-Rank Adaptation)
   - Additional: Prompt Tuning, DPO support
 
 ### 2.2 Experiment Tracking
-- Tool: **MLflow**
+- Tool: **Wandb**
 - Metrics tracked:
   - `ANLS*` (Average Normalized Levenshtein Similarity)
   - `KIEval` (Key Information Extraction Evaluation)
@@ -84,7 +84,7 @@ Contoh: `pint_GAMBAR_0042.jpg`, `cord_GAMBAR_0001.jpg`
 
 ### 2.3 Hyperparameter Tuning
 - Method: Search Heuristic
-- Rule of thumb: lora_rank = [8, 16, 32, 64], lora_alpha = r*2
+- Rule of thumb: lora_rank = [8, 16, 32], lora_alpha = r*2
 
 ### 2.4 Output
 - Best Model selected → registered to **Model Registry**
@@ -97,7 +97,7 @@ Contoh: `pint_GAMBAR_0042.jpg`, `cord_GAMBAR_0001.jpg`
 - Runtime: **Docker**
 - Services:
   - `Klaudia Server` — agentic orchestration layer
-  - `GLM-OCR Server` — fine-tuned OCR inference model (running on vLLM)
+  - `Qwen3.5-4B Server` — fine-tuned OCR inference model (running on vLLM)
 
 ### 3.2 Queue
 - Async job queue between servers and API layer
@@ -186,11 +186,11 @@ Queue membuat:
 ```
 [User Input: Receipt Image]
         ↓
-[Data Annotation Pipeline: GLM-OCR → Gemini 3.1 Pro → JSON → Human Correction]
+[Data Annotation Pipeline: Qwen3.5-4B → Gemini 3.1 Pro → JSON → Human Correction]
         ↓
-[Training Pipeline: LLaMA-Factory + GLM-OCR+LoRA → Best Model]
+[Training Pipeline: LLaMA-Factory + Qwen3.5-4B+LoRA → Best Model]
         ↓
-[Model Registry → Inference Pipeline: Docker (Klaudia + GLM-OCR Servers) → Queue → REST API]
+[Model Registry → Inference Pipeline: Docker (Klaudia + Qwen3.5-4B Servers) → Queue → REST API]
         ↓
 [Klaudia Agentic Pipeline: User → Guardrails → Extraction Agent → Supervisor Agent]
         ↓
@@ -210,10 +210,10 @@ Queue membuat:
 | Category | Tools |
 |---|---|
 | Data Sources | HuggingFace, Kaggle, Roboflow, Oxen.ai, Pinterest |
-| OCR & Extraction | GLM-OCR 0.9b, Gemini 3.1 Pro |
+| OCR & Extraction | Qwen3.5-4B, Gemini 3.1 Pro |
 | Annotation | Label Studio, ShareGPT |
-| Fine-Tuning | LLaMA-Factory, GLM-OCR, LoRA |
-| Experiment Tracking | MLflow |
+| Fine-Tuning | LLaMA-Factory, Qwen3.5-4B, LoRA |
+| Experiment Tracking | Wandb |
 | Serving | Docker, Fast API |
 | Orchestration | Klaudia Server (custom agentic framework) |
 | Agent Tools | MCP Server, SQLite, Google Sheets |

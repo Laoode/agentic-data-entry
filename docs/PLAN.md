@@ -13,7 +13,7 @@
 | Model | `gemini-3-flash-preview` (agents) |
 | Gemini Transport | Toggle via env: `GOOGLE_GENAI_USE_VERTEXAI=True` → Vertex AI; `False` → Developer API (`LLM_API_KEY`) |
 | Guardrails | Groq/Llama (prompt injection) + Gemini via `LLMClient` (scope check, output check) |
-| KIE (Extraction) | Routing via `MOCK_KIE` + `OCR_MODE` + `KIE_MODEL` (default `gemini-3-flash-preview` direct image→JSON). `OCR_MODE=true` reserved for GLM-OCR text + Gemini KIE two-stage path. |
+| KIE (Extraction) | Routing via `MOCK_KIE` + `OCR_MODE` + `KIE_MODEL` (default `gemini-3-flash-preview` direct image→JSON). `OCR_MODE=true` reserved for Qwen3.5-4B text + Gemini KIE two-stage path. |
 | DB | SQLite via `mcp-sqlite` (11 tools) + private blob registry (`file_blob`, `file_blob_page`, `blob_extraction`, `metadata_file_blob`) hidden from LLM |
 | Sheets | Google Sheets via `mcp-gsheets` (16 tools, `SHEET_ID` dari env) |
 | Cache + Queue | Redis (L1 dedup cache + Taskiq broker) — fail-soft when unreachable |
@@ -34,8 +34,8 @@
 | `GOOGLE_CLOUD_LOCATION` | Region, mis. `global` atau `us-central1` |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Path ke service account JSON, mis. `gcp_service_account.json` |
 | `MOCK_KIE` | `true` = return content-keyed fixture from `sample-data/labels/`. (Old `USE_MOCK_OCR` still honored as fallback.) |
-| `OCR_MODE` | `false` (default) = single-call image→JSON via `KIE_MODEL`. `true` = vLLM GLM-OCR text recog → `KIE_MODEL` → JSON. |
-| `KIE_MODEL` | KIE provider: `gemini-3-flash-preview` (current) or `zai-org/GLM-OCR` (future fine-tune). |
+| `OCR_MODE` | `false` (default) = single-call image→JSON via `KIE_MODEL`. `true` = vLLM Qwen3.5-4B text recog → `KIE_MODEL` → JSON. |
+| `KIE_MODEL` | KIE provider: `gemini-3-flash-preview` (current) or `Qwen/Qwen3.5-4B` (future fine-tune). |
 | `EXTRACTION_MODE` | `sync` (inline) or `async` (Taskiq queue + workers + Redis pubsub). |
 | `REDIS_URL`, `MINIO_*`, `TASKIQ_*` | Cache, object store, queue. See `docs/OPERATIONS.md`. |
 | `MCP_TRANSPORT` | `stdio` (default) atau `sse` |
@@ -171,5 +171,5 @@ Orchestrator.process() / .stream()
 | O2 | Rate limit Google Sheets API (100 req/100s) — butuh backoff |
 | O3 | Observability: structured logging (request_id, session_id, file_id) |
 | O4 | `MCPToolRegistry.connect()` tidak ada timeout — pytest hang kalau MCP down |
-| O5 | GLM-OCR fine-tune masih training — `OCR_MODE=true` belum diuji end-to-end, akan dilakukan saat vLLM di Lightning AI aktif |
+| O5 | Qwen3.5-4B fine-tune masih training — `OCR_MODE=true` belum diuji end-to-end, akan dilakukan saat vLLM di Lightning AI aktif |
 | O6 | Frontend mobile (Klaudia native app) — next phase |
