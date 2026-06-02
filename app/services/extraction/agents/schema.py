@@ -1,6 +1,6 @@
-"""Schema utilities for GLM-OCR JSON output.
+"""Schema utilities for Qwen3.5-4B JSON output.
 
-GLM-OCR is fine-tuned on EXTRACTION_SCHEMA but real-world output drifts:
+Qwen3.5-4B is fine-tuned on EXTRACTION_SCHEMA but real-world output drifts:
 extra keys, missing nested keys, arrays that should be lists end up as
 strings or None, all-empty placeholder entries leftover from the schema
 template, etc. These helpers normalize back to the canonical shape so

@@ -1,7 +1,7 @@
 """Schema validation + 3-layer JSON parser tests.
 
 These exercise the defensive layer between vLLM and DB persistence: even
-when GLM-OCR outputs malformed JSON or partial data, downstream code must
+when Qwen3.5-4B outputs malformed JSON or partial data, downstream code must
 see a stable schema.
 """
 

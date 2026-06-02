@@ -45,13 +45,13 @@ class Settings(BaseSettings):
     #   mock      → MOCK_KIE=true; return fixture JSON from sample-data/labels/
     #   direct    → OCR_MODE=false; KIE_MODEL handles image -> JSON in one call
     #               (default for now: gemini-3-flash, which is multimodal)
-    #   separated → OCR_MODE=true; vLLM GLM-OCR does text recognition only,
+    #   separated → OCR_MODE=true; vLLM Qwen3.5-4B does text recognition only,
     #               then KIE_MODEL extracts JSON from that text. Lets us swap
-    #               in the fine-tuned GLM-OCR as KIE_MODEL once training is done.
+    #               in the fine-tuned Qwen3.5-4B as KIE_MODEL once training is done.
     vllm_base_url: str = Field(default="", alias="VLLM_BASE_URL")
     auth_token: str = Field(default="", alias="AUTH_TOKEN")
     vllm_ocr_model: str = Field(
-        default="zai-org/GLM-OCR", alias="VLLM_OCR_MODEL"
+        default="Qwen/Qwen3.5-4B", alias="VLLM_OCR_MODEL"
     )
     # MOCK_KIE replaces USE_MOCK_OCR. We keep the old alias as a fallback for
     # one release cycle so existing .env files don't silently break.

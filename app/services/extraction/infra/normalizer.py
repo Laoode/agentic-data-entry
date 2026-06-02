@@ -9,7 +9,7 @@ Edge cases handled:
   - EXIF rotation (phones save sideways)
   - RGBA/LA/P modes (transparency flattened on white)
   - HEIC/HEIF (iPhone) via pillow-heif
-  - Long-edge clamp keeps GLM-OCR vision token budget bounded
+  - Long-edge clamp keeps Qwen3.5-4B vision token budget bounded
 """
 
 from __future__ import annotations
@@ -55,7 +55,7 @@ SUPPORTED_IMAGE_MIME_TYPES: Final = (
     "image/bmp",
 )
 
-# GLM-OCR vision encoder downsamples; >2048 long edge wastes tokens without
+# Qwen3.5-4B vision encoder downsamples; >2048 long edge wastes tokens without
 # improving recognition on receipts.
 DEFAULT_MAX_LONG_EDGE = 2048
 DEFAULT_JPEG_QUALITY = 92

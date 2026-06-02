@@ -1,12 +1,12 @@
-"""GLM-OCR text-recognition client (vLLM).
+"""Qwen3.5-4B text-recognition client (vLLM).
 
-Used only when OCR_MODE=true: the upstream model is the base GLM-OCR
-(zai-org/GLM-OCR) running on Lightning AI. It produces raw text that is
+Used only when OCR_MODE=true: the upstream model is the base Qwen3.5-4B
+(Qwen/Qwen3.5-4B) running on Lightning AI. It produces raw text that is
 then fed to the KIE model (Gemini) for structured extraction.
 
 This is intentionally minimal — no JSON parsing, no schema validation. Its
 sole job is image → plain text. The "Text Recognition:" prompt matches
-the official GLM-OCR usage example.
+the official Qwen3.5-4B usage example.
 """
 
 from __future__ import annotations
@@ -76,7 +76,7 @@ class TextOCRClient:
 
         span_cm = (
             self._langfuse.span(
-                "glm-ocr.text_recognition",
+                "qwen-3.5-4b.text_recognition",
                 as_type="generation",
                 metadata={
                     "model": self._model,
@@ -101,13 +101,13 @@ class TextOCRClient:
                         pass
                 return text
             except Exception as e:
-                logger.error("GLM-OCR text recognition failed: %s", e)
+                logger.error("Qwen3.5-4B text recognition failed: %s", e)
                 if obs is not None:
                     try:
                         obs.update(level="ERROR", status_message=str(e))
                     except Exception:
                         pass
-                raise OCRError(f"GLM-OCR text recognition failed: {e}") from e
+                raise OCRError(f"Qwen3.5-4B text recognition failed: {e}") from e
 
     async def shutdown(self) -> None:
         await self._client.aclose()

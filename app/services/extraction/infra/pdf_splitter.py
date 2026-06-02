@@ -1,6 +1,6 @@
 """PDF -> per-page canonical JPG bytes.
 
-GLM-OCR consumes single images; PDFs are rendered page-by-page at 200 DPI
+Qwen3.5-4B consumes single images; PDFs are rendered page-by-page at 200 DPI
 via pypdfium2 (already a project dep). Each page goes through the same
 normalizer used for image uploads so dedup is consistent across formats —
 i.e. if the same page is uploaded as a standalone JPG and as a PDF page,
@@ -24,7 +24,7 @@ from app.services.extraction.infra.normalizer import (
 
 logger = logging.getLogger(__name__)
 
-# 200 DPI is the GLM-OCR default for receipt-scale text.
+# 200 DPI is the Qwen3.5-4B default for receipt-scale text.
 RENDER_DPI = 200
 RENDER_SCALE = RENDER_DPI / 72
 

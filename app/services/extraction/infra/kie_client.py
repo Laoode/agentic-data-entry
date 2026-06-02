@@ -5,7 +5,7 @@ between mock / direct / separated KIE. Modes:
 
     mock      MOCK_KIE=true                        fixture lookup
     direct    MOCK_KIE=false + OCR_MODE=false      Gemini image -> JSON (one call)
-    separated MOCK_KIE=false + OCR_MODE=true       GLM-OCR text -> Gemini KIE -> JSON
+    separated MOCK_KIE=false + OCR_MODE=true       Qwen3.5-4B text -> Gemini KIE -> JSON
 
 The content-keyed mock fixture map lives here (used to be in OCRClient) so
 ingest tests can swap modes without changing the dep wiring.
@@ -119,7 +119,7 @@ class KIEClient:
 
         text = await self._text_ocr.recognize_text(jpg_bytes)
         if not text.strip():
-            raise OCRError("GLM-OCR returned empty text for separated KIE path")
+            raise OCRError("Qwen3.5-4B returned empty text for separated KIE path")
         return await self._gemini.extract_from_text(text)
 
     # Legacy compatibility shim — old OCRClient.process_file accepted raw

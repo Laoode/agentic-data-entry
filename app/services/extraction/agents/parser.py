@@ -1,4 +1,4 @@
-"""Robust JSON parsing for vLLM/GLM-OCR responses.
+"""Robust JSON parsing for vLLM/Qwen3.5-4B responses.
 
 3-layer fallback:
     1. json.loads on the cleaned content (after stripping markdown fences and
@@ -54,7 +54,7 @@ def _strip_fences_and_preamble(text: str) -> str:
 
 
 def parse_extraction_json(raw: str) -> dict[str, Any]:
-    """Parse GLM-OCR response into a dict. Never returns None.
+    """Parse Qwen3.5-4B response into a dict. Never returns None.
 
     Raises:
         OCRJsonParseError if all 3 layers fail.

@@ -2,7 +2,7 @@
 
 Two entrypoints share the same prompt:
     extract_from_image(jpg_bytes) — multimodal, Gemini sees the receipt image
-    extract_from_text(ocr_text)   — text-only, used after GLM-OCR text recog
+    extract_from_text(ocr_text)   — text-only, used after Qwen3.5-4B text recog
 
 Both return a raw dict (caller runs validate_and_merge for schema hygiene).
 google-genai's `response_mime_type='application/json'` forces JSON output;
@@ -106,7 +106,7 @@ class GeminiKIEClient:
         return await self._generate(contents, span_name="gemini.kie.image")
 
     async def extract_from_text(self, ocr_text: str) -> dict[str, Any]:
-        """Text-only call — for the OCR_MODE=true path, where GLM-OCR provides
+        """Text-only call — for the OCR_MODE=true path, where Qwen3.5-4B provides
         plain text and Gemini does the KIE step."""
         contents = [
             types.Content(
