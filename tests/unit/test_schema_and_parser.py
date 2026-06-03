@@ -19,9 +19,8 @@ from app.services.extraction.agents.schema import validate_and_merge
 
 def test_merge_returns_full_schema_for_empty_input():
     out = validate_and_merge({})
-    assert set(out.keys()) == {"info", "items", "returned_items", "payment"}
+    assert set(out.keys()) == {"info", "items", "payment"}
     assert out["items"] == []
-    assert out["returned_items"] == []
 
 
 def test_merge_drops_unknown_top_level_keys():

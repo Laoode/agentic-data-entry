@@ -30,7 +30,7 @@ async def test_mock_image_returns_full_schema(settings_mock):
         pages = await client.process_file(_SAMPLE_IMAGE.read_bytes(), "image/jpeg")
         assert len(pages) == 1
         ext = pages[0]
-        assert set(ext.keys()) >= {"info", "items", "returned_items", "payment"}
+        assert set(ext.keys()) >= {"info", "items", "payment"}
         assert ext["info"]["store_name"] == "GREEN FIELD"
     finally:
         await client.shutdown()

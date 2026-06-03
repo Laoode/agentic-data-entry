@@ -61,7 +61,6 @@ async def _seed() -> tuple[int, int]:
     extraction = {
         "info": {"store_name": "ALFAMART", "store_location": "Jl. Ciputat Raya"},
         "items": [{"item_name": "Aqua 600ml", "quantity": "2", "price_per_unit": "4000"}],
-        "returned_items": [],
         "payment": {"grand_total": "8000", "currency": "IDR"},
     }
     async with sse_client("http://localhost:8001/sse") as (r, w):

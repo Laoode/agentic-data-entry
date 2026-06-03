@@ -48,7 +48,7 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> None:
 
 def _ensure_arrays(merged: dict[str, Any]) -> None:
     """Guarantee array fields are lists, never None or string."""
-    root_arrays = ("items", "returned_items")
+    root_arrays = ("items",)
     info_arrays = ("store_contacts",)
     pay_arrays = ("discounts", "taxes", "additional_charges")
 
@@ -73,7 +73,6 @@ def _clean_empty_arrays(merged: dict[str, Any]) -> None:
     checks: list[tuple[dict[str, Any], str, str]] = [
         (info, "store_contacts", "value"),
         (merged, "items", "item_name"),
-        (merged, "returned_items", "item_name"),
         (payment, "discounts", "amount"),
         (payment, "taxes", "amount"),
         (payment, "additional_charges", "amount"),
@@ -96,7 +95,7 @@ def validate_and_merge(ai_result: dict[str, Any]) -> dict[str, Any]:
     """Merge model output into a clean schema copy.
 
     Guarantees on return value:
-      - Top-level keys: info, items, returned_items, payment
+      - Top-level keys: info, items, payment
       - All array fields are lists
       - No placeholder empty entries leaked from the schema template
       - Extra keys from the model are dropped

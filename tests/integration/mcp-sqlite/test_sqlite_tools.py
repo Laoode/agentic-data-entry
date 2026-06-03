@@ -75,7 +75,6 @@ async def test_full_document_flow():
             extraction = {
                 "info": {"store_name": "INDOMARET"},
                 "items": [{"item_name": "Indomie", "quantity": "2"}],
-                "returned_items": [],
                 "payment": {"grand_total": "15540", "currency": "IDR"},
             }
             saved = await _call(
