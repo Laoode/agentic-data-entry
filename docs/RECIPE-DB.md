@@ -378,19 +378,19 @@ payment_time & time_unit:
 - time_unit: Copy only the unit IF written (e.g., "AM", "PM", "WIB", "UTC", "+07:00", "+08:00"). Otherwise "".
 - If multiple times exist, select the chronologically latest time, or pick the one closest to "TOTAL".
 
-items & returned_items:
-- item_name: extract ONLY the descriptive product text. DO NOT include internal codes, SKUs, or barcodes.
+items:
+- item_name: extract ONLY the descriptive product text. DO NOT include internal codes, SKUs, barcodes, or symbols bullet points (e.g., •, -, *). Group a main item and its sub-menu items into a single item_name ONLY IF the sub-menu items do not have individual prices. Separate sub-menu items with a single space into distinct, individual item_name entries IF they have their own explicit prices.
 - quantity: the number of units. Copy only the number — never include "x", "@", "PCS", "*".
 - unit_price: price for ONE single unit.
-- total_price / total_refund: final extended price for that line.
-- discount_label: copy exact text of any per-item discount label (e.g., "DISKON: (20%)", "Member Disc."). Use "" if none.
+- total_price: final extended price for that line.
+- discount_label: copy exact text of any per-item discount label (e.g., "DISKON 20%", "Member Disc."). Use "" if none.
 - discount_price: copy the number printed next to/below discount_label. Include "-" if written. Use "" if none.
 - tax_label: tax code or category on the item line (e.g., "SR", "ZRL", "6%"). Use "" if not shown per item.
 
 payment summary:
-- total_items: fill ONLY if explicitly written (e.g., "Total Qty", "Item Count"). Do NOT count rows yourself.
+- total_items: fill ONLY if explicitly written without self-counting, prioritizing "Total Qty" (total pieces) if available, or falling back to "Total Item" (row count) if "Total Qty" is missing.
 - subtotal_price: look for "Subtotal", "Total Sales (Excl. GST)", "Net Amount", "Total (Excl. Tax)".
-- currency: symbol ($, Rp, RM, €, etc.) ONLY if printed on receipt. Do not infer from location.
+- currency: symbol ($, Rp, RM, €, etc.) ONLY if printed on receipt. Do not infer from location. Do not inclue the symbol (,.).
 - discount labels and amounts: for each line item that reduces the total price (e.g., 'Discount 35%', 'KOTA HEMAT', 'Voucher', 'Promo Code', 'Total Diskon', 'Total Voucher', or similar), create a separate entry with the exact label as 'discount_name' and the numeric value as 'amount'. Include the negative sign '-' if written.
 - taxes: each tax line — exact label → "tax_name", numeric value → "amount" (e.g. tax_name: "GST 6%", amount: "5000", etc) also include total tax if writen.
 - additional_charges: service charge, delivery fee, etc. — exact label → "charge_name", value → "amount" (e.g. charge_name: "Biaya perngiriman", amount: "16,000", etc). also include total charge if writen.
@@ -415,7 +415,6 @@ Receipt buatan yang mendemonstrasikan **semua edge case** sekaligus:
 | `+08:00` di timestamp | time_unit = "+08:00" |
 | `MEMBER -9.50` per item | discount_label + discount_price |
 | `SR` per item | tax_label per item |
-| RETURN ITEM section | returned_items array |
 | `Total Qty : 5` | total_items (explicit only) |
 | `MEMBER DISC : -5.00` | discounts array |
 | `SST 6%` | taxes array |

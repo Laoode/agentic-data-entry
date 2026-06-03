@@ -77,16 +77,24 @@ IngestService + Taskiq workers never branch on mode themselves; they call
 
 ```bash
 # Service Configuration
+HOST=0.0.0.0
+PORT=8000
 SERVICE_NAME=Klaudia Chatbot
-VERSION=1.1.0
+VERSION=1.0.0
 DEBUG=true
 
-# LLM Configuration (Gemini for agents)
-LLM_PROVIDER=openai
-LLM_ENDPOINT=https://generativelanguage.googleapis.com/v1beta/openai/
+# LLM Configuration (Google Gemini via native google-genai SDK | Vertex AI) 
 LLM_MODEL=gemini-3-flash-preview
-LLM_API_KEY=<your-gemini-key>
+LLM_API_KEY=
 LLM_TEMPERATURE=0.5
+LLM_THINKING_LEVEL_ROUTING=minimal
+LLM_THINKING_LEVEL_WORKER=minimal
+
+# Vertex AI
+GOOGLE_CLOUD_PROJECT=
+GOOGLE_CLOUD_LOCATION=global
+GOOGLE_GENAI_USE_VERTEXAI=True
+GOOGLE_APPLICATION_CREDENTIALS=gcp_service_account.json
 
 # OCR Configuration (vLLM endpoint - Qwen3.5-4B)
 VLLM_BASE_URL=<your-vllm-endpoint>
@@ -109,17 +117,7 @@ PDF/Image → Qwen3.5-4B (vLLM) → Structured JSON (Direct)
 
 #### **Implementation: Extraction Agent**
 
-**Location:** `app/services/extraction/agents/extraction_agent.py`
-
 ```python
-# app/services/extraction/agents/extraction_agent.py
-import base64
-import requests
-import pypdfium2 as pdfium
-import io
-from typing import Dict, List
-import logging
-
 EXTRACTION_SCHEMA = {
     "info": {
         "store_name": "",
@@ -164,314 +162,6 @@ EXTRACTION_SCHEMA = {
         "change": ""
     }
 }
-
-class ExtractionAgent:
-    """
-    Simplified Extraction Agent using Qwen3.5-4B
-    Directly extracts structured JSON from receipt images/PDFs
-    """
-    
-    def __init__(
-        self,
-        vllm_endpoint: str,
-        auth_token: str,
-        model: str = "Qwen/Qwen3.5-4B",
-        db_client = None
-    ):
-        self.endpoint = vllm_endpoint
-        self.auth_token = auth_token
-        self.model = model
-        self.db_client = db_client
-        self.logger = logging.getLogger("ExtractionAgent")
-    
-    async def process_document(
-        self,
-        file_path: str,
-        file_type: str,  # 'pdf' | 'image'
-        metadata_file_id: int
-    ) -> Dict:
-        """
-        Process document and extract structured data
-        
-        Flow:
-        1. Convert PDF/Image to base64
-        2. Send to Qwen3.5-4B with JSON schema prompt
-        3. Parse JSON response
-        4. Validate against schema
-        5. Save to database (pages table)
-        """
-        try:
-            if file_type == 'pdf':
-                pages_data = await self._process_pdf(file_path, metadata_file_id)
-            else:
-                pages_data = await self._process_image(file_path, metadata_file_id)
-            
-            # Update metadata_file status
-            await self._update_file_status(
-                metadata_file_id,
-                total_pages=len(pages_data),
-                pages_extracted=sum(1 for p in pages_data if p['status'] == 'extracted')
-            )
-            
-            return {
-                "metadata_file_id": metadata_file_id,
-                "pages": pages_data,
-                "status": "success"
-            }
-            
-        except Exception as e:
-            self.logger.error(f"Document processing failed: {e}")
-            await self._update_file_status(
-                metadata_file_id,
-                status='failed',
-                status_message=str(e)
-            )
-            raise
-    
-    async def _process_pdf(self, file_path: str, metadata_file_id: int) -> List[Dict]:
-        """Process multi-page PDF"""
-        pdf = pdfium.PdfDocument(file_path)
-        pages_data = []
-        
-        for page_num, page in enumerate(pdf, start=1):
-            try:
-                # Render at 200 DPI
-                pil_image = page.render(scale=2.77).to_pil()
-                
-                # Convert to base64
-                buffer = io.BytesIO()
-                pil_image.save(buffer, format="PNG")
-                image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
-                
-                # Extract JSON
-                extracted_json = await self._extract_json(image_base64)
-                
-                # Validate JSON
-                validated_json = self._validate_schema(extracted_json)
-                
-                # Save to database
-                page_id = await self._save_page(
-                    metadata_file_id=metadata_file_id,
-                    page_number=page_num,
-                    extracted_json=validated_json,
-                    status='extracted'
-                )
-                
-                pages_data.append({
-                    "page_id": page_id,
-                    "page_number": page_num,
-                    "status": "extracted",
-                    "data": validated_json
-                })
-                
-            except Exception as e:
-                self.logger.error(f"Page {page_num} extraction failed: {e}")
-                pages_data.append({
-                    "page_number": page_num,
-                    "status": "failed",
-                    "error": str(e)
-                })
-        
-        return pages_data
-    
-    async def _process_image(self, file_path: str, metadata_file_id: int) -> List[Dict]:
-        """Process single image"""
-        try:
-            with open(file_path, 'rb') as f:
-                image_base64 = base64.b64encode(f.read()).decode('utf-8')
-            
-            extracted_json = await self._extract_json(image_base64)
-            validated_json = self._validate_schema(extracted_json)
-            
-            page_id = await self._save_page(
-                metadata_file_id=metadata_file_id,
-                page_number=1,
-                extracted_json=validated_json,
-                status='extracted'
-            )
-            
-            return [{
-                "page_id": page_id,
-                "page_number": 1,
-                "status": "extracted",
-                "data": validated_json
-            }]
-            
-        except Exception as e:
-            self.logger.error(f"Image extraction failed: {e}")
-            return [{
-                "page_number": 1,
-                "status": "failed",
-                "error": str(e)
-            }]
-    
-    async def _extract_json(self, image_base64: str) -> Dict:
-        """
-        Call Qwen3.5-4B with structured prompt
-        Returns JSON directly from model
-        """
-        import json
-        
-        # Construct prompt with JSON schema
-        prompt = f"""请按下列JSON格式输出图中信息:
-{json.dumps(EXTRACTION_SCHEMA, ensure_ascii=False, indent=2)}"""
-        
-        headers = {
-            "Authorization": f"Bearer {self.auth_token}",
-            "Content-Type": "application/json"
-        }
-        
-        payload = {
-            "model": self.model,
-            "messages": [{
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/png;base64,{image_base64}"}
-                    },
-                    {
-                        "type": "text",
-                        "text": prompt
-                    }
-                ]
-            }],
-            "max_tokens": 4096,
-            "temperature": 0.2,
-            "top_p": 0.9,
-        }
-        
-        response = requests.post(self.endpoint, json=payload, headers=headers)
-        response.raise_for_status()
-        
-        content = response.json()['choices'][0]['message']['content']
-        
-        # Parse JSON from response
-        # Qwen3.5-4B might wrap JSON in markdown code blocks
-        if "```json" in content:
-            content = content.split("```json")[1].split("```")[0].strip()
-        elif "```" in content:
-            content = content.split("```")[1].split("```")[0].strip()
-        
-        return json.loads(content)
-    
-    def _validate_schema(self, data: Dict) -> Dict:
-        """
-        Validate and fill missing fields with defaults
-        """
-        import copy
-        validated = copy.deepcopy(EXTRACTION_SCHEMA)
-        
-        # Merge extracted data
-        if "info" in data:
-            validated["info"].update(data["info"])
-        
-        if "items" in data and isinstance(data["items"], list):
-            validated["items"] = data["items"]
-        
-        if "payment" in data:
-            validated["payment"].update(data["payment"])
-        
-        return validated
-    
-    async def _save_page(
-        self,
-        metadata_file_id: int,
-        page_number: int,
-        extracted_json: Dict,
-        status: str
-    ) -> int:
-        """Save page data to database"""
-        import json
-        
-        result = await self.db_client.execute(
-            """
-            INSERT INTO pages (metadata_file_id, page, agent_extracted, status, status_message)
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            (
-                metadata_file_id,
-                page_number,
-                json.dumps(extracted_json, ensure_ascii=False),
-                status,
-                "extracted" if status == "extracted" else None
-            )
-        )
-        
-        return result.lastrowid
-    
-    async def _update_file_status(
-        self,
-        metadata_file_id: int,
-        status: str = None,
-        status_message: str = None,
-        total_pages: int = None,
-        pages_extracted: int = None
-    ):
-        """Update metadata_file status"""
-        updates = []
-        params = []
-        
-        if total_pages is not None:
-            updates.append("total_pages = ?")
-            params.append(total_pages)
-        
-        if status:
-            updates.append("status = ?")
-            params.append(status)
-        elif total_pages and pages_extracted is not None:
-            if pages_extracted == total_pages:
-                updates.append("status = 'completed'")
-            elif pages_extracted > 0:
-                updates.append("status = 'partial'")
-            else:
-                updates.append("status = 'failed'")
-        
-        if status_message:
-            updates.append("status_message = ?")
-            params.append(status_message)
-        
-        params.append(metadata_file_id)
-        
-        await self.db_client.execute(
-            f"UPDATE metadata_file SET {', '.join(updates)} WHERE id = ?",
-            tuple(params)
-        )
-```
-
-#### **Testing Example**
-
-```python
-# tests/integration/extraction/test_extraction_agent.py
-import pytest
-from app.services.extraction.agents.extraction_agent import ExtractionAgent
-
-@pytest.mark.asyncio
-async def test_extract_receipt_image():
-    agent = ExtractionAgent(
-        vllm_endpoint=os.environ["VLLM_BASE_URL"],
-        auth_token=os.environ["AUTH_TOKEN"],
-        db_client=mock_db_client
-    )
-    
-    result = await agent.process_document(
-        file_path="data/receipt-indomaret-test.jpg",
-        file_type="image",
-        metadata_file_id=1
-    )
-    
-    assert result["status"] == "success"
-    assert len(result["pages"]) == 1
-    assert result["pages"][0]["status"] == "extracted"
-    
-    # Validate JSON structure
-    data = result["pages"][0]["data"]
-    assert "info" in data
-    assert "items" in data
-    assert "payment" in data
-    assert data["info"]["store_name"] != ""
-    assert len(data["items"]) > 0
-```
 
 ---
 
@@ -663,44 +353,6 @@ CREATE TABLE pages (
 );
 ```
 
-### 5.2 Schema: `agent_extracted` JSON
-
-```json
-{
-  "info": {
-    "receipt_id": "INV-2025-001",
-    "store_name": "Indomaret",
-    "store_location": "Jl. Poros Raha",
-    "payment_date": "2025-01-30",
-    "payment_time": "14:30:00"
-  },
-  "items": [
-    {
-      "item_name": "Indomie Goreng",
-      "quantity": 2,
-      "unit_price": 3500,
-      "total_price": 7000
-    }
-  ],
-  "payment": {
-    "subtotal": 10000,
-    "tax": 1000,
-    "rounding": 0,
-    "discount": 0,
-    "voucher": 0,
-    "grand_total": 11000,
-    "payment_method": "QRIS",
-    "change": 0
-  }
-}
-```
-
-**Validation Rules:**
-- Missing numeric fields → default to `0`
-- Missing string fields → default to `""` (empty string)
-- All fields MUST be present in output JSON
-- Python validation for multi-page PDF extraction
-
 ---
 
 ## 6. MCP TOOL CONTRACTS
@@ -847,19 +499,6 @@ LOG_PATH=logs
 | Tool Timeout      | Sub-agent          | Retry 3x, then fallback     |
 | LLM Error         | Orchestrator       | Generic error message       |
 
-### 9.3 Resource Cleanup
-
-```python
-# app/services/core/container.py
-class KlaudiaContainer:
-    async def shutdown(self):
-        """Graceful shutdown"""
-        await self.llm_client.shutdown()
-        await self.extraction_agent.shutdown()
-        await self.mcp_sqlite.shutdown()
-        await self.mcp_gsheets.shutdown()
-        await self.db_client.close()
-```
 
 ---
 
@@ -868,11 +507,5 @@ class KlaudiaContainer:
 **Dynamic Staging:**
 - In development mode, use mock OCR KIE responses to avoid vLLM bottlenecks
 - Apply to all services with high latency
-
-```python
-# config.py
-if os.getenv("DEBUG") == "true":
-    USE_MOCK_OCR = True
-```
 
 # TODO Apply Docker
