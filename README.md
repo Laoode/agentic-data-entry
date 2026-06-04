@@ -23,7 +23,8 @@
 </div>
 
 ```
-yudhypr@MacBook-Air-La Big-Thesis-S1 % lt
+~/Codex/Big-Thesis-S1 on  development !                                                                                  
+❯ lt
  .
 ├──  app
 │   ├──  __init__.py
@@ -91,8 +92,6 @@ yudhypr@MacBook-Air-La Big-Thesis-S1 % lt
 │           ├──  output.py
 │           ├──  prompts.py
 │           └──  scope.py
-├──  app_dev.db-shm
-├──  app_dev.db-wal
 ├──  config
 │   ├──  __init__.py
 │   └──  settings.py
@@ -101,18 +100,10 @@ yudhypr@MacBook-Air-La Big-Thesis-S1 % lt
 │   ├──  HAT.md
 │   ├──  LANGCHAIN.md
 │   ├──  LLMOps.md
-│   ├──  METRICS.md
 │   ├──  OPERATIONS.md
-│   ├──  paper
-│   │   └──  metrics
-│   │       ├──  ANSL*.md
-│   │       └──  KIEval.md
 │   ├──  PLAN.md
 │   ├──  PRD.md
-│   ├──  PROMPT.md
 │   ├──  RECIPE-DB.md
-│   └──  THESIS.md
-├──  dump.rdb
 ├──  klaudia
 │   ├──  __init__.py
 │   ├──  core
