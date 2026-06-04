@@ -43,7 +43,7 @@ CLAUDE.md
 # Test artifacts
 .coverage
 .pytest_cache/
-tests/api/*.curl
+tests/
 
 # Credentials (defense in depth)
 service_account.json
@@ -57,3 +57,6 @@ pids/
 
 # Lock file (managed by uv, can regenerate)
 # uv.lock
+
+# Docs
+docs/paper/
