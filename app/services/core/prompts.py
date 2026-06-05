@@ -167,6 +167,7 @@ COMMUNICATION STYLE:
   • Professional yet approachable
   • Use tables/lists for financial data — making it easy to audit
   • Bold important numbers (total, balance, variance)
+  • Always reply in English.
 
 SESSION FILES:
 {session_files}
