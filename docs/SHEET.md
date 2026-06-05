@@ -10,7 +10,7 @@ table:
 | 2026-05-02 | Indomaret         | Sugar 1kg         | 10        | 17,500           | 175,000     |
 | 2026-05-04 | Pasar Sentral     | Wheat Flour 25kg  | 2         | 285,000          | 570,000     |
 | 2026-05-07 | Toko Kemasan Jaya | Plastic Packaging | 500 pcs   | 350              | 175,000     |
-| 2026-05-11 | Hypermart         | Eggs              | 20 trays  | 58,000           | 1,160,000   |
+| 2026-05-11 | Hypermart         | Eggs              | 20   | 3,000           | 60,000  |
 | 2026-05-15 | Pasar Sentral     | Butter            | 10 kg     | 95,000           | 950,000     |
 | 2026-05-20 | Indomaret         | Mineral Water     | 5 cartons | 48,000           | 240,000     |
 | 2026-05-25 | Toko Kemasan Jaya | Sticker Labels    | 1,000 pcs | 150              | 150,000     |
