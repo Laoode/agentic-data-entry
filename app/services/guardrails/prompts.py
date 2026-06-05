@@ -1,5 +1,5 @@
 # ── Input scope: SARA ────────────────────────────────────────────────────────
-SARA_CHECK_PROMPT = """You are a content safety classifier for an Indonesian receipt-processing and data-entry application.
+SARA_CHECK_PROMPT = """You are a content safety classifier for receipt-processing and data-entry application.
 
 TASK: Decide whether the user message contains SARA content.
 
@@ -10,7 +10,7 @@ SARA POLICY — flag YES only when the message:
 - Uses racial/ethnic slurs or promotes racial supremacy
 
 NOT SARA — always return NO for:
-- Food names, restaurant names, menu items, or prices (e.g. "nasi kuning", "ayam goreng")
+- Food names, restaurant names, menu items, or transactional prices found on vendor receipts
 - Spreadsheet / database operations (read, write, update, delete rows)
 - Receipt scanning, data entry, or any application feature question
 - Neutral mentions of locations, ethnic cuisines, or everyday business operations
@@ -23,7 +23,7 @@ Classification:"""
 
 
 # ── Input scope: Financial Advice ─────────────────────────────────────────────
-FINANCIAL_ADVICE_CHECK_PROMPT = """You are a content safety classifier for an Indonesian receipt-processing and data-entry application.
+FINANCIAL_ADVICE_CHECK_PROMPT = """You are a content safety classifier for receipt-processing and data-entry application.
 
 TASK: Decide whether the user message asks for financial advice or investment recommendations.
 
@@ -57,7 +57,7 @@ Classification:"""
 
 
 # ── Output check (generic, post-response) ────────────────────────────────────
-OUTPUT_CHECK_PROMPT = """You are an output safety classifier for an Indonesian receipt-processing and data-entry application.
+OUTPUT_CHECK_PROMPT = """You are an output safety classifier for receipt-processing and data-entry application.
  
 TASK: Decide whether the assistant response below contains harmful content.
  
@@ -91,24 +91,48 @@ Classification:"""
 
 
 # ── Rejection messages ────────────────────────────────────────────────────────
+## Indonesian Version
+# REJECTION_MESSAGES = {
+#     "prompt_injection": (
+#         "Maaf, saya mendeteksi pola yang tidak aman dalam pesan Anda. "
+#         "Mohon kirimkan pesan yang sesuai."
+#     ),
+#     "SARA": (
+#         "Maaf, pesan Anda terdeteksi mengandung konten SARA "
+#         "(Suku, Agama, Ras, dan Antar-Golongan). "
+#         "Saya hanya dapat membantu dengan pemrosesan receipt dan data entry."
+#     ),
+#     "FINANCIAL_ADVICE": (
+#         "Maaf, saya tidak dapat memberikan saran keuangan atau investasi. "
+#         "NFA — Not Financial Advice. "
+#         "Saya hanya dapat membantu dengan pemrosesan receipt dan data entry Anda."
+#     ),
+#     # fallback (should not be hit after this refactor)
+#     "blacklisted_topic": (
+#         "Maaf, topik tersebut berada di luar cakupan layanan saya. "
+#         "Saya hanya bisa membantu dengan pemrosesan receipt dan data entry."
+#     ),
+# }
+
+## English Version
 REJECTION_MESSAGES = {
     "prompt_injection": (
-        "Maaf, saya mendeteksi pola yang tidak aman dalam pesan Anda. "
-        "Mohon kirimkan pesan yang sesuai."
+        "Sorry, I detected an unsafe pattern in your message. "
+        "Please send a valid message."
     ),
     "SARA": (
-        "Maaf, pesan Anda terdeteksi mengandung konten SARA "
-        "(Suku, Agama, Ras, dan Antar-Golongan). "
-        "Saya hanya dapat membantu dengan pemrosesan receipt dan data entry."
+        "Sorry, your message was detected to contain sensitive content related to "
+        "race, religion, ethnicity, or social groups. "
+        "I can only assist with receipt processing and data entry."
     ),
     "FINANCIAL_ADVICE": (
-        "Maaf, saya tidak dapat memberikan saran keuangan atau investasi. "
+        "Sorry, I cannot provide financial or investment advice. "
         "NFA — Not Financial Advice. "
-        "Saya hanya dapat membantu dengan pemrosesan receipt dan data entry Anda."
+        "I can only assist with your receipt processing and data entry."
     ),
     # fallback (should not be hit after this refactor)
     "blacklisted_topic": (
-        "Maaf, topik tersebut berada di luar cakupan layanan saya. "
-        "Saya hanya bisa membantu dengan pemrosesan receipt dan data entry."
+        "Sorry, that topic is outside the scope of my services. "
+        "I can only assist with receipt processing and data entry."
     ),
 }
