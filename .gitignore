@@ -39,6 +39,8 @@ venv.bak/
 .claude/
 CLAUDE.md
 .claudeignore
+.agents/
+AGENTS.md
 
 # Test artifacts
 .coverage
