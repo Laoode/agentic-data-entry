@@ -29,7 +29,7 @@ table:
 | Bank Interest Expense     |       50,000 |
 | Tax Expense               |      250,000 |
 | Total Expenses            |    8,170,000 |
-| Net Profit                |   10,330,000 |
+| Net Profit                |   10,280,000 |
 
 - sheet:
 index: 2
