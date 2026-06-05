@@ -13,7 +13,10 @@ from app.models.chat import (
 from app.services.core.container import KlaudiaContainer
 from app.services.core.prompts import KLAUDIA_SYSTEM_PROMPT
 from app.services.extraction.infra.normalizer import is_pdf, is_supported_image
-from klaudia.core.supervisor.tools.context import build_extraction_context, build_session_context
+from klaudia.core.supervisor.tools.context import (
+    build_extraction_context,
+    build_session_context,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -172,13 +175,15 @@ class KlaudiaOrchestrator:
                 # ExtractionAgent here because process() is non-streaming and
                 # callers expect data ready on return.
                 result = await self._extraction_agent.process(att, session_id, user_id)
-                extraction_results.append({
-                    "file_id": result.file_id,
-                    "file_name": result.file_name,
-                    "pages": result.pages,
-                    "status": result.status,
-                    "summary": result.summary,
-                })
+                extraction_results.append(
+                    {
+                        "file_id": result.file_id,
+                        "file_name": result.file_name,
+                        "pages": result.pages,
+                        "status": result.status,
+                        "summary": result.summary,
+                    }
+                )
 
         # 5. Build context
         # NOTE: history is fetched BEFORE saving the current user msg so the
@@ -186,6 +191,7 @@ class KlaudiaOrchestrator:
         # Saving first would double the user turn (history + explicit append),
         # which confuses the LLM (two identical consecutive user messages).
         import asyncio
+
         history, session_files_raw, available_sheets = await asyncio.gather(
             self._c.db_client.get_conversation_history(session_id, limit=10),
             self._c.db_client.get_session_files(session_id),
@@ -196,21 +202,25 @@ class KlaudiaOrchestrator:
         session_files_ctx = build_session_context(session_files_raw)
         system_prompt = KLAUDIA_SYSTEM_PROMPT.format(
             session_files=session_files_ctx,
-            available_sheets=available_sheets or "Tidak ada sheet tersedia.",
+            available_sheets=available_sheets or "No sheets available.",
             date=meta.date,
             time=meta.time,
             timezone=meta.timezone,
         )
 
         # Build messages for supervisor
-        llm_messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
+        llm_messages: list[dict[str, Any]] = [
+            {"role": "system", "content": system_prompt}
+        ]
 
         # Add history (reversed to chronological)
         for row in reversed(history):
-            llm_messages.append({
-                "role": row["sender"],
-                "content": row["message_text"],
-            })
+            llm_messages.append(
+                {
+                    "role": row["sender"],
+                    "content": row["message_text"],
+                }
+            )
 
         # Add extraction context if present (one block per attachment, in order)
         for ext in extraction_results:
@@ -235,7 +245,9 @@ class KlaudiaOrchestrator:
         )
 
         # 8. Post-process: remove thinking tokens
-        content = re.sub(r"<think>.*?</think>", "", agent_response.content, flags=re.DOTALL).strip()
+        content = re.sub(
+            r"<think>.*?</think>", "", agent_response.content, flags=re.DOTALL
+        ).strip()
 
         # 9. Output guardrails
         output_guard = await self._c.guardrails.validate_output(content)
@@ -277,7 +289,9 @@ class KlaudiaOrchestrator:
             langfuse = self._langfuse
             trace_cm = (
                 langfuse.trace_attributes(
-                    session_id=session_id, user_id=user_id, tags=["klaudia", "chat", "stream"]
+                    session_id=session_id,
+                    user_id=user_id,
+                    tags=["klaudia", "chat", "stream"],
                 )
                 if langfuse is not None
                 else _nullctx()
@@ -300,13 +314,20 @@ class KlaudiaOrchestrator:
             user_msg = messages[-1]
             user_text = user_msg.content
 
-            yield {"type": "guardrail", "data": {"stage": "input", "status": "checking"}}
+            yield {
+                "type": "guardrail",
+                "data": {"stage": "input", "status": "checking"},
+            }
             guard_result = await self._c.guardrails.validate_input(user_text)
             if not guard_result.passed:
                 rejection = guard_result.rejection_message
                 yield {
                     "type": "guardrail",
-                    "data": {"stage": "input", "status": "rejected", "message": rejection},
+                    "data": {
+                        "stage": "input",
+                        "status": "rejected",
+                        "message": rejection,
+                    },
                 }
                 yield {"type": "token", "data": {"text": rejection}}
                 elapsed = int((time.time() - start) * 1000)
@@ -334,7 +355,11 @@ class KlaudiaOrchestrator:
                 if rejection_msg is not None:
                     yield {
                         "type": "guardrail",
-                        "data": {"stage": "attachment", "status": "rejected", "message": rejection_msg},
+                        "data": {
+                            "stage": "attachment",
+                            "status": "rejected",
+                            "message": rejection_msg,
+                        },
                     }
                     yield {"type": "token", "data": {"text": rejection_msg}}
                     elapsed = int((time.time() - start) * 1000)
@@ -353,7 +378,11 @@ class KlaudiaOrchestrator:
                 if prv_msg is not None:
                     yield {
                         "type": "guardrail",
-                        "data": {"stage": "queue", "status": "rejected", "message": prv_msg},
+                        "data": {
+                            "stage": "queue",
+                            "status": "rejected",
+                            "message": prv_msg,
+                        },
                     }
                     yield {"type": "token", "data": {"text": prv_msg}}
                     elapsed = int((time.time() - start) * 1000)
@@ -375,8 +404,9 @@ class KlaudiaOrchestrator:
                         extraction_results = event["payload"]
                         continue
                     yield event
-            
+
             import asyncio
+
             history, session_files_raw, available_sheets = await asyncio.gather(
                 self._c.db_client.get_conversation_history(session_id, limit=10),
                 self._c.db_client.get_session_files(session_id),
@@ -387,15 +417,19 @@ class KlaudiaOrchestrator:
             session_files_ctx = build_session_context(session_files_raw)
             system_prompt = KLAUDIA_SYSTEM_PROMPT.format(
                 session_files=session_files_ctx,
-                available_sheets=available_sheets or "Tidak ada sheet tersedia.",
+                available_sheets=available_sheets or "No sheets available.",
                 date=meta.date,
                 time=meta.time,
                 timezone=meta.timezone,
             )
 
-            llm_messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
+            llm_messages: list[dict[str, Any]] = [
+                {"role": "system", "content": system_prompt}
+            ]
             for row in reversed(history):
-                llm_messages.append({"role": row["sender"], "content": row["message_text"]})
+                llm_messages.append(
+                    {"role": row["sender"], "content": row["message_text"]}
+                )
             for ext in extraction_results:
                 extraction_ctx = build_extraction_context(ext)
                 llm_messages.append({"role": "user", "content": extraction_ctx})
@@ -421,7 +455,9 @@ class KlaudiaOrchestrator:
                     any_token_emitted = True
                 yield event
 
-            content = re.sub(r"<think>.*?</think>", "", final_content, flags=re.DOTALL).strip()
+            content = re.sub(
+                r"<think>.*?</think>", "", final_content, flags=re.DOTALL
+            ).strip()
 
             if not any_token_emitted and content:
                 # RouterWithResponse inline FINISH path: supervisor assembled the
@@ -445,10 +481,16 @@ class KlaudiaOrchestrator:
                 content = output_guard.rejection_message
                 yield {
                     "type": "guardrail",
-                    "data": {"stage": "output", "status": "rejected", "message": content},
+                    "data": {
+                        "stage": "output",
+                        "status": "rejected",
+                        "message": content,
+                    },
                 }
 
-            await self._c.db_client.save_message(session_id, user_id, "assistant", content)
+            await self._c.db_client.save_message(
+                session_id, user_id, "assistant", content
+            )
             await self._c.db_client.update_session_timestamp(session_id)
 
             elapsed = int((time.time() - start) * 1000)
@@ -515,10 +557,7 @@ class KlaudiaOrchestrator:
             return None
         if depth >= settings.extraction_queue_depth_reject:
             logger.warning("Queue depth %d exceeds reject cap; rejecting upload", depth)
-            return (
-                f"Sistem lagi sibuk (antrian {depth} task). "
-                "Coba lagi sebentar ya."
-            )
+            return f"Sistem lagi sibuk (antrian {depth} task). Coba lagi sebentar ya."
         return None
 
     async def _run_extraction_stream(
@@ -583,9 +622,7 @@ class KlaudiaOrchestrator:
                 "data": {"status": "queueing", "file_name": att.filename},
             }
             try:
-                ef = await ingest.enqueue(
-                    att, session_id=session_id, user_id=user_id
-                )
+                ef = await ingest.enqueue(att, session_id=session_id, user_id=user_id)
             except IngestRejectedError as e:
                 yield {
                     "type": "extraction",
@@ -653,6 +690,7 @@ class KlaudiaOrchestrator:
                 (ef.file_id,),
             )
             import json as _json
+
             pages_payload = []
             for r in pages_rows:
                 ext = {}
@@ -661,11 +699,13 @@ class KlaudiaOrchestrator:
                         ext = _json.loads(r["agent_extracted"])
                     except _json.JSONDecodeError:
                         pass
-                pages_payload.append({
-                    "page": r["page"],
-                    "extraction": ext,
-                    "status": r["status"],
-                })
+                pages_payload.append(
+                    {
+                        "page": r["page"],
+                        "extraction": ext,
+                        "status": r["status"],
+                    }
+                )
             payload = {
                 "file_id": ef.file_id,
                 "file_name": ef.file_name,
