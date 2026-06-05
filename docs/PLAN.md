@@ -1,4 +1,4 @@
-# Klaudia Receipt Extraction — Project Memory
+# Klaudia Receipt Extraction + Financial Accounting Data Entry — Project Memory
 
 > Baca ini dulu sebelum mulai. Semua plan sudah DONE. Ini state terakhir project.
 
@@ -101,6 +101,8 @@ Orchestrator.process() / .stream()
 | B14 | `agent.py` | Sheet cache stale setelah `sheet_agent` create/rename/delete sheet — TTL-only, tidak ada invalidation | `invalidate_sheets_cache()` public method; `make_data_entry_team_node` terima `on_sheet_mutation` callback, fire on `[SHEET_DONE]` |
 | B15 | `router.py` + `agents.py` | `_MINIMAL_THINK` hardcoded — tidak bisa tuning per agent type tanpa code change | Pindah ke `settings.py` sebagai `llm_thinking_level_routing` + `llm_thinking_level_worker`; `llm.py` terima `thinking_level` param, apply via `.bind()` di factory; `agent.py` build `_routing_llm` + `_worker_llm` terpisah; `_MINIMAL_THINK` dihapus dari router/agents (Fix H) |
 | B16 | `output.py` + `config.py` | `topics_str` + `blacklisted_topics` dead code — `OUTPUT_CHECK_PROMPT` tidak punya `{topics}` placeholder, Python silently ignore extra kwarg, field tidak pernah dipakai | Hapus `topics_str` + `.format(topics=...)` dari `output.py`; hapus `blacklisted_topics` dari `GuardrailsConfig`; tambah explicit counterexample ke `OUTPUT_CHECK_PROMPT` |
+| B17 | `observability.py` | `LangfuseService.span()` + `trace_attributes()` double-yield bug — `except` block tries to `yield` lagi setelah exception di-throw ke generator → `RuntimeError: generator didn't stop after throw()`, masks real error | Pisah Langfuse setup ke `try/except` tersendiri (tidak wrap `yield`); `yield` selalu di luar try block. Sama untuk `trace_attributes()`. |
+| B18 | `gemini_kie.py` | `GeminiKIEClient` tidak set `thinking_config` → `gemini-3-flash-lite` (thinking model) konsumsi semua `max_output_tokens=4096` untuk internal reasoning, zero tokens tersisa untuk JSON output → `response.text` empty. Hanya muncul pada gambar besar (≥1MB). | Tambah `thinking_config=types.ThinkingConfig(thinking_level=types.ThinkingLevel.MINIMAL)` ke `GenerateContentConfig`. KIE adalah pure extraction, bukan reasoning — thinking tidak diperlukan (mirrors D15). |
 
 ---
 
