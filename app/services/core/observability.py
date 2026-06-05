@@ -8,7 +8,7 @@ that the rest of the pipeline continues unobserved instead of breaking.
 from __future__ import annotations
 
 import logging
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager
 from typing import Any, Iterator, Optional
 
 from config.settings import Settings
@@ -125,24 +125,31 @@ class LangfuseService:
 
         Yields the underlying observation (or None if disabled) so the caller
         can `.update(output=..., metadata=...)` at the end.
+
+        Fail-open: if Langfuse *setup* fails, yields None and continues.
+        Exceptions raised *inside* the with-block propagate normally — the
+        except must only guard setup, not the yield, to avoid the
+        'generator didn't stop after throw()' RuntimeError.
         """
         if not self._enabled:
-            with nullcontext(None) as noop:
-                yield noop
+            yield None
             return
 
         try:
-            with self._client.start_as_current_observation(
+            observation_ctx = self._client.start_as_current_observation(
                 name=name,
                 as_type=as_type,
                 input=input,
                 metadata=metadata,
-            ) as obs:
-                yield obs
+            )
         except Exception as exc:
-            logger.debug(f"Langfuse span '{name}' failed, continuing: {exc}")
-            with nullcontext(None) as noop:
-                yield noop
+            # Langfuse context creation failed → fail-open, yield None
+            logger.debug(f"Langfuse span '{name}' setup failed, continuing: {exc}")
+            yield None
+            return
+
+        with observation_ctx as obs:
+            yield obs
 
     @contextmanager
     def trace_attributes(
@@ -159,14 +166,18 @@ class LangfuseService:
         try:
             from langfuse import propagate_attributes
 
-            with propagate_attributes(
+            ctx = propagate_attributes(
                 user_id=str(user_id) if user_id is not None else None,
                 session_id=str(session_id) if session_id is not None else None,
                 tags=tags,
-            ):
-                yield
+            )
         except Exception as exc:
-            logger.debug(f"Langfuse propagate_attributes failed: {exc}")
+            # Setup failed → fail-open, same double-yield guard as span()
+            logger.debug(f"Langfuse propagate_attributes setup failed: {exc}")
+            yield
+            return
+
+        with ctx:
             yield
 
     def flush(self) -> None:
