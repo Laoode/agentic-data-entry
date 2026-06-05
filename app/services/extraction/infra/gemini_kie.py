@@ -134,10 +134,12 @@ class GeminiKIEClient:
         config = types.GenerateContentConfig(
             system_instruction=self._system_prompt,
             response_mime_type="application/json",
-            # KIE is deterministic — keep temperature low. Schema enforcement
-            # via prompt + response_mime_type is enough; we'll add
-            # response_schema once google-genai supports our exact shape
-            # without re-modelling it as pydantic.
+            # KIE is pure extraction, not reasoning — disable thinking so the
+            # full output budget goes to the JSON response, not internal thought.
+            # gemini-3-flash-preview is a thinking model; without this the model
+            # can exhaust max_output_tokens on thinking tokens and emit nothing.
+            # (mirrors D15: thinking_budget=0 on all non-reasoning paths)
+            thinking_config=types.ThinkingConfig(thinking_level=types.ThinkingLevel.MINIMAL),
             temperature=0.1,
             top_p=0.95,
             max_output_tokens=4096,
@@ -170,8 +172,60 @@ class GeminiKIEClient:
                 raise LLMError(f"Gemini KIE failed: {e}") from e
 
             raw = response.text or ""
+            if not raw and response.candidates:
+                # Fallback: aggregate non-thought text parts directly.
+                # On thinking models response.text can be None when the SDK
+                # doesn't find a plain text part in the first candidate.
+                candidate = response.candidates[0]
+                if candidate.content and candidate.content.parts:
+                    parts_text = [
+                        p.text
+                        for p in candidate.content.parts
+                        if p.text and not getattr(p, "thought", False)
+                    ]
+                    raw = "".join(parts_text)
+                    if raw:
+                        logger.debug(
+                            "Gemini KIE: response.text was empty, "
+                            "recovered from %d part(s)",
+                            len(parts_text),
+                        )
+
             if not raw:
-                raise LLMError("Gemini KIE returned empty response")
+                finish_reason = (
+                    response.candidates[0].finish_reason
+                    if response.candidates
+                    else "NO_CANDIDATES"
+                )
+                parts_count = (
+                    len(response.candidates[0].content.parts)
+                    if response.candidates
+                    and response.candidates[0].content
+                    and response.candidates[0].content.parts
+                    else 0
+                )
+                logger.error(
+                    "Gemini KIE empty response "
+                    "(model=%s finish_reason=%s candidates=%d parts=%d)",
+                    self._model,
+                    finish_reason,
+                    len(response.candidates) if response.candidates else 0,
+                    parts_count,
+                )
+                if obs is not None:
+                    try:
+                        obs.update(
+                            level="ERROR",
+                            status_message=(
+                                f"empty response finish_reason={finish_reason}"
+                            ),
+                        )
+                    except Exception:
+                        pass
+                raise LLMError(
+                    f"Gemini KIE returned empty response "
+                    f"(finish_reason={finish_reason})"
+                )
             try:
                 parsed = parse_extraction_json(raw)
             except Exception as e:

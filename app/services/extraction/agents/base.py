@@ -15,6 +15,7 @@ import logging
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
+import re
 
 from app.exceptions import IngestRejectedError
 from app.models.attachment import FileAttachment
@@ -39,13 +40,13 @@ class ExtractionResult:
             extraction = p.get("extraction", {})
             total_items += len(extraction.get("items", []))
             gt = extraction.get("payment", {}).get("grand_total", 0)
-            try:
-                grand_total += int(gt) if gt not in ("", None) else 0
-            except (ValueError, TypeError):
-                pass
+            if gt not in ("", None):
+                digits = re.sub(r"\D", "", str(gt))  # keep only digits
+                if digits:
+                    grand_total += int(digits)
         return (
             f"File {self.file_name}: {len(self.pages)} page(s), "
-            f"{total_items} item(s), total Rp {grand_total:,}"
+            f"{total_items} item(s), total {grand_total:,}"
         )
 
 
