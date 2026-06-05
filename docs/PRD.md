@@ -1,17 +1,17 @@
 # 📄 PRODUCT REQUIREMENT DOCUMENT
-## Agentic Receipt Processing & Data Entry System
+## Agentic Receipt Processing & Finance Accountant Data Entry
 
 ```
-Version: 1.1
+Version: 1.2
 Audience: Senior AI Engineer / Senior Software Engineer
 Status: Implementation-ready
-Last Updated: 2026-02-16
+Last Updated: 2026-06-05
 ```
 
 ## 1. PRODUCT OVERVIEW
 
 ### 1.1 Objective
-Membangun sistem AI-assisted data entry untuk receipt/struk pembelian berbasis document OCR + structured extraction, yang:
+Membangun sistem AI-assisted finance accountant data entry dengan fitur upload receipt/struk pembelian menjadi structured extraction, yang:
 - Mendukung multi-page PDF / image
 - Menggunakan single source of truth (SQLite)
 - Memungkinkan multi-turn conversational input
@@ -372,9 +372,8 @@ CREATE TABLE pages (
 | Tool Name                 | Type | Description                      |
 |---------------------------|------|----------------------------------|
 | `get_sheet_formulas`      | Read | Fetch formulas                   |
-| `list_sheets`             | Read | List all sheets                  |
-| `get_spreadsheet_info`    | Read | Get spreadsheet metadata         |
-| `get_multiple_sheet_data` | Read | Batch read multiple ranges       |
+| `get_sheet_data`          | Read | Read specific sheetndata         |
+| `get_multiple_sheet_data` | Read | Batch read multiple sheets       |
 
 #### Sheet Agent Tools
 | Tool Name      | Type  | Description                 |
@@ -460,17 +459,17 @@ uvicorn app.main:app --port $FASTAPI_PORT --reload
 [submodule "klaudia"]
     path = klaudia
     url = https://github.com/laoode/klaudia.git
-    branch = main
+    branch = development
 
 [submodule "mcp-sqlite"]
     path = mcp-sqlite
     url = https://github.com/laoode/mcp-sqlite.git
-    branch = main
+    branch = development
 
 [submodule "mcp-gsheets"]
     path = mcp-gsheets
     url = https://github.com/laoode/mcp-gsheets.git
-    branch = main
+    branch = development
 ```
 
 ### 8.3 Dependency Management (`setup.sh`)
@@ -508,4 +507,4 @@ LOG_PATH=logs
 - In development mode, use mock OCR KIE responses to avoid vLLM bottlenecks
 - Apply to all services with high latency
 
-# TODO Apply Docker
+# TODO Apply Docker + OrbStack
