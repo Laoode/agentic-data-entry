@@ -64,6 +64,7 @@ class Settings(BaseSettings):
     ocr_mode: bool = Field(default=False, alias="OCR_MODE")
     kie_model: str = Field(default="gemini-3-flash-preview", alias="KIE_MODEL")
     # Guardrails
+    guardrails_enabled: bool = Field(default=True, alias="GUARDRAILS_ENABLED")
     llm_guardrails_prompt_inj: str = Field(
         default="meta-llama/Llama-Prompt-Guard-2-86M",
         alias="LLM_GUARDRAILS_PROMPT_INJ",

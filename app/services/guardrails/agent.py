@@ -41,6 +41,9 @@ class GuardrailsAgent:
 
     async def validate_input(self, text: str) -> GuardrailResult:
         """Run prompt injection and scope checks in parallel."""
+        if not self._config.enabled:
+            return GuardrailResult(passed=True)
+        
         span_cm = (
             self._langfuse.span(
                 "guardrail.validate_input",
@@ -89,6 +92,8 @@ class GuardrailsAgent:
 
     async def validate_output(self, response_text: str) -> GuardrailResult:
         """Validate assistant output against blacklisted topics."""
+        if not self._config.enabled:
+            return GuardrailResult(passed=True)
         span_cm = (
             self._langfuse.span(
                 "guardrail.validate_output",

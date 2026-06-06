@@ -185,6 +185,7 @@ class KlaudiaContainer:
 
         # Guardrails
         guardrails_config = GuardrailsConfig(
+            enabled=settings.guardrails_enabled,
             groq_api_key=settings.groq_api_key,
             groq_model=settings.llm_guardrails_prompt_inj,
             guardrails_model=settings.llm_guardrails_model,
