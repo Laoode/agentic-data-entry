@@ -4,6 +4,7 @@ FastMCP server exposing Google Sheets operations as MCP tools.
 """
 
 import os
+import re
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -41,12 +42,12 @@ load_dotenv()
 async def sheets_lifespan(server: FastMCP) -> AsyncIterator[SheetsContext]:
     """
     Manage Google Sheets API connection lifecycle.
-    
+
     Yields:
         SheetsContext with authenticated service
     """
     logger.info("Initializing Google Sheets MCP server...")
-    
+
     try:
         context = create_sheets_context()
         logger.info("Google Sheets service ready")
@@ -82,10 +83,41 @@ def _resolve_sheet_id(ctx: Context, spreadsheet_id: Optional[str]) -> str:
     default = ctx.request_context.lifespan_context.default_sheet_id
     if not default:
         raise ValueError(
-            "spreadsheet_id not provided and no SHEET_ID default is configured "
-            "on the MCP server."
+            "spreadsheet_id not provided and no SHEET_ID default is configured on the MCP server."
         )
     return default
+
+
+def _fuzzy_resolve_sheet_name(
+    service: Any,
+    spreadsheet_id: str,
+    name: str,
+) -> Optional[str]:
+    """Find the actual tab name that best matches *name*.
+
+    Handles two common LLM normalization errors:
+    1. Case differences ("sheet1" vs "Sheet1")
+    2. Spacing around dashes ("Foo - Bar" vs "Foo- Bar" vs "Foo-Bar")
+
+    Returns the exact tab title from the spreadsheet, or None if no match.
+    """
+    try:
+        sheets = list_sheets(service, spreadsheet_id)
+    except Exception:
+        return None
+
+    def _norm(s: str) -> str:
+        # Collapse all whitespace around hyphens and lowercase
+        return re.sub(r"\s*-\s*", "-", s.strip().lower())
+
+    name_norm = _norm(name)
+    for sheet in sheets:
+        title = sheet["title"]
+        if title.strip().lower() == name.strip().lower():
+            return title  # exact case-insensitive
+        if _norm(title) == name_norm:
+            return title  # dash-spacing normalised
+    return None
 
 
 # ============================================================================
@@ -105,7 +137,8 @@ def tool_get_sheet_data(
     Get data from a specific sheet in a Google Spreadsheet.
 
     Args:
-        sheet: The name of the sheet tab
+        sheet: The name of the sheet tab (MUST match the tab name exactly;
+               minor spacing differences around dashes are auto-corrected).
         spreadsheet_id: Optional spreadsheet ID (found in URL after /d/).
                         If omitted, uses the server's default SHEET_ID.
         range: Optional cell range in A1 notation (e.g., 'A1:C10'). Gets all data if not provided.
@@ -116,7 +149,19 @@ def tool_get_sheet_data(
     """
     service = ctx.request_context.lifespan_context.service
     sid = _resolve_sheet_id(ctx, spreadsheet_id)
-    return get_sheet_data(service, sid, sheet, range, include_grid_data)
+    try:
+        return get_sheet_data(service, sid, sheet, range, include_grid_data)
+    except Exception as exc:
+        if "Unable to parse range" in str(exc):
+            # LLM may have normalised the sheet name (e.g. added a space before a
+            # dash). Try a fuzzy match against the actual tab list and retry once.
+            resolved = _fuzzy_resolve_sheet_name(service, sid, sheet)
+            if resolved and resolved != sheet:
+                logger.warning(
+                    "Sheet name %r auto-corrected to %r via fuzzy match", sheet, resolved
+                )
+                return get_sheet_data(service, sid, resolved, range, include_grid_data)
+        raise
 
 
 @mcp.tool()
@@ -186,22 +231,21 @@ def tool_get_multiple_sheet_data(
     ctx: Context = None,
 ) -> list[dict[str, Any]]:
     """
-    Get data from multiple ranges across spreadsheets in one call.
+    Get data from multiple sheets in a single API round-trip.
 
     Args:
-        queries: List of dicts with 'sheet' and 'range' keys; 'spreadsheet_id' is optional
-                 and falls back to the server's default SHEET_ID when omitted.
-                 Example: [{'sheet': 'Sheet1', 'range': 'A1:B5'}]
+        queries: List of dicts. Required key per item: 'sheet'.
+                 Optional keys: 'range' (A1 notation; omit to fetch the entire sheet),
+                 'spreadsheet_id' (falls back to the server's default SHEET_ID).
+                 Minimal example: [{'sheet': 'Sheet1'}, {'sheet': 'Sheet2'}]
+                 With range:      [{'sheet': 'Sheet1', 'range': 'A1:B10'}]
 
     Returns:
-        List of results with original query params and 'data' or 'error'
+        List of results with original query params plus 'data' (2-D array) or 'error'
     """
     service = ctx.request_context.lifespan_context.service
     default_sid = ctx.request_context.lifespan_context.default_sheet_id
-    resolved = [
-        {**q, "spreadsheet_id": q.get("spreadsheet_id") or default_sid}
-        for q in queries
-    ]
+    resolved = [{**q, "spreadsheet_id": q.get("spreadsheet_id") or default_sid} for q in queries]
     return get_multiple_sheet_data(service, resolved)
 
 
@@ -481,13 +525,13 @@ def tool_batch_update(
 def main() -> None:
     """Main entry point for MCP server."""
     transport = "stdio"
-    
+
     # Parse command line args for transport mode
     for i, arg in enumerate(sys.argv):
         if arg == "--transport" and i + 1 < len(sys.argv):
             transport = sys.argv[i + 1]
             break
-    
+
     logger.info(f"Starting MCP Google Sheets server on {HOST}:{PORT} with {transport} transport")
     mcp.run(transport=transport)
 
