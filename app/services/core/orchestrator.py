@@ -203,6 +203,7 @@ class KlaudiaOrchestrator:
         system_prompt = KLAUDIA_SYSTEM_PROMPT.format(
             session_files=session_files_ctx,
             available_sheets=available_sheets or "No sheets available.",
+            session_id=session_id,
             date=meta.date,
             time=meta.time,
             timezone=meta.timezone,
@@ -230,7 +231,16 @@ class KlaudiaOrchestrator:
         # Add current user message
         llm_messages.append({"role": "user", "content": user_text})
 
-        # 6. Persist the current user message NOW that history has been read.
+        # 6. Persist extraction contexts (if any) then the user message to DB.
+        # Extraction contexts MUST be saved so future turns can access the full
+        # item-level JSON when the user follows up (e.g., "masukkan ke sheet"
+        # after "ini total berapa?"). Without this, write_agent has no data.
+        for ext in extraction_results:
+            extraction_ctx = build_extraction_context(ext)
+            if extraction_ctx:
+                await self._c.db_client.save_message(
+                    session_id, user_id, "user", extraction_ctx
+                )
         await self._c.db_client.save_message(session_id, user_id, "user", user_text)
 
         # 7. Invoke supervisor. Pass last extraction so legacy callers that
@@ -418,6 +428,7 @@ class KlaudiaOrchestrator:
             system_prompt = KLAUDIA_SYSTEM_PROMPT.format(
                 session_files=session_files_ctx,
                 available_sheets=available_sheets or "No sheets available.",
+                session_id=session_id,
                 date=meta.date,
                 time=meta.time,
                 timezone=meta.timezone,
@@ -435,6 +446,13 @@ class KlaudiaOrchestrator:
                 llm_messages.append({"role": "user", "content": extraction_ctx})
             llm_messages.append({"role": "user", "content": user_text})
 
+            # Persist extraction contexts then user message (mirrors _process_inner).
+            for ext in extraction_results:
+                extraction_ctx = build_extraction_context(ext)
+                if extraction_ctx:
+                    await self._c.db_client.save_message(
+                        session_id, user_id, "user", extraction_ctx
+                    )
             await self._c.db_client.save_message(session_id, user_id, "user", user_text)
 
             last_extraction = extraction_results[-1] if extraction_results else None
