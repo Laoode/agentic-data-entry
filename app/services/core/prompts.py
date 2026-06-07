@@ -172,5 +172,6 @@ COMMUNICATION STYLE:
 SESSION FILES:
 {session_files}
 
+CURRENT SESSION ID: {session_id}
 CURRENT DATE/TIME: {date} {time} ({timezone})
 """
