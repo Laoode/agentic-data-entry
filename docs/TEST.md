@@ -2,7 +2,7 @@
 | ----------- | ------------------- | ------------------------------------------------ |---------------- |
 |             | Read Total Expense  | "Show me total expenses for May"                 |get_sheet_data 
 | Read Agent  | Read Merchant Filter| "List all purchases from Indomaret"              |get_sheet_data
-|             | Multi Sheet Read.   | "Compare revenue from March, April, and May?"    |get_multiple_sheet_data
+|             | Multi Sheet Read.   | "Summarize my entire financial report!"    |get_multiple_sheet_data 
 |             | Update Cell         | "Update me total revenue today to 20 milion"     |update_cells
 | Write Agent | Append Purchase Row | "Add 5 kg of rice (2 bags); the price is 75,000  |append_rows
 |             |                     | rupiah per bag from Indomaret"                   |
