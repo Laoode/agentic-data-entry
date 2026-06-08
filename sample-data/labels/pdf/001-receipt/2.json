@@ -1,14 +1,18 @@
 {
   "info": {
-    "store_name": "ALFAMART JAMPANG KULON",
-    "store_location": "TERMINAL JAMPANG KULON",
+    "store_name": "ALFAMART",
+    "store_location": "",
     "store_contacts": [
       {
-        "type": "",
-        "value": "081288481"
+        "type": "Kritik&Saran",
+        "value": "1500959"
+      },
+      {
+        "type": "SMS/WA",
+        "value": "081110640888"
       }
     ],
-    "tax_id": "01.336.238.9-402.000",
+    "tax_id": "",
     "receipt_id": "U807-307-09036DX2",
     "payment_date": "09-03-2025",
     "payment_time": "22:35:24",
@@ -36,7 +40,7 @@
   ],
   "payment": {
     "total_items": "2",
-    "currency": "Rp",
+    "currency": "",
     "subtotal_price": "",
     "discounts": [],
     "taxes": [
@@ -47,9 +51,9 @@
     ],
     "additional_charges": [],
     "grand_total": "34,000",
-    "rounding": "",
     "payment_method": "Tunai",
     "tendered": "34,000",
+    "rounding": "",
     "change": "0"
   }
 }
