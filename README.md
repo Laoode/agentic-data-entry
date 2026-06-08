@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=Chakra+Petch&weight=600&size=30&duration=1&pause=1000&color=000000&background=CCFF00&center=true&vCenter=true&repeat=false&width=1200&lines=Klaudia+%E2%80%94+End-to-End+Agentic+Finance+AI+Platform" alt="Title" />
+  <img src="https://readme-typing-svg.demolab.com?font=Chakra+Petch&weight=600&size=38&duration=1&pause=1000&color=000000&background=CCFF00&center=true&vCenter=true&repeat=false&width=1200&lines=Klaudia+%E2%80%94+End-to-End+Agentic+Finance+AI+Platform" alt="Title" />
 </h1>
 
 <div align="center">
