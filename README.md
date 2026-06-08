@@ -1,261 +1,253 @@
-<h1 align="center"><img src="https://readme-typing-svg.demolab.com?font=Chakra+Petch&weight=500&size=29&duration=1&pause=1000&color=000000&background=CCFF00&vCenter=true&repeat=false&width=928&lines=Klaudia+Agentic+AI+for+Processing+Receipt+and+Data+Entry+Automation" alt="Typing SVG" /></h1>
+<h1 align="center">
+  <img src="https://readme-typing-svg.demolab.com?font=Chakra+Petch&weight=600&size=30&duration=1&pause=1000&color=000000&background=CCFF00&center=true&vCenter=true&repeat=false&width=1200&lines=Klaudia+%E2%80%94+End-to-End+Agentic+Finance+AI+Platform" alt="Title" />
+</h1>
+
+<div align="center">
+  <img src="https://github.com/Laoode/agentic-data-entry/blob/development/docs/Klaudia-Cozy-Workspace.png" alt="Klaudia Workspace">
+</div>
+
+<p align="center">
+  <b>Zero Error is the Baseline. Absolute Balance is the Goal.</b>
+</p>
+
+<p align="center">
+  <img src="https://readme-typing-svg.demolab.com?font=Chakra+Petch&pause=1800&color=CCFF00&center=true&vCenter=true&width=1000&lines=Multi-Agent+Finance+Accountant+AI;Receipt+Extraction+to+Spreadsheet+Automation;LangGraph+%2B+MCP+%2B+LLMOps+Architecture;Fine-Tuned+Qwen+3.5+for+Financial+Documents;Built+for+Production-Ready+Financial+Workflows" />
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/FastAPI-Backend-green" />
+  <img src="https://img.shields.io/badge/LangGraph-Agentic%20Workflow-blue" />
+  <img src="https://img.shields.io/badge/LangChain-Orchestration-blueviolet" />
+  <img src="https://img.shields.io/badge/Qwen3.5-4B-orange" />
+  <img src="https://img.shields.io/badge/Gemini-3.5-red" />
+  <img src="https://img.shields.io/badge/MCP-Protocol-black" />
+  <img src="https://img.shields.io/badge/Redis-Queue-red" />
+  <img src="https://img.shields.io/badge/Taskiq-Workers-yellow" />
+  <img src="https://img.shields.io/badge/vLLM-Model%20Serving-1f4b99" />
+  <img src="https://img.shields.io/badge/Vertex%20AI-Google%20Cloud-4285F4" />
+  <img src="https://img.shields.io/badge/SQLite-Database-lightblue" />
+  <img src="https://img.shields.io/badge/Google%20Sheets-Automation-green" />
+  <img src="https://img.shields.io/badge/MinIO-Object%20Storage-darkred" />
+  <img src="https://img.shields.io/badge/Langfuse-Observability-purple" />
+  <img src="https://img.shields.io/badge/React%20Native-Mobile%20App-cyan" />
+  <img src="https://img.shields.io/badge/Expo-Cross%20Platform-black" />
+  <img src="https://img.shields.io/badge/Docker-OrbStack-blue" />
+</p>
+
+---
+
+## 🏵 Overview
+
+Klaudia is an end-to-end agentic finance accountant AI platform designed to automate financial document processing, receipt extraction, data entry operations, and spreadsheet workflows.
+
+Unlike traditional OCR systems, Klaudia combines document intelligence, multi-agent orchestration, human-in-the-loop validation, and production-grade LLMOps into a single architecture.
+
+### Core Capabilities
+
+- Receipt & invoice extraction
+- Multi-page PDF processing
+- Human-in-the-loop correction workflow
+- Google Sheets automation
+- SQLite financial document registry
+- LangGraph multi-agent orchestration
+- MCP-based tool execution boundary
+- Fine-tuned Qwen 3.5 financial document understanding
+- Async document processing pipeline
+- Langfuse observability & tracing
+- Mobile-first conversational interface
+
+---
+
+## 🐸 System Architecture
 
 <div align="center">
   <img src="https://github.com/Laoode/agentic-data-entry/blob/development/docs/LLMOps.png" alt="LLM Ops Pipeline">
 </div>
 
+### Agentic Flow
+
+```text
+User
+ │
+ ▼
+Guardrails
+ │
+ ▼
+Extraction Agent
+ │
+ ▼
+Supervisor Agent (Klaudia)
+ │
+ ├── SQL Agent
+ │      ▼
+ │   MCP SQLite
+ │
+ └── Data Entry Team
+        ▼
+    MCP Google Sheets
+
+````
+
+---
+
+## 🐝 Training Pipeline
 
 <div align="center">
-  <img src="https://github.com/Laoode/agentic-data-entry/blob/development/docs/FineTuning.png" alt="Fine-Tuning">
+  <img src="https://github.com/Laoode/agentic-data-entry/blob/development/docs/FineTuning.png" alt="Fine Tuning Pipeline">
 </div>
 
+### Fine-Tuning Strategy
+
+* Base Model: Qwen 3.5 4B
+* PEFT LoRA Fine-Tuning
+* Hyperparameter Search
+* Experiment Tracking with Weights & Biases
+* KIEVal, ANLS*, and DA Evaluation
+* Financial Receipt Domain Adaptation
+
+---
+
+## 🎞️ Dataset & Models
 
 > [!WARNING]
-> The dataset and fine-tuned model will be released soon after the paper is published. They are currently archived in my oxen.ai repository.
+> The dataset and fine-tuned model will be released after the research paper is published. They are currently archived in a private Oxen.ai repository.
 
 <div align="center">
-  <img src="https://github.com/Laoode/agentic-data-entry/blob/development/docs/DatasetsModel.png" alt="Datasets & Model">
+  <img src="https://github.com/Laoode/agentic-data-entry/blob/development/docs/DatasetsModel.png" alt="Datasets and Models">
 </div>
 
+### Dataset Sources
+
+* Hugging Face
+* Kaggle
+* Roboflow
+* Pinterest
+* X (Twitter)
+* Custom Collected Receipts
+* Human Verified Labels
+
+---
+
+## 🏞️ Mobile Application
 
 <div align="center">
-  <img src="https://github.com/Laoode/agentic-data-entry/blob/development/docs/UIApp.png" alt="UI App">
+  <img src="https://github.com/Laoode/agentic-data-entry/blob/development/docs/UIApp.png" alt="Mobile Application">
 </div>
 
+### Mobile Stack
+
+* React Native
+* Expo
+* TypeScript
+* Session Management
+* Conversational Finance Assistant
+* Receipt Upload Workflow
+* Spreadsheet Operations
+
+---
+
+## 🍏 Tech Stack
+
+| Layer                   | Technologies         |
+| ----------------------- | -------------------- |
+| Backend                 | FastAPI              |
+| Agent Framework         | LangGraph            |
+| LLM Framework           | LangChain            |
+| Models                  | Gemini 3.5, Qwen 3.5 |
+| Fine-Tuning             | LoRA, PEFT           |
+| Inference               | vLLM                 |
+| Queue                   | Redis, Taskiq        |
+| Storage                 | SQLite, MinIO        |
+| Tool Layer              | MCP                  |
+| Spreadsheet Integration | Google Sheets        |
+| Observability           | Langfuse             |
+| Containerization        | Docker, OrbStack     |
+| Frontend                | React Native, Expo   |
+| Experiment Tracking     | Weights & Biases     |
+
+---
+
+## 🪲 Key Features
+
+### Financial Document Intelligence
+
+* Receipt Extraction
+* Invoice Extraction
+* OCR + KIE Pipeline
+* Multi-page PDF Support
+* Structured JSON Generation
+
+### Agentic AI System
+
+* Supervisor Architecture
+* Multi-Agent Collaboration
+* MCP Tool Execution
+* Human-in-the-Loop Workflow
+* Session-Aware Context Management
+
+### Production Infrastructure
+
+* Async Processing
+* Queue-Based Execution
+* Observability & Tracing
+* Object Storage
+* Deduplication Pipeline
+* Fault-Tolerant Processing
+
+---
+
+## 🗂️ Repository Structure
+
+```text
+app/
+├── routes/
+├── services/
+├── extraction/
+├── guardrails/
+└── core/
+
+klaudia/
+├── supervisor/
+├── sql_agent/
+├── data_entry_team/
+└── tools/
+
+mcp-sqlite/
+mcp-gsheets/
+
+docs/
+tests/
+sample-data/
 ```
-~/Codex/Big-Thesis-S1 on  development !                                                                                  
-❯ lt
- .
-├──  app
-│   ├──  __init__.py
-│   ├──  exceptions.py
-│   ├──  helpers
-│   │   ├──  __init__.py
-│   │   └──  auth.py
-│   ├──  main.py
-│   ├──  models
-│   │   ├──  __init__.py
-│   │   ├──  attachment.py
-│   │   ├──  chat.py
-│   │   └──  message.py
-│   ├──  routes
-│   │   ├──  __init__.py
-│   │   └──  v1
-│   │       ├──  __init__.py
-│   │       ├──  chat.py
-│   │       ├──  health.py
-│   │       ├──  sessions.py
-│   │       └──  sheets.py
-│   └──  services
-│       ├──  __init__.py
-│       ├──  core
-│       │   ├──  __init__.py
-│       │   ├──  container.py
-│       │   ├──  llm_client.py
-│       │   ├──  observability.py
-│       │   ├──  orchestrator.py
-│       │   └──  prompts.py
-│       ├──  extraction
-│       │   ├──  __init__.py
-│       │   ├──  agents
-│       │   │   ├──  __init__.py
-│       │   │   ├──  base.py
-│       │   │   ├──  config.py
-│       │   │   ├──  parser.py
-│       │   │   ├──  prompt.py
-│       │   │   └──  schema.py
-│       │   ├──  infra
-│       │   │   ├──  __init__.py
-│       │   │   ├──  db_client.py
-│       │   │   ├──  dedup_cache.py
-│       │   │   ├──  filename.py
-│       │   │   ├──  gemini_kie.py
-│       │   │   ├──  hasher.py
-│       │   │   ├──  kie_client.py
-│       │   │   ├──  magic.py
-│       │   │   ├──  normalizer.py
-│       │   │   ├──  object_store.py
-│       │   │   ├──  pdf_splitter.py
-│       │   │   └──  text_ocr.py
-│       │   ├──  ingest.py
-│       │   └──  queue
-│       │       ├──  __init__.py
-│       │       ├──  broker.py
-│       │       ├──  progress.py
-│       │       ├──  state.py
-│       │       └──  tasks.py
-│       └──  guardrails
-│           ├──  __init__.py
-│           ├──  agent.py
-│           ├──  base.py
-│           ├──  config.py
-│           ├──  output.py
-│           ├──  prompts.py
-│           └──  scope.py
-├──  config
-│   ├──  __init__.py
-│   └──  settings.py
-├──  docs
-│   ├──  FRONT_END.md
-│   ├──  HAT.md
-│   ├──  LANGCHAIN.md
-│   ├──  LLMOps.md
-│   ├──  OPERATIONS.md
-│   ├──  PLAN.md
-│   ├──  PRD.md
-│   ├──  RECIPE-DB.md
-├──  klaudia
-│   ├──  __init__.py
-│   ├──  core
-│   │   ├──  __init__.py
-│   │   └──  supervisor
-│   │       ├──  __init__.py
-│   │       ├──  _content.py
-│   │       ├──  agent.py
-│   │       ├──  agents
-│   │       │   ├──  data_entry_team
-│   │       │   │   ├──  __init__.py
-│   │       │   │   ├──  agents.py
-│   │       │   │   └──  prompts.py
-│   │       │   └──  sql_agent
-│   │       │       ├──  __init__.py
-│   │       │       ├──  agent.py
-│   │       │       └──  prompts.py
-│   │       ├──  llm.py
-│   │       ├──  prompts.py
-│   │       ├──  router.py
-│   │       ├──  state.py
-│   │       └──  tools
-│   │           ├──  __init__.py
-│   │           ├──  context.py
-│   │           └──  wrappers.py
-│   ├──  interfaces
-│   │   ├──  __init__.py
-│   │   ├──  agent.py
-│   │   └──  tool_registry.py
-│   ├──  models
-│   │   ├──  __init__.py
-│   │   ├──  message.py
-│   │   └──  state.py
-│   ├──  pyproject.toml
-│   └── 󰂺 README.md
-├──  mcp-config-stdio.json
-├──  mcp-config.json
-├──  mcp-gsheets
-│   ├──  app
-│   │   ├──  __init__.py
-│   │   ├──  infra
-│   │   │   ├──  __init__.py
-│   │   │   └──  gsheet_client.py
-│   │   ├──  server.py
-│   │   ├──  tools
-│   │   │   ├──  __init__.py
-│   │   │   ├──  read_ops.py
-│   │   │   ├──  sheet_ops.py
-│   │   │   └──  write_ops.py
-│   │   └──  utils
-│   │       ├──  __init__.py
-│   │       └──  logger.py
-│   ├──  main.py
-│   ├──  pyproject.toml
-│   ├── 󰂺 README.md
-│   └──  service_account.json
-├──  mcp-sqlite
-│   ├──  app
-│   │   ├──  __init__.py
-│   │   ├──  engines
-│   │   │   ├──  __init__.py
-│   │   │   └──  config.py
-│   │   ├──  infra
-│   │   │   ├──  __init__.py
-│   │   │   └──  db_client.py
-│   │   ├──  server.py
-│   │   ├──  tools
-│   │   │   ├──  __init__.py
-│   │   │   ├──  document_ops.py
-│   │   │   ├──  extraction_ops.py
-│   │   │   └──  page_ops.py
-│   │   └──  utils
-│   │       ├──  __init__.py
-│   │       ├──  exceptions.py
-│   │       └──  logger.py
-│   ├──  main.py
-│   ├──  mcp_sqlite.egg-info
-│   │   ├──  dependency_links.txt
-│   │   ├── 󰡯 PKG-INFO
-│   │   ├──  requires.txt
-│   │   ├──  SOURCES.txt
-│   │   └──  top_level.txt
-│   ├──  pyproject.toml
-│   └── 󰂺 README.md
-├──  pyproject.toml
-├── 󰂺 README.md
-├──  sample-data
-│   ├──  labels
-│   │   ├──  images
-│   │   │   ├──  1000-receipt.json
-│   │   │   └──  1001-receipt.json
-│   │   └──  pdf
-│   │       └──  001-receipt
-│   │           ├──  1.json
-│   │           ├──  2.json
-│   │           ├──  3.json
-│   │           ├──  4.json
-│   │           ├──  5.json
-│   │           └──  6.json
-│   ├──  pdf
-│   │   └──  001-receipt.pdf
-│   └──  receipt
-│       ├──  1000-receipt.jpg
-│       └──  1001-receipt.jpg
-├──  scripts
-│   └──  run_worker.sh
-├──  setup.sh
-├──  shutdown.sh
-├──  startup.sh
-├──  tests
-│   ├──  api
-│   ├──  data
-│   │   └──  receipt-indomaret-test.jpg
-│   ├──  e2e
-│   │   ├──  __init__.py
-│   │   └──  postman_collection.json
-│   ├──  integration
-│   │   ├──  agent
-│   │   │   ├──  __init__.py
-│   │   │   ├──  test_data_entry_team.py
-│   │   │   ├──  test_guardrails.py
-│   │   │   ├──  test_hitl_and_idempotency.py
-│   │   │   ├──  test_llm_client.py
-│   │   │   ├──  test_sql_agent.py
-│   │   │   └──  test_streaming.py
-│   │   ├──  database
-│   │   │   ├──  __init__.py
-│   │   │   └──  test_db_client.py
-│   │   ├──  extraction
-│   │   │   ├──  __init__.py
-│   │   │   ├──  test_async_pipeline.py
-│   │   │   ├──  test_gemini_kie.py
-│   │   │   └──  test_ingest_pipeline.py
-│   │   ├──  mcp-gsheets
-│   │   │   ├──  test_gsheets_tools.py
-│   │   │   └──  test_mcp_gsheets.py
-│   │   ├──  mcp-sqlite
-│   │   │   ├──  test_mcp_sqlite.py
-│   │   │   └──  test_sqlite_tools.py
-│   │   ├──  observability
-│   │   │   ├──  __init__.py
-│   │   │   └──  test_langfuse.py
-│   │   └──  ocr
-│   │       └──  test_ocr_mock.py
-│   └──  unit
-│       ├──  __init__.py
-│       ├──  test_filename_and_magic.py
-│       ├──  test_hasher.py
-│       ├──  test_normalizer.py
-│       ├──  test_observability.py
-│       ├──  test_pdf_splitter.py
-│       ├──  test_schema_and_parser.py
-│       └──  test_supervisor_resolve.py
-└──  uv.lock
-```
+
+---
+
+## 🍀 Mission
+
+> Where financial records lose balance, Klaudia restores order.
+
+Klaudia is designed around a simple philosophy:
+
+**Inputting financial data is not merely typing numbers. It is preserving the financial truth of an organization.**
+
+---
+
+## 📗 Research
+
+This project is part of an undergraduate research thesis focused on:
+
+* Agentic AI Systems
+* Financial Document Intelligence
+* LLMOps Pipelines
+* Human-in-the-Loop Data Entry Automation
+* Domain Adaptation for Financial OCR
+
+Dataset and model release will follow publication.
+
+---
+
+## 🔰 Author
+
+**Yudhy Prayitno**
+
+Building agentic systems for real-world financial automation.
