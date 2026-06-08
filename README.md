@@ -19,7 +19,7 @@
   <img src="https://img.shields.io/badge/LangGraph-Agentic%20Workflow-blue" />
   <img src="https://img.shields.io/badge/LangChain-Orchestration-blueviolet" />
   <img src="https://img.shields.io/badge/Qwen3.5-4B-orange" />
-  <img src="https://img.shields.io/badge/Gemini-3.5-red" />
+  <img src="https://img.shields.io/badge/Gemini3.5-flash-red" />
   <img src="https://img.shields.io/badge/MCP-Protocol-black" />
   <img src="https://img.shields.io/badge/Redis-Queue-red" />
   <img src="https://img.shields.io/badge/Taskiq-Workers-yellow" />
