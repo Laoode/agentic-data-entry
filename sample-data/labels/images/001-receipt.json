@@ -1,0 +1,63 @@
+{
+  "info": {
+    "store_name": "ALFAMIDI CAWANG BARU",
+    "store_location": "JL. CAWANG I RT 004 RW 12 KELU ALFA TOWER LT. 12, JL JALUR SUTERA BARAT KAV. 7-9 ALAM SUTERA PANUNGGANGAN TIMUR PINANG KOTA TANGERANG BANTEN",
+    "store_contacts": [
+      {
+        "type": "",
+        "value": "081290144281"
+      },
+      {
+        "type": "Kritik & Saran",
+        "value": "1500959"
+      },
+      {
+        "type": "",
+        "value": "Alfacare@nu.co.id"
+      },
+      {
+        "type": "Website",
+        "value": "WWW.ALFAMIDIKU.COM"
+      }
+    ],
+    "tax_id": "02.672.927.7-054.000",
+    "receipt_id": "NC25-321-140974D4",
+    "payment_date": "14-09-2021",
+    "payment_time": "19:57:52",
+    "time_unit": ""
+  },
+  "items": [
+    {
+      "item_name": "PUCUK 1.5L/1.36",
+      "quantity": "1",
+      "unit_price": "13,300",
+      "discount_label": "Disc.",
+      "discount_price": "-2,500",
+      "tax_label": "",
+      "total_price": "13,300"
+    }
+  ],
+  "payment": {
+    "total_items": "1",
+    "currency": "",
+    "subtotal_price": "",
+    "discounts": [
+      {
+        "discount_name": "Total Disc.",
+        "amount": "2,500"
+      }
+    ],
+    "taxes": [
+      {
+        "tax_name": "PPN",
+        "amount": "1,209"
+      }
+    ],
+    "additional_charges": [],
+    "grand_total": "10,800",
+    "rounding": "",
+    "payment_method": "SHOPEEPAY",
+    "tendered": "10,800",
+    "change": "0"
+  }
+}
