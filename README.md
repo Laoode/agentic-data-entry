@@ -102,8 +102,8 @@ Supervisor Agent (Klaudia)
 * PEFT LoRA Fine-Tuning
 * Hyperparameter Search
 * Experiment Tracking with Weights & Biases
-* KIEVal, ANLS*, and DA Evaluation
-* Financial Receipt Domain Adaptation
+* KIEVal Evaluation Suite
+* ANLS*, Digit Accuracy, and JSON Validity Assessment
 
 ---
 
