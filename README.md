@@ -28,6 +28,7 @@
   <img src="https://img.shields.io/badge/SQLite-Database-lightblue" />
   <img src="https://img.shields.io/badge/Google%20Sheets-Automation-green" />
   <img src="https://img.shields.io/badge/MinIO-Object%20Storage-darkred" />
+  <img src="https://img.shields.io/badge/BLAKE3-Hashing-420d09" />
   <img src="https://img.shields.io/badge/Langfuse-Observability-purple" />
   <img src="https://img.shields.io/badge/React%20Native-Mobile%20App-cyan" />
   <img src="https://img.shields.io/badge/Expo-Cross%20Platform-black" />
@@ -189,6 +190,7 @@ Across all evaluation metrics, Klaudia consistently outperformed the base Qwen 3
 | Inference               | vLLM                 |
 | Queue                   | Redis, Taskiq        |
 | Storage                 | SQLite, MinIO        |
+| Hashing                 | BLAKE3               |
 | Tool Layer              | MCP                  |
 | Spreadsheet Integration | Google Sheets        |
 | Observability           | Langfuse             |
