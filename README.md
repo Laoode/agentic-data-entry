@@ -121,8 +121,8 @@ Across all evaluation metrics, Klaudia consistently outperformed the base Qwen 3
 
 | Model | Entity F1 | Group F1 | Aligned | ANLS* | Digit Accuracy | JSON Validity |
 |--------|----------:|----------:|----------:|----------:|----------:|----------:|
-| Gemma 4 E2B | 49.29 | 11.04 | 39.72 | 36.22 | 50.83 | 99 |
-| Gemma 4 E4B | 58.61 | 18.46 | 51.17 | 73.49 | 60.38 | 100 |
+| Gemma 4 E2B-it | 49.29 | 11.04 | 39.72 | 36.22 | 50.83 | 99 |
+| Gemma 4 E4B-it | 58.61 | 18.46 | 51.17 | 73.49 | 60.38 | 100 |
 | Qwen 3.5 2B | 58.88 | 18.40 | 50.36 | 68.96 | 71.15 | 98 |
 | Qwen 3.5 4B | 69.93 | 28.17 | 63.05 | 77.22 | 77.87 | 100 |
 | **Klaudia (Qwen 3.5 4B Fine-Tuned)** | **87.30** | **70.26** | **84.82** | **93.38** | **93.78** | **100** |
