@@ -107,6 +107,37 @@ Supervisor Agent (Klaudia)
 
 ---
 
+## 🍀ྀི Benchmark Results
+
+The Klaudia model (Qwen 3.5 4B fine-tuned on our financial receipt dataset) was evaluated using KIEVal, ANLS*, Digit Accuracy, and JSON Validity benchmarks.
+
+Across all evaluation metrics, Klaudia consistently outperformed the base Qwen 3.5 and Gemma 4 models, demonstrating superior entity extraction, document structure understanding, numerical accuracy, and reduced human correction effort.
+
+<div align="center">
+  <img src="https://github.com/Laoode/agentic-data-entry/blob/development/docs/Benchmarks.png" alt="Benchmark Results">
+</div>
+
+### Evaluation Summary
+
+| Model | Entity F1 | Group F1 | Aligned | ANLS* | Digit Accuracy | JSON Validity |
+|--------|----------:|----------:|----------:|----------:|----------:|----------:|
+| Gemma 4 2B | 49.29 | 11.04 | 39.72 | 36.22 | 50.83 | 99 |
+| Gemma 4 4B | 58.61 | 18.46 | 51.17 | 73.49 | 60.38 | 100 |
+| Qwen 3.5 2B | 58.88 | 18.40 | 50.36 | 68.96 | 71.15 | 98 |
+| Qwen 3.5 4B | 69.93 | 28.17 | 63.05 | 77.22 | 77.87 | 100 |
+| **Klaudia (Qwen 3.5 4B Fine-Tuned)** | **87.30** | **70.26** | **84.82** | **93.38** | **93.78** | **100** |
+
+### Key Improvements Over Base Qwen 3.5 4B
+
+- **+17.37%** KIEVal Entity F1
+- **+41.99%** KIEVal Group F1
+- **+21.77%** KIEVal Aligned
+- **+16.16%** ANLS*
+- **+15.91%** Digit Accuracy
+- Maintained **100% JSON Validity**
+
+---
+
 ## 🎞️ Dataset & Models
 
 > [!WARNING]
