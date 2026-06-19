@@ -22,7 +22,7 @@ async def check_prompt_injection(
 ) -> bool:
     """Check for prompt injection using Groq Llama-Prompt-Guard.
 
-    Returns True if the input is MALICIOUS.
+    Returns True if the input is MALICIOUS, False if BENIGN.
     """
     span_cm = (
         langfuse.span(
