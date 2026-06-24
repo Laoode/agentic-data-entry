@@ -8,11 +8,12 @@ NC='\033[0m'
 MCP_SQLITE_PORT=8001
 MCP_GSHEETS_PORT=8002
 FASTAPI_PORT=${PORT:-8000}
+MINIO_API_PORT=${MINIO_API_PORT:-9000}
 
 echo -e "${YELLOW}Stopping Klaudia services...${NC}"
 
 # Kill by PID file
-for service in fastapi mcp-sqlite mcp-gsheets; do
+for service in fastapi mcp-sqlite mcp-gsheets minio; do
     pidfile="logs/$service.pid"
     if [ -f "$pidfile" ]; then
         pid=$(cat "$pidfile")
@@ -30,10 +31,10 @@ done
 
 # Fallback: kill anything still holding the ports
 echo -e "${YELLOW}Checking for leftover processes on ports...${NC}"
-for port in $FASTAPI_PORT $MCP_SQLITE_PORT $MCP_GSHEETS_PORT; do
+for port in $FASTAPI_PORT $MCP_SQLITE_PORT $MCP_GSHEETS_PORT $MINIO_API_PORT; do
     pids=$(lsof -ti tcp:$port 2>/dev/null | tr '\n' ' ')
     if [ -n "$pids" ]; then
-        kill $pid 2>/dev/null
+        kill $pids 2>/dev/null
         echo -e "${GREEN}Killed leftover on port $port (PIDs: $pids)${NC}"
     fi
 done
