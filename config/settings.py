@@ -16,12 +16,27 @@ class Settings(BaseSettings):
     debug: bool = Field(default=True, alias="DEBUG")
     stage: str = Field(default="development", alias="STAGE")
 
+    # LLM provider selection for the agentic stack (supervisor + sub-agents).
+    #   "google" → ChatGoogleGenerativeAI (Gemini, via Dev API or Vertex AI)
+    #   "openai" → ChatOpenAI against an OpenAI-compatible server (local vLLM/Qwen)
+    # Guardrails + KIE stay on Gemini regardless of this flag.
+    model_provider: str = Field(default="google", alias="MODEL_PROVIDER")
+    # Base URL of the OpenAI-compatible endpoint (vLLM /v1) — used only when
+    # model_provider="openai". Ignored for "google".
+    llm_endpoint: str = Field(default="", alias="LLM_ENDPOINT")
+    # Bearer token for the OpenAI-compatible endpoint. Empty is allowed for a
+    # vLLM server started without --api-key; sent as "EMPTY" placeholder then.
+    llm_openai_api_key: str = Field(default="", alias="LLM_OPENAI_API_KEY")
+    # vLLM/Qwen: force enable_thinking=false on every request (in-code fallback
+    # for /no_think). Only affects model_provider="openai".
+    llm_disable_thinking: bool = Field(default=True, alias="LLM_DISABLE_THINKING")
+
     # LLM (Google Gemini via native google-genai SDK)
     llm_model: str = Field(default="gemini-3-flash-preview", alias="LLM_MODEL")
     llm_api_key: str = Field(default="", alias="LLM_API_KEY")
     llm_temperature: float = Field(default=0.5, alias="LLM_TEMPERATURE")
     # Thinking level for Gemini 3 models (gemini-3-*).
-    # Valid values: "none", "minimal", "low", "medium", "high" (model default = "high").
+    # Valid values: "minimal", "low", "medium", "high" (model default = "high").
     # routing = supervisor router + team_supervisor + _emit_final_reply (classification / summarization)
     # worker  = write_agent, read_agent, sheet_agent, sql_agent (tool-augmented reasoning)
     llm_thinking_level_routing: str = Field(default="minimal", alias="LLM_THINKING_LEVEL_ROUTING")
