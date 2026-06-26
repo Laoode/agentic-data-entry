@@ -8,9 +8,9 @@
 
 | Komponen | Detail |
 |----------|--------|
-| LLM Agent | `langchain-google-genai` (Gemini) atau `langchain-openai` (vLLM/OpenAI-compatible) — toggle via `MODEL_PROVIDER` |
-| LLM Builder | `klaudia/core/supervisor/llm.py` → `build_chat_llm()` — branch `_build_gemini_llm` / `_build_openai_llm`; `with_structured(llm, schema)` provider-agnostic structured output |
-| Model | `gemini-3-flash-preview` (Gemini) atau `Qwen/Qwen3.5-4B` (vLLM, OpenAI-compatible endpoint) |
+| LLM Agent | `langchain-google-genai` (Gemini) atau `langchain-openai` (vLLM + DeepSeek, OpenAI-compatible) — toggle via `MODEL_PROVIDER` (`google`/`vllm`/`deepseek`). Lihat `docs/MODELS.md` |
+| LLM Builder | `klaudia/core/supervisor/llm.py` → `build_chat_llm()` — branch `_build_gemini_llm` / `_build_openai_llm` (thinking extra_body per provider via `_openai_thinking_extra_body`); `with_structured(llm, schema)` provider-aware (DeepSeek=function_calling, vLLM=json_schema) |
+| Model | `gemini-3-flash-preview` (Gemini) \| `Qwen/Qwen3.5-27B` (vLLM) \| `deepseek-v4-pro` (DeepSeek) |
 | Gemini Transport | Toggle via env: `GOOGLE_GENAI_USE_VERTEXAI=True` → Vertex AI; `False` → Developer API (`LLM_API_KEY`) |
 | Guardrails | Groq/Llama (prompt injection) + Gemini via `LLMClient` (scope check, output check) — **selalu Gemini**, tidak ikut `MODEL_PROVIDER` |
 | KIE (Extraction) | Routing via `MOCK_KIE` + `OCR_MODE` + `KIE_MODEL` (default `gemini-3-flash-preview` direct image→JSON). `OCR_MODE=true` reserved for Qwen3.5-4B text + Gemini KIE two-stage path. KIE **selalu Gemini-native SDK**, tidak ikut `MODEL_PROVIDER` |
@@ -33,10 +33,10 @@
 | `GOOGLE_CLOUD_PROJECT` | GCP project ID (Vertex) |
 | `GOOGLE_CLOUD_LOCATION` | Region, mis. `global` atau `us-central1` |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Path ke service account JSON, mis. `gcp_service_account.json` |
-| `MODEL_PROVIDER` | `google` (default) atau `openai` — toggle supervisor/router/worker LLM client. Guardrails + KIE tidak terpengaruh, selalu Gemini |
-| `LLM_ENDPOINT` | Base URL vLLM/OpenAI-compatible server (dipakai saat `MODEL_PROVIDER=openai`) |
-| `LLM_OPENAI_API_KEY` | Bearer token untuk endpoint OpenAI-compatible; kosong → fallback `"EMPTY"` |
-| `LLM_DISABLE_THINKING` | `true`/`false` — disable thinking di sisi vLLM via `extra_body={"chat_template_kwargs":{"enable_thinking":False}}` |
+| `MODEL_PROVIDER` | `google` (default) \| `vllm` \| `deepseek` — toggle supervisor/router/worker LLM client. `openai` = alias lama untuk `vllm`. Guardrails + KIE tidak terpengaruh, selalu Gemini. Detail lengkap: `docs/MODELS.md` |
+| `VLLM_LLM_ENDPOINT` / `VLLM_LLM_API_KEY` | Endpoint + bearer untuk agentic Qwen di vLLM (dipakai saat `MODEL_PROVIDER=vllm`). **Beda** dari `VLLM_BASE_URL` (server OCR Qwen3.5-4B) |
+| `DEEPSEEK_BASE_URL` / `DEEPSEEK_API_KEY` | Endpoint (default `https://api.deepseek.com/v1`) + API key DeepSeek (dipakai saat `MODEL_PROVIDER=deepseek`) |
+| `LLM_DISABLE_THINKING` | `true`/`false` — disable thinking pada agentic stack. extra_body per provider: vLLM `{"chat_template_kwargs":{"enable_thinking":False}}`, DeepSeek `{"thinking":{"type":"disabled"}}` |
 | `MOCK_KIE` | `true` = return content-keyed fixture from `sample-data/labels/`. (Old `USE_MOCK_OCR` still honored as fallback.) |
 | `OCR_MODE` | `false` (default) = single-call image→JSON via `KIE_MODEL`. `true` = vLLM Qwen3.5-4B text recog → `KIE_MODEL` → JSON |
 | `KIE_MODEL` | KIE provider: `gemini-3-flash-preview` (current) or `Qwen/Qwen3.5-4B` (future fine-tune) |
@@ -136,6 +136,8 @@ Orchestrator.process() / .stream()
 | D18 | Thinking level single source of truth di `.env` (`LLM_THINKING_LEVEL_ROUTING`/`_WORKER`). Worker pakai `low` bukan `minimal` — butuh reasoning untuk Pattern B/C/D |
 | D19 | Output guardrail **tidak** twin-prompt — assistant output lebih controlled dari user input. Revisit hanya jika false positive muncul di Langfuse |
 | D20 | Multi-provider LLM (`MODEL_PROVIDER=google\|openai`) di `llm.py`: `_build_gemini_llm` (existing, unchanged) vs `_build_openai_llm` (`ChatOpenAI` → vLLM, thinking off via `extra_body`, empty bearer → `"EMPTY"`). Structured output lewat `with_structured(llm, schema)` — OpenAI pakai `method="json_schema"` (guided decoding), Gemini native. Guardrails + KIE **tetap Gemini-only**, tidak ikut switch ini |
+| D21 | **DeepSeek sebagai provider ketiga** (`MODEL_PROVIDER=deepseek`). DeepSeek + vLLM sama-sama OpenAI-compatible tapi toggle thinking beda: `_openai_thinking_extra_body(provider, disable)` → DeepSeek `{"thinking":{"type":"disabled"}}`, vLLM `{"chat_template_kwargs":{"enable_thinking":False}}`. `with_structured` jadi per-provider: DeepSeek `method="function_calling"` (json_schema strict masih beta), vLLM `method="json_schema"`. Kredensial per-provider di `.env` (`VLLM_LLM_ENDPOINT`/`VLLM_LLM_API_KEY` vs `DEEPSEEK_BASE_URL`/`DEEPSEEK_API_KEY`); `Settings.active_openai_endpoint()` resolve sesuai `MODEL_PROVIDER`. Ganti provider = edit `MODEL_PROVIDER` + `LLM_MODEL` saja. Live-tested: plain chat + structured routing hijau. Detail: `docs/MODELS.md` |
+| D22 | DeepSeek thinking **enabled** balikin `reasoning_content` yang wajib di-round-trip pada tool-call turn (kalau tidak → 400). react workers (langchain-openai) belum round-trip → `LLM_DISABLE_THINKING=true` wajib untuk `deepseek`. KV cache DeepSeek otomatis (no config); prefix completion butuh endpoint `/beta` (belum dipakai) |
 
 ---
 
@@ -184,3 +186,5 @@ Orchestrator.process() / .stream()
 | O6 | Frontend mobile (Klaudia native app) — next phase |
 | O7 | `MODEL_PROVIDER=openai`: sub-agent tool-calling (sql_agent, data_entry_team via `create_react_agent`) butuh vLLM jalan dengan `--enable-auto-tool-choice --tool-call-parser hermes`. Routing/structured-output sudah jalan tanpa flag itu (json_schema/guided decoding) |
 | O8 | Multi-provider switch (D20) belum live-tested terhadap endpoint vLLM asli — baru construction/wiring. Verifikasi: 1 real call tiap path (routing, worker tool-call) setelah GPU session tersedia |
+| O9 | DeepSeek (D21): plain chat + structured routing sudah live-tested hijau. Belum diuji end-to-end lewat full graph dengan tool-calling workers (sql_agent, data_entry_team) terhadap MCP. Verifikasi: jalankan `./startup.sh` + 1 alur upload/sheet dengan `MODEL_PROVIDER=deepseek` |
+| O10 | DeepSeek thinking mode (D22) belum dipakai — react workers harus round-trip `reasoning_content` dulu sebelum `LLM_DISABLE_THINKING=false` aman untuk deepseek |

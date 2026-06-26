@@ -195,6 +195,7 @@ class KlaudiaContainer:
         )
 
         # Supervisor
+        openai_base_url, openai_api_key = settings.active_openai_endpoint()
         container.supervisor = SupervisorAgent(
             llm_api_key=settings.llm_api_key,
             llm_model=settings.llm_model,
@@ -205,8 +206,8 @@ class KlaudiaContainer:
             use_vertexai=settings.google_genai_use_vertexai,
             google_cloud_project=settings.google_cloud_project,
             google_cloud_location=settings.google_cloud_location,
-            openai_base_url=settings.llm_endpoint,
-            openai_api_key=settings.llm_openai_api_key,
+            openai_base_url=openai_base_url,
+            openai_api_key=openai_api_key,
             disable_thinking=settings.llm_disable_thinking,
             temperature=settings.llm_temperature,
             thinking_level_routing=settings.llm_thinking_level_routing,

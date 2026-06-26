@@ -16,20 +16,22 @@ class Settings(BaseSettings):
     debug: bool = Field(default=True, alias="DEBUG")
     stage: str = Field(default="development", alias="STAGE")
 
-    # LLM provider selection for the agentic stack (supervisor + sub-agents).
-    #   "google" → ChatGoogleGenerativeAI (Gemini, via Dev API or Vertex AI)
-    #   "openai" → ChatOpenAI against an OpenAI-compatible server (local vLLM/Qwen)
-    # Guardrails + KIE stay on Gemini regardless of this flag.
+    # Agentic LLM provider (supervisor + sub-agents). Guardrails + KIE stay on
+    # Gemini regardless. Values: "google" | "vllm" | "deepseek". See docs/MODELS.md.
     model_provider: str = Field(default="google", alias="MODEL_PROVIDER")
-    # Base URL of the OpenAI-compatible endpoint (vLLM /v1) — used only when
-    # model_provider="openai". Ignored for "google".
-    llm_endpoint: str = Field(default="", alias="LLM_ENDPOINT")
-    # Bearer token for the OpenAI-compatible endpoint. Empty is allowed for a
-    # vLLM server started without --api-key; sent as "EMPTY" placeholder then.
-    llm_openai_api_key: str = Field(default="", alias="LLM_OPENAI_API_KEY")
-    # vLLM/Qwen: force enable_thinking=false on every request (in-code fallback
-    # for /no_think). Only affects model_provider="openai".
+    # Force reasoning off on the agentic stack. Applies to vllm/deepseek only;
+    # the per-provider extra_body is resolved in klaudia/core/supervisor/llm.py.
     llm_disable_thinking: bool = Field(default=True, alias="LLM_DISABLE_THINKING")
+
+    # OpenAI-compatible credentials, kept per provider so switching MODEL_PROVIDER
+    # never requires re-pasting endpoints/keys. Resolved via active_openai_endpoint().
+    # NOTE: distinct from the OCR vLLM server below (VLLM_BASE_URL / AUTH_TOKEN).
+    vllm_llm_endpoint: str = Field(default="", alias="VLLM_LLM_ENDPOINT")
+    vllm_llm_api_key: str = Field(default="", alias="VLLM_LLM_API_KEY")
+    deepseek_base_url: str = Field(
+        default="https://api.deepseek.com/v1", alias="DEEPSEEK_BASE_URL"
+    )
+    deepseek_api_key: str = Field(default="", alias="DEEPSEEK_API_KEY")
 
     # LLM (Google Gemini via native google-genai SDK)
     llm_model: str = Field(default="gemini-3-flash-preview", alias="LLM_MODEL")
@@ -160,6 +162,15 @@ class Settings(BaseSettings):
     log_path: str = Field(default="logs", alias="LOG_PATH")
 
     model_config = {"env_file": ".env", "extra": "ignore"}
+
+    def active_openai_endpoint(self) -> tuple[str, str]:
+        """Return (base_url, api_key) for the active OpenAI-compatible provider.
+
+        Only meaningful when model_provider is "vllm" or "deepseek".
+        """
+        if self.model_provider.strip().lower() in ("deepseek",):
+            return self.deepseek_base_url, self.deepseek_api_key
+        return self.vllm_llm_endpoint, self.vllm_llm_api_key
 
     @model_validator(mode="after")
     def _coalesce_mock_flag(self) -> "Settings":
