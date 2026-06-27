@@ -13,7 +13,7 @@
 | Model | `gemini-3-flash-preview` (Gemini) \| `Qwen/Qwen3.5-27B` (vLLM) \| `deepseek-v4-pro` (DeepSeek) |
 | Gemini Transport | Toggle via env: `GOOGLE_GENAI_USE_VERTEXAI=True` → Vertex AI; `False` → Developer API (`LLM_API_KEY`) |
 | Guardrails | Groq/Llama (prompt injection) + Gemini via `LLMClient` (scope check, output check) — **selalu Gemini**, tidak ikut `MODEL_PROVIDER` |
-| KIE (Extraction) | Routing via `MOCK_KIE` + `OCR_MODE` + `KIE_MODEL` (default `gemini-3-flash-preview` direct image→JSON). `OCR_MODE=true` reserved for Qwen3.5-4B text + Gemini KIE two-stage path. KIE **selalu Gemini-native SDK**, tidak ikut `MODEL_PROVIDER` |
+| KIE (Extraction) | Backend dipilih dari `KIE_MODEL` saja (tidak ada `OCR_MODE` lagi): `MOCK_KIE=true` → fixture; `KIE_MODEL` diawali `gemini` → `GeminiKIEClient` (full zero-shot prompt, image→JSON); selain itu → `VLLMKIEClient` (Qwen3.5-4B fine-tuned di vLLM, **image-only**, prompt ada di jinja template server). Tidak ikut `MODEL_PROVIDER`. Lihat `docs/MODELS.md` |
 | DB | SQLite via `mcp-sqlite` (11 tools) + private blob registry (`file_blob`, `file_blob_page`, `blob_extraction`, `metadata_file_blob`) hidden from LLM |
 | Sheets | Google Sheets via `mcp-gsheets` (16 tools, `SHEET_ID` dari env) |
 | Cache + Queue | Redis (L1 dedup cache + Taskiq broker) — fail-soft when unreachable |
@@ -37,9 +37,9 @@
 | `VLLM_LLM_ENDPOINT` / `VLLM_LLM_API_KEY` | Endpoint + bearer untuk agentic Qwen di vLLM (dipakai saat `MODEL_PROVIDER=vllm`). **Beda** dari `VLLM_BASE_URL` (server OCR Qwen3.5-4B) |
 | `DEEPSEEK_BASE_URL` / `DEEPSEEK_API_KEY` | Endpoint (default `https://api.deepseek.com/v1`) + API key DeepSeek (dipakai saat `MODEL_PROVIDER=deepseek`) |
 | `LLM_DISABLE_THINKING` | `true`/`false` — disable thinking pada agentic stack. extra_body per provider: vLLM `{"chat_template_kwargs":{"enable_thinking":False}}`, DeepSeek `{"thinking":{"type":"disabled"}}` |
-| `MOCK_KIE` | `true` = return content-keyed fixture from `sample-data/labels/`. (Old `USE_MOCK_OCR` still honored as fallback.) |
-| `OCR_MODE` | `false` (default) = single-call image→JSON via `KIE_MODEL`. `true` = vLLM Qwen3.5-4B text recog → `KIE_MODEL` → JSON |
-| `KIE_MODEL` | KIE provider: `gemini-3-flash-preview` (current) or `Qwen/Qwen3.5-4B` (future fine-tune) |
+| `MOCK_KIE` | `true` = return content-keyed fixture from `sample-data/labels/` (offline). Satu-satunya flag mock — `USE_MOCK_OCR` sudah dihapus |
+| `KIE_MODEL` | Satu-satunya knob KIE backend: `gemini-*` → GeminiKIEClient (full prompt); selain itu → VLLMKIEClient (fine-tuned, image-only) |
+| `VLLM_KIE_ENDPOINT` / `VLLM_KIE_API_KEY` | Endpoint full `/v1/chat/completions` + bearer untuk vLLM KIE fine-tuned. Dipakai hanya saat `KIE_MODEL` bukan gemini. **Beda** dari `VLLM_LLM_ENDPOINT` (agentic) |
 | `EXTRACTION_MODE` | `sync` (inline) or `async` (Taskiq queue + workers + Redis pubsub) |
 | `REDIS_URL`, `MINIO_*`, `TASKIQ_*` | Cache, object store, queue. See `docs/OPERATIONS.md` |
 | `MCP_TRANSPORT` | `stdio` (default) atau `sse` |
@@ -117,7 +117,7 @@ Orchestrator.process() / .stream()
 | # | Keputusan |
 |---|-----------|
 | D1 | `ExtractionAgent` boleh raw SQL (bukan LLM, "No Raw SQL from LLM" tidak berlaku) |
-| D2 | `USE_MOCK_OCR=true` = explicit flag, bukan auto dari `STAGE=development` |
+| D2 | Mock KIE = explicit flag (`MOCK_KIE`), bukan auto dari `STAGE=development`. Legacy `USE_MOCK_OCR` + validator-nya sudah dihapus total (D24) |
 | D3 | `spreadsheet_id` optional di semua MCP-GSheets tools — fallback ke `SHEET_ID` env |
 | D4 | Klaudia **tidak boleh minta spreadsheet ID/URL** ke user |
 | D5 | `gcp_service_account.json` & `service_account.json` di .gitignore |
@@ -138,6 +138,8 @@ Orchestrator.process() / .stream()
 | D20 | Multi-provider LLM (`MODEL_PROVIDER=google\|openai`) di `llm.py`: `_build_gemini_llm` (existing, unchanged) vs `_build_openai_llm` (`ChatOpenAI` → vLLM, thinking off via `extra_body`, empty bearer → `"EMPTY"`). Structured output lewat `with_structured(llm, schema)` — OpenAI pakai `method="json_schema"` (guided decoding), Gemini native. Guardrails + KIE **tetap Gemini-only**, tidak ikut switch ini |
 | D21 | **DeepSeek sebagai provider ketiga** (`MODEL_PROVIDER=deepseek`). DeepSeek + vLLM sama-sama OpenAI-compatible tapi toggle thinking beda: `_openai_thinking_extra_body(provider, disable)` → DeepSeek `{"thinking":{"type":"disabled"}}`, vLLM `{"chat_template_kwargs":{"enable_thinking":False}}`. `with_structured` jadi per-provider: DeepSeek `method="function_calling"` (json_schema strict masih beta), vLLM `method="json_schema"`. Kredensial per-provider di `.env` (`VLLM_LLM_ENDPOINT`/`VLLM_LLM_API_KEY` vs `DEEPSEEK_BASE_URL`/`DEEPSEEK_API_KEY`); `Settings.active_openai_endpoint()` resolve sesuai `MODEL_PROVIDER`. Ganti provider = edit `MODEL_PROVIDER` + `LLM_MODEL` saja. Live-tested: plain chat + structured routing hijau. Detail: `docs/MODELS.md` |
 | D22 | DeepSeek thinking **enabled** balikin `reasoning_content` yang wajib di-round-trip pada tool-call turn (kalau tidak → 400). react workers (langchain-openai) belum round-trip → `LLM_DISABLE_THINKING=true` wajib untuk `deepseek`. KV cache DeepSeek otomatis (no config); prefix completion butuh endpoint `/beta` (belum dipakai) |
+| D23 | **KIE routing disederhanakan: `OCR_MODE` dihapus total** (path two-stage Qwen-text→Gemini dibuang, `text_ocr.py` dihapus, `gemini_kie.extract_from_text` dihapus). Backend = `KIE_MODEL` saja: `gemini-*` → `GeminiKIEClient` (full zero-shot prompt.py); selain itu → `VLLMKIEClient` (fine-tuned Qwen, **image-only** — prompt hidup di jinja template vLLM, bukan di kode). Deteksi via `_is_gemini_model()` (prefix `gemini`). `MOCK_KIE` tetap. Env: `VLLM_BASE_URL`→`VLLM_KIE_ENDPOINT`, `AUTH_TOKEN`→`VLLM_KIE_API_KEY`, `VLLM_OCR_MODEL` dihapus (pakai `KIE_MODEL`). Provenance DB: `ocr_model`/`schema_version` (kolom `ocr_lora` sudah di-drop, lihat D24) |
+| D24 | **`ocr_lora` + `USE_MOCK_OCR` dihapus total** (image-only KIE terbukti jalan, LoRA-name provenance tak dipakai). Kolom `ocr_lora` di-DROP dari `blob_extraction` (SQLite 3.35+ `ALTER TABLE DROP COLUMN`, 19 row aman); hapus `OCR_LORA_NAME`/`ocr_lora_name`, `KIEClient.lora_name`, param `ocr_lora` di `upsert_extraction` + caller (ingest, tasks). `USE_MOCK_OCR`/`legacy_use_mock_ocr` + `_coalesce_mock_flag` validator dibuang; `MOCK_KIE` jadi `alias` biasa. Provenance tersisa: `ocr_model`, `schema_version` |
 
 ---
 
@@ -182,7 +184,7 @@ Orchestrator.process() / .stream()
 | O2 | Rate limit Google Sheets API (100 req/100s) — butuh backoff |
 | O3 | Observability: structured logging (request_id, session_id, file_id) |
 | O4 | `MCPToolRegistry.connect()` tidak ada timeout — pytest hang kalau MCP down |
-| O5 | Qwen3.5-4B fine-tune masih training — `OCR_MODE=true` belum diuji end-to-end |
+| O5 | `VLLMKIEClient` (Qwen3.5-4B fine-tuned, image-only) baru construction/wiring — endpoint vLLM belum aktif. Verifikasi nanti: set `KIE_MODEL=<served-name>` + `VLLM_KIE_ENDPOINT`, 1 real upload receipt → cek JSON valid |
 | O6 | Frontend mobile (Klaudia native app) — next phase |
 | O7 | `MODEL_PROVIDER=openai`: sub-agent tool-calling (sql_agent, data_entry_team via `create_react_agent`) butuh vLLM jalan dengan `--enable-auto-tool-choice --tool-call-parser hermes`. Routing/structured-output sudah jalan tanpa flag itu (json_schema/guided decoding) |
 | O8 | Multi-provider switch (D20) belum live-tested terhadap endpoint vLLM asli — baru construction/wiring. Verifikasi: 1 real call tiap path (routing, worker tool-call) setelah GPU session tersedia |

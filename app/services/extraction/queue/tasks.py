@@ -116,7 +116,6 @@ async def extract_page_task(
         page_blake3=page_blake3,
         extraction_json=json.dumps(validated, ensure_ascii=False),
         ocr_model=ocr.model_id,
-        ocr_lora=ocr.lora_name,
         schema_version=ocr.schema_version,
     )
     await _safe_set(cache.set_extraction, user_id, page_blake3, validated)

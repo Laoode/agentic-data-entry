@@ -80,15 +80,16 @@ surfaced to the UI.
 
 ## 6. Mode Reference (KIE Routing)
 
-| `MOCK_KIE` | `OCR_MODE` | Behavior                                              |
-|------------|------------|-------------------------------------------------------|
-| true       | (ignored)  | Return fixture from `sample-data/labels/`             |
-| false      | false      | KIE_MODEL handles image → JSON in one call (Gemini)   |
-| false      | true       | Qwen3.5-4B (vLLM) text recog → KIE_MODEL → JSON          |
+Backend is chosen from `KIE_MODEL` alone (no `OCR_MODE`):
 
-Set `KIE_MODEL=gemini-3-flash-preview` for the default. Once Qwen3.5-4B
-fine-tune ships, swap to `KIE_MODEL=Qwen/Qwen3.5-4B` and set
-`OCR_LORA_NAME` to the trained adapter name.
+| Condition                        | Behavior                                          |
+|----------------------------------|---------------------------------------------------|
+| `MOCK_KIE=true`                  | Return fixture from `sample-data/labels/`         |
+| `KIE_MODEL` starts with `gemini` | Gemini, full zero-shot prompt (image → JSON)      |
+| `KIE_MODEL` anything else        | Fine-tuned Qwen on vLLM, image-only → JSON        |
+
+For the fine-tuned model, set `KIE_MODEL` to the served model name and fill
+`VLLM_KIE_ENDPOINT` (full `/v1/chat/completions` URL) + `VLLM_KIE_API_KEY`.
 
 ## 7. Smoke Tests
 

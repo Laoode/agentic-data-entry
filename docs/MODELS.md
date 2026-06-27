@@ -74,6 +74,31 @@ against the official docs:
 - **Prefix completion** — `/beta` endpoint; last message `{"role":"assistant",
   "content": "...", "prefix": true}`. Not wired into the agentic graph.
 
+## KIE / receipt extraction
+
+KIE is independent of `MODEL_PROVIDER` (that switch is only the agentic stack).
+The extraction backend is chosen from `KIE_MODEL` alone — no mode flag:
+
+| Condition                       | Backend          | Prompt                                  |
+|---------------------------------|------------------|-----------------------------------------|
+| `MOCK_KIE=true`                 | fixture lookup   | none (offline, `sample-data/labels/`)   |
+| `KIE_MODEL` starts with `gemini`| `GeminiKIEClient`| full zero-shot (`agents/prompt.py`)     |
+| `KIE_MODEL` anything else       | `VLLMKIEClient`  | none — image-only                       |
+
+`KIEClient.extract_from_image()` is the only seam IngestService + Taskiq workers
+call; it routes internally via `_is_gemini_model()`.
+
+- **Gemini path** — a general multimodal model, so it needs the schema + rules +
+  few-shot prompt to extract zero-shot.
+- **vLLM path** — a Qwen3.5-4B fine-tuned for receipt→JSON, served on vLLM. Its
+  chat template (`template.jinja`) injects the same short prompt used in
+  training, so the client sends the **image only**. To switch to it, set
+  `KIE_MODEL` to the served model name + fill `VLLM_KIE_ENDPOINT`
+  (full `/v1/chat/completions` URL) and `VLLM_KIE_API_KEY`.
+
+Provenance (`ocr_model`, `schema_version`) is persisted per page to
+`blob_extraction` so extractions can be re-run when the model is upgraded.
+
 ### Caveat — thinking + tool calls
 
 With thinking **enabled**, DeepSeek returns `reasoning_content` alongside

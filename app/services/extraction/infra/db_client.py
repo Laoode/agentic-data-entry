@@ -111,7 +111,6 @@ CREATE TABLE IF NOT EXISTS blob_extraction (
     page_blake3 TEXT NOT NULL,
     extraction_json TEXT NOT NULL,
     ocr_model TEXT,
-    ocr_lora TEXT,
     schema_version TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (user_id, page_blake3)
@@ -294,7 +293,7 @@ class AppDBClient:
     ) -> dict[str, Any] | None:
         return await self.fetchone(
             """
-            SELECT extraction_json, ocr_model, ocr_lora, schema_version, created_at
+            SELECT extraction_json, ocr_model, schema_version, created_at
             FROM blob_extraction
             WHERE user_id = ? AND page_blake3 = ?
             """,
@@ -308,21 +307,19 @@ class AppDBClient:
         page_blake3: str,
         extraction_json: str,
         ocr_model: str | None,
-        ocr_lora: str | None,
         schema_version: str | None,
     ) -> None:
         await self.execute(
             """
             INSERT INTO blob_extraction
-                (user_id, page_blake3, extraction_json, ocr_model, ocr_lora, schema_version)
-            VALUES (?, ?, ?, ?, ?, ?)
+                (user_id, page_blake3, extraction_json, ocr_model, schema_version)
+            VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(user_id, page_blake3) DO UPDATE SET
                 extraction_json = excluded.extraction_json,
                 ocr_model = excluded.ocr_model,
-                ocr_lora = excluded.ocr_lora,
                 schema_version = excluded.schema_version
             """,
-            (user_id, page_blake3, extraction_json, ocr_model, ocr_lora, schema_version),
+            (user_id, page_blake3, extraction_json, ocr_model, schema_version),
         )
 
     async def link_metadata_file_blob(self, metadata_file_id: int, blob_id: int) -> None:

@@ -1,11 +1,9 @@
-"""Gemini-3-flash KIE client.
+"""Gemini KIE client — multimodal image -> JSON.
 
-Two entrypoints share the same prompt:
-    extract_from_image(jpg_bytes) — multimodal, Gemini sees the receipt image
-    extract_from_text(ocr_text)   — text-only, used after Qwen3.5-4B text recog
-
-Both return a raw dict (caller runs validate_and_merge for schema hygiene).
-google-genai's `response_mime_type='application/json'` forces JSON output;
+extract_from_image(jpg_bytes) sends the receipt image with the full zero-shot
+prompt (schema + rules + few-shot) so a general Gemini model can extract without
+fine-tuning. Returns a raw dict (caller runs validate_and_merge for schema
+hygiene). google-genai's `response_mime_type='application/json'` forces JSON;
 malformed cases still go through the project's 3-layer parser.
 """
 
@@ -105,26 +103,6 @@ class GeminiKIEClient:
         ]
         return await self._generate(contents, span_name="gemini.kie.image")
 
-    async def extract_from_text(self, ocr_text: str) -> dict[str, Any]:
-        """Text-only call — for the OCR_MODE=true path, where Qwen3.5-4B provides
-        plain text and Gemini does the KIE step."""
-        contents = [
-            types.Content(
-                role="user",
-                parts=[
-                    types.Part(
-                        text=(
-                            "Extract the following receipt text into the JSON "
-                            "schema. Follow every rule above. Output only JSON.\n\n"
-                            "## RECEIPT TEXT\n"
-                            f"{ocr_text}"
-                        )
-                    ),
-                ],
-            )
-        ]
-        return await self._generate(contents, span_name="gemini.kie.text")
-
     async def _generate(
         self,
         contents: list[types.Content],
@@ -134,15 +112,10 @@ class GeminiKIEClient:
         config = types.GenerateContentConfig(
             system_instruction=self._system_prompt,
             response_mime_type="application/json",
-            # KIE is pure extraction, not reasoning — disable thinking so the
-            # full output budget goes to the JSON response, not internal thought.
-            # gemini-3-flash-preview is a thinking model; without this the model
-            # can exhaust max_output_tokens on thinking tokens and emit nothing.
-            # (mirrors D15: thinking_budget=0 on all non-reasoning paths)
             thinking_config=types.ThinkingConfig(thinking_level=types.ThinkingLevel.MINIMAL),
             temperature=0.1,
             top_p=0.95,
-            max_output_tokens=4096,
+            max_output_tokens=8192,
         )
 
         span_cm = (

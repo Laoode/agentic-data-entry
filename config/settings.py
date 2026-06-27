@@ -1,7 +1,7 @@
 from functools import lru_cache
 
 from dotenv import load_dotenv
-from pydantic import Field, model_validator
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 load_dotenv()
@@ -25,7 +25,7 @@ class Settings(BaseSettings):
 
     # OpenAI-compatible credentials, kept per provider so switching MODEL_PROVIDER
     # never requires re-pasting endpoints/keys. Resolved via active_openai_endpoint().
-    # NOTE: distinct from the OCR vLLM server below (VLLM_BASE_URL / AUTH_TOKEN).
+    # NOTE: distinct from the KIE vLLM server below (VLLM_KIE_ENDPOINT).
     vllm_llm_endpoint: str = Field(default="", alias="VLLM_LLM_ENDPOINT")
     vllm_llm_api_key: str = Field(default="", alias="VLLM_LLM_API_KEY")
     deepseek_base_url: str = Field(
@@ -56,30 +56,18 @@ class Settings(BaseSettings):
         default="", alias="GOOGLE_APPLICATION_CREDENTIALS"
     )
 
-    # OCR / KIE routing
-    #
-    # KIE (Key Information Extraction) has three execution modes:
-    #   mock      → MOCK_KIE=true; return fixture JSON from sample-data/labels/
-    #   direct    → OCR_MODE=false; KIE_MODEL handles image -> JSON in one call
-    #               (default for now: gemini-3-flash, which is multimodal)
-    #   separated → OCR_MODE=true; vLLM Qwen3.5-4B does text recognition only,
-    #               then KIE_MODEL extracts JSON from that text. Lets us swap
-    #               in the fine-tuned Qwen3.5-4B as KIE_MODEL once training is done.
-    vllm_base_url: str = Field(default="", alias="VLLM_BASE_URL")
-    auth_token: str = Field(default="", alias="AUTH_TOKEN")
-    vllm_ocr_model: str = Field(
-        default="Qwen/Qwen3.5-4B", alias="VLLM_OCR_MODEL"
-    )
-    # MOCK_KIE replaces USE_MOCK_OCR. We keep the old alias as a fallback for
-    # one release cycle so existing .env files don't silently break.
-    mock_kie: bool = Field(
-        default=True, validation_alias="MOCK_KIE"
-    )
-    # Legacy USE_MOCK_OCR is read for backwards compat; mock_kie wins if both
-    # are set. Wired in via @model_validator below.
-    legacy_use_mock_ocr: bool | None = Field(default=None, alias="USE_MOCK_OCR")
-    ocr_mode: bool = Field(default=False, alias="OCR_MODE")
+    # KIE (Key Information Extraction) routing — backend derived from KIE_MODEL:
+    #   MOCK_KIE=true             → fixture JSON from sample-data/labels/ (offline)
+    #   KIE_MODEL startswith gemini → Gemini SDK, full zero-shot prompt (image→JSON)
+    #   KIE_MODEL anything else     → fine-tuned model on vLLM (image-only)
+    # See docs/MODELS.md.
     kie_model: str = Field(default="gemini-3-flash-preview", alias="KIE_MODEL")
+    # vLLM KIE endpoint (full /v1/chat/completions URL) for the fine-tuned model.
+    # Distinct from the agentic vLLM server (VLLM_LLM_ENDPOINT).
+    vllm_kie_endpoint: str = Field(default="", alias="VLLM_KIE_ENDPOINT")
+    vllm_kie_api_key: str = Field(default="", alias="VLLM_KIE_API_KEY")
+    # Offline fixture mode for KIE (sample-data/labels/).
+    mock_kie: bool = Field(default=True, alias="MOCK_KIE")
     # Guardrails
     guardrails_enabled: bool = Field(default=True, alias="GUARDRAILS_ENABLED")
     llm_guardrails_prompt_inj: str = Field(
@@ -133,7 +121,6 @@ class Settings(BaseSettings):
     extraction_queue_depth_reject: int = Field(
         default=200, alias="EXTRACTION_QUEUE_DEPTH_REJECT"
     )
-    ocr_lora_name: str = Field(default="", alias="OCR_LORA_NAME")
     ocr_schema_version: str = Field(default="v1", alias="OCR_SCHEMA_VERSION")
 
     # Extraction execution mode:
@@ -171,18 +158,6 @@ class Settings(BaseSettings):
         if self.model_provider.strip().lower() in ("deepseek",):
             return self.deepseek_base_url, self.deepseek_api_key
         return self.vllm_llm_endpoint, self.vllm_llm_api_key
-
-    @model_validator(mode="after")
-    def _coalesce_mock_flag(self) -> "Settings":
-        """If a user only set the old USE_MOCK_OCR (and not MOCK_KIE), honor it.
-
-        Strategy: when MOCK_KIE is at its default (True) AND USE_MOCK_OCR is
-        explicitly set in env, treat USE_MOCK_OCR as the source of truth. This
-        keeps existing .env files working until they're updated.
-        """
-        if self.legacy_use_mock_ocr is not None:
-            self.mock_kie = self.legacy_use_mock_ocr
-        return self
 
 
 @lru_cache

@@ -61,13 +61,13 @@ Membangun sistem AI-assisted finance accountant data entry dengan fitur upload r
 
 #### KIE Routing Modes
 
-Selected via env (`MOCK_KIE`, `OCR_MODE`, `KIE_MODEL`):
+Backend selected from `KIE_MODEL` alone (`OCR_MODE` removed). See docs/MODELS.md:
 
-| `MOCK_KIE` | `OCR_MODE` | Pipeline                                                         | Use when            |
-|------------|------------|------------------------------------------------------------------|---------------------|
-| `true`     | (ignored)  | Content-keyed fixture from `sample-data/labels/`                 | Dev / tests offline |
-| `false`    | `false`    | Image → `KIE_MODEL` (Gemini) → JSON (single multimodal call)     | Default production  |
-| `false`    | `true`     | Image → Qwen3.5-4B (vLLM) text → `KIE_MODEL` → JSON (two-stage)  | After Qwen3.5-4B fine-tune ships or for redundancy testing |
+| Condition                        | Pipeline                                                  | Use when            |
+|----------------------------------|-----------------------------------------------------------|---------------------|
+| `MOCK_KIE=true`                  | Content-keyed fixture from `sample-data/labels/`          | Dev / tests offline |
+| `KIE_MODEL` starts with `gemini` | Image → Gemini (full zero-shot prompt) → JSON             | Default production   |
+| `KIE_MODEL` anything else        | Image → fine-tuned Qwen on vLLM (image-only) → JSON       | Fine-tuned model serving |
 
 The single seam is `app/services/extraction/infra/kie_client.py::KIEClient`.
 IngestService + Taskiq workers never branch on mode themselves; they call

@@ -413,7 +413,6 @@ class IngestService:
             page_blake3=page_hash,
             extraction_json=json.dumps(validated, ensure_ascii=False),
             ocr_model=self._ocr.model_id,
-            ocr_lora=self._ocr.lora_name,
             schema_version=self._ocr.schema_version,
         )
         await self._safe_cache_set(user_id, page_hash, validated)
