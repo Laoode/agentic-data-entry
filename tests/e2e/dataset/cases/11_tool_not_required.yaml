@@ -1,0 +1,40 @@
+# "Tool NOT required" — info already injected into the system prompt every turn
+# (AVAILABLE GOOGLE SHEETS via get_available_sheets, SESSION FILES). The agent
+# should answer from context and FINISH (tools_used empty) instead of burning an
+# LLM hop on a sub-agent / a redundant read.
+#
+# NOTE: the orchestrator always calls tool_list_sheets in Python to refresh the
+# context cache, so that call is EXPECTED and never asserted absent here. What we
+# assert is that no sub-agent ran and no heavy read tool was issued by an agent.
+
+- id: TN01-list-sheets-from-context
+  category: tool_not_required
+  title: List available sheets answered from injected context
+  tags: [tool_not_required, finish, context]
+  turns:
+    - user: "Sheet apa saja yang tersedia di spreadsheet ini?"
+      expect:
+        route: none
+        content_any: ["jun", "mei", "apr", "rangkuman", "feb", "jan"]
+        mcp_tools_none: [tool_get_sheet_data, tool_update_cells]
+
+- id: TN02-list-files-empty-session
+  category: tool_not_required
+  title: List uploaded files in a fresh session answered from SESSION FILES
+  tags: [tool_not_required, finish, context]
+  turns:
+    - user: "File apa saja yang sudah saya upload di sesi ini?"
+      note: "Fresh session, no files. Should answer 'none' from context, no tool."
+      expect:
+        route: none
+        mcp_tools_none: [tool_get_extraction, tool_get_session_files, tool_get_sheet_data]
+
+- id: TN03-capability-question
+  category: tool_not_required
+  title: Capability / how-to question needs no tool
+  tags: [tool_not_required, finish]
+  turns:
+    - user: "Kamu bisa bantu pencatatan keuangan apa saja? Jelaskan singkat."
+      expect:
+        route: none
+        mcp_tools_none: [tool_get_sheet_data, tool_update_cells, tool_get_extraction]

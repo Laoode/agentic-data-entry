@@ -1,0 +1,71 @@
+# Multi-turn conversations. Turns share one session so we exercise real context
+# carry-over and the LangChain history window (get_conversation_history limit=10
+# ROWS — each turn persists ~2 rows, an upload ~3).
+
+- id: MT01-read-then-update
+  category: multi_turn
+  title: Read a value, then update it referencing prior context
+  tags: [multi_turn, read, update, mutating]
+  mutating: true
+  cleanup:
+    - "Hapus baris terakhir dari sheet Jun."
+  turns:
+    - user: "Berapa harga NARAYA ROKA ISI 80 PCS di sheet Jun?"
+      expect:
+        route: data_entry_team
+        contains_amount: ["63000"]
+    - user: >
+        Catat pembelian baru item itu (NARAYA ROKA) di sheet Jun untuk tanggal hari ini,
+        toko TOKO QA TEST, jumlah 1, metode Cash, dengan harga yang sama.
+      note: "'item itu' must resolve to NARAYA ROKA from the previous turn."
+      expect:
+        route: data_entry_team
+        content_any: ["naraya", "ditambahkan", "added", "berhasil", "✓"]
+        mcp_tools_any: [tool_append_rows, tool_update_cells]
+        mcp_args_contains: ["NARAYA"]
+
+- id: MT02-anti-anchor
+  category: multi_turn
+  title: Anti-anchor — evaluate the latest message, not the previous topic
+  tags: [multi_turn, anti_anchor]
+  turns:
+    - user: "Tampilkan total pembelian bulan Mei."
+      expect:
+        route: data_entry_team
+        contains_amount: ["2163500"]
+    - user: "Oke, sekarang lupakan itu. Halo, kamu bisa bantu apa saja?"
+      note: "Should switch to a capability answer (FINISH), not re-read Mei."
+      expect:
+        route: none
+
+- id: MT03-memory-window-recall
+  category: multi_turn
+  title: Recall the first uploaded receipt after it falls out of the 10-row window
+  tags: [multi_turn, memory_window, sql_agent, long]
+  turns:
+    - user: "Ini struk pertama saya, tolong simpan."
+      attachment: sample-data/receipt/001-receipt.jpeg
+      note: "Turn 1 upload (ALFAMIDI). Its extraction context is in the window now."
+      expect:
+        route: any
+    # ── filler turns push the turn-1 extraction context out of the 10-row window
+    - user: "Berapa total pembelian bulan Januari?"
+      expect: {route: any}
+    - user: "Kalau bulan Februari berapa totalnya?"
+      expect: {route: any}
+    - user: "Terima kasih. Bulan Maret bagaimana?"
+      expect: {route: any}
+    - user: "Lanjut, total bulan April berapa?"
+      expect: {route: any}
+    - user: "Dan bulan Mei totalnya berapa?"
+      expect: {route: any}
+    - user: "Terakhir, total bulan Juni berapa?"
+      expect: {route: any}
+    # ── recall: turn-1 context is now gone → must fetch from the receipt DB
+    - user: "Nama toko di struk PERTAMA yang saya upload tadi apa? Ambil dari arsip struk."
+      note: "Beyond the conversation window → sql_agent must read SQLite."
+      expect:
+        route_any_of: [sql_agent, none]
+        forbid_agents: [data_entry_team]
+        content_any: ["alfamidi"]
+        mcp_tools_any: [tool_get_session_files, tool_get_extraction, tool_get_document]

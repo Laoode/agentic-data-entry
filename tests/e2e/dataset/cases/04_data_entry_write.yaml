@@ -1,0 +1,67 @@
+# Data Entry — WRITE AGENT. MUTATING. Each case is additive (appends a clearly
+# fake "TOKO QA TEST" row) and reverses itself via `cleanup`, so a failed cleanup
+# leaves only an obviously-synthetic row rather than corrupting real bookkeeping.
+# Granular spy asserts the actual write primitive + the value in its args.
+
+- id: DW01-append-row
+  category: data_entry_write
+  title: Append a new purchase row to Jun
+  tags: [write, append, mutating, single_turn]
+  mutating: true
+  cleanup:
+    - "Hapus baris terakhir dari sheet Jun."
+  turns:
+    - user: >
+        Tambahkan satu baris pembelian baru ke sheet Jun:
+        tanggal 2026-06-28, toko TOKO QA TEST, item ITEM QA ALPHA, jumlah 1,
+        metode pembayaran Cash, satuan harga 5000, total 5000.
+      expect:
+        route: data_entry_team
+        is_clarification: false
+        content_any: ["toko qa test", "item qa", "ditambahkan", "added", "berhasil", "✓"]
+        mcp_tools_any: [tool_append_rows, tool_update_cells, tool_batch_update_cells]
+        mcp_args_contains: ["ITEM QA ALPHA"]
+
+- id: DW02-append-then-update
+  category: data_entry_write
+  title: Append a row, then update its price (single-cell write)
+  tags: [write, update, mutating, multi_turn]
+  mutating: true
+  cleanup:
+    - "Hapus baris terakhir dari sheet Jun."
+  turns:
+    - user: >
+        Tambahkan baris ke sheet Jun: tanggal 2026-06-28, toko TOKO QA TEST,
+        item ITEM QA BETA, jumlah 1, metode pembayaran Cash, satuan harga 7000, total 7000.
+      expect:
+        route: data_entry_team
+        mcp_tools_any: [tool_append_rows, tool_update_cells]
+    - user: "Update harga (satuan dan total) baris ITEM QA BETA tadi menjadi 9999."
+      expect:
+        route: data_entry_team
+        content_any: ["9999", "9.999", "diperbarui", "updated", "berhasil", "✓"]
+        contains_amount: ["9999"]
+        mcp_tools_any: [tool_update_cells, tool_batch_update_cells]
+        mcp_args_contains: ["9999"]
+
+- id: DW03-batch-update
+  category: data_entry_write
+  title: Append two rows, then batch-update both prices in one turn
+  tags: [write, batch, multi_tool, mutating, multi_turn]
+  mutating: true
+  cleanup:
+    - "Hapus 2 baris terakhir dari sheet Jun."
+  turns:
+    - user: >
+        Tambahkan dua baris ke sheet Jun, keduanya tanggal 2026-06-28, toko TOKO QA TEST,
+        metode pembayaran Cash: (1) item ITEM QA GAMMA jumlah 1 harga 1000 total 1000,
+        (2) item ITEM QA DELTA jumlah 1 harga 2000 total 2000.
+      expect:
+        route: data_entry_team
+        mcp_tools_any: [tool_append_rows]
+    - user: "Ubah harga ITEM QA GAMMA jadi 11000 dan ITEM QA DELTA jadi 22000 sekaligus."
+      expect:
+        route: data_entry_team
+        content_any: ["11000", "11.000", "22000", "22.000", "berhasil", "updated", "✓"]
+        mcp_tools_any: [tool_batch_update_cells, tool_update_cells]
+        mcp_args_contains: ["11000"]

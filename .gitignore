@@ -45,7 +45,10 @@ AGENTS.md
 # Test artifacts
 .coverage
 .pytest_cache/
-tests/
+tests/api/
+tests/integration/
+tests/unit/
+endpoint_test/
 
 # Credentials (defense in depth)
 service_account.json

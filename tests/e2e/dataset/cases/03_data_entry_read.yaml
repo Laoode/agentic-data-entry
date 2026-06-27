@@ -1,0 +1,62 @@
+# Data Entry — READ AGENT. Non-destructive reads against the live sheet whose
+# layout is docs/TABLE.md (tabs: Rangkuman Total, Jun, Mei, Apr, Mar, Feb, Jan).
+# Granular spy expects a read tool; never a write tool.
+
+- id: DR01-monthly-total
+  category: data_entry_read
+  title: Read a monthly total from Rangkuman Total
+  tags: [read, single_turn]
+  turns:
+    - user: "Berapa total pembelian bulan Mei?"
+      expect:
+        route: data_entry_team
+        forbid_agents: [sql_agent]
+        contains_amount: ["2163500"]
+        mcp_tools_any: [tool_get_sheet_data, tool_get_multiple_sheet_data]
+        mcp_tools_none: [tool_update_cells, tool_append_rows, tool_clear_range]
+
+- id: DR02-filter-by-merchant
+  category: data_entry_read
+  title: Filter rows by merchant in the Jun sheet
+  tags: [read, filter, single_turn]
+  turns:
+    - user: "Tampilkan semua pembelian dari PARIS MART di sheet Jun."
+      expect:
+        route: data_entry_team
+        forbid_agents: [sql_agent]
+        content_any: ["paris mart"]
+        content_all: []
+        mcp_tools_any: [tool_get_sheet_data, tool_get_multiple_sheet_data]
+
+- id: DR03-item-price-lookup
+  category: data_entry_read
+  title: Look up a specific item's price in Jun
+  tags: [read, lookup, single_turn]
+  turns:
+    - user: "Harga NARAYA ROKA ISI 80 PCS di sheet Jun berapa?"
+      expect:
+        route: data_entry_team
+        contains_amount: ["63000"]
+        mcp_tools_any: [tool_get_sheet_data, tool_get_multiple_sheet_data]
+
+- id: DR04-cross-month-summary
+  category: data_entry_read
+  title: Summarize the yearly Rangkuman Total across months
+  tags: [read, multi_sheet, summary, single_turn]
+  turns:
+    - user: "Ringkas total pembelian per bulan dari sheet Rangkuman Total."
+      expect:
+        route: data_entry_team
+        content_any: ["januari", "februari", "maret", "april", "mei", "juni"]
+        mcp_tools_any: [tool_get_sheet_data, tool_get_multiple_sheet_data]
+
+- id: DR05-payment-method-question
+  category: data_entry_read
+  title: Read derived detail (payment method) from a row
+  tags: [read, single_turn]
+  turns:
+    - user: "Di sheet Jun, pembelian Telur 20 butir di Alfamart pakai metode pembayaran apa?"
+      expect:
+        route: data_entry_team
+        content_any: ["cash", "tunai"]
+        mcp_tools_any: [tool_get_sheet_data, tool_get_multiple_sheet_data]

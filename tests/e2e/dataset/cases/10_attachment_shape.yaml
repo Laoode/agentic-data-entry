@@ -1,0 +1,58 @@
+# Attachment-shape guard (orchestrator _check_attachment_shape, pre-OCR). These
+# are deterministic, cheap rejections (no LLM/KIE), so routing is "none" and no
+# MCP tool runs. Reject strings are exact (orchestrator.py).
+
+- id: AS01-too-many-pdfs
+  category: attachment_shape
+  title: More than one PDF in a turn is rejected
+  tags: [attachment, reject, pdf]
+  turns:
+    - user: "Proses dua PDF ini."
+      attachments:
+        - sample-data/pdf/001-receipt.pdf
+        - sample-data/pdf/001-receipt.pdf
+      expect:
+        route: none
+        content_any: ["satu PDF per pesan", "1 PDF"]
+        mcp_tools_none: [tool_append_rows, tool_get_extraction]
+
+- id: AS02-mixed-pdf-and-image
+  category: attachment_shape
+  title: Mixing a PDF and an image in one turn is rejected
+  tags: [attachment, reject, mixed]
+  turns:
+    - user: "Ini PDF dan satu foto, proses bareng ya."
+      attachments:
+        - sample-data/pdf/001-receipt.pdf
+        - sample-data/receipt/001-receipt.jpeg
+      expect:
+        route: none
+        content_any: ["PDF atau gambar", "tidak campur"]
+
+- id: AS03-too-many-images
+  category: attachment_shape
+  title: More than five images in a turn is rejected
+  tags: [attachment, reject, images]
+  turns:
+    - user: "Proses enam struk ini sekaligus."
+      attachments:
+        - sample-data/receipt/001-receipt.jpeg
+        - sample-data/receipt/002-receipt.png
+        - sample-data/receipt/001-receipt.jpeg
+        - sample-data/receipt/002-receipt.png
+        - sample-data/receipt/001-receipt.jpeg
+        - sample-data/receipt/002-receipt.png
+      expect:
+        route: none
+        content_any: ["Maksimal 5 gambar", "maksimal 5"]
+
+- id: AS04-unsupported-format
+  category: attachment_shape
+  title: Unsupported file format (.txt) is rejected
+  tags: [attachment, reject, unsupported]
+  turns:
+    - user: "Ekstrak file ini."
+      attachment: tests/e2e/dataset/fixtures/unsupported.txt
+      expect:
+        route: none
+        content_any: ["Format tidak didukung", "JPG/PNG/HEIC/PDF"]

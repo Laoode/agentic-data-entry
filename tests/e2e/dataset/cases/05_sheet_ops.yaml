@@ -1,0 +1,50 @@
+# Data Entry — SHEET AGENT (structural ops). MUTATING. All operate on dedicated
+# "QA E2E *" tabs that the case creates and deletes, so real bookkeeping tabs are
+# never touched. Cleanup deletes the sandbox tab even if the assertion fails.
+
+- id: SH01-create-sheet
+  category: sheet_ops
+  title: Create a new sheet tab
+  tags: [sheet, create, mutating, single_turn]
+  mutating: true
+  cleanup:
+    - "Hapus sheet bernama 'QA E2E Sandbox'."
+  turns:
+    - user: "Buatkan sheet baru bernama 'QA E2E Sandbox'."
+      expect:
+        route: data_entry_team
+        content_any: ["qa e2e sandbox", "dibuat", "created", "berhasil", "✓"]
+        mcp_tools_any: [tool_create_sheet]
+
+- id: SH02-copy-sheet
+  category: sheet_ops
+  title: Copy an existing sheet to a new tab
+  tags: [sheet, copy, mutating, single_turn]
+  mutating: true
+  cleanup:
+    - "Hapus sheet bernama 'QA E2E Copy'."
+  turns:
+    - user: "Salin sheet Jun menjadi sheet baru bernama 'QA E2E Copy'."
+      expect:
+        route: data_entry_team
+        content_any: ["qa e2e copy", "disalin", "copied", "berhasil", "✓"]
+        mcp_tools_any: [tool_copy_sheet]
+
+- id: SH03-create-then-rename
+  category: sheet_ops
+  title: Create a sheet then rename it (two structural ops)
+  tags: [sheet, create, rename, mutating, multi_turn]
+  mutating: true
+  cleanup:
+    - "Hapus sheet bernama 'QA E2E Renamed'."
+    - "Hapus sheet bernama 'QA E2E Temp'."
+  turns:
+    - user: "Buat sheet baru bernama 'QA E2E Temp'."
+      expect:
+        route: data_entry_team
+        mcp_tools_any: [tool_create_sheet]
+    - user: "Ganti nama sheet 'QA E2E Temp' menjadi 'QA E2E Renamed'."
+      expect:
+        route: data_entry_team
+        content_any: ["qa e2e renamed", "diganti", "renamed", "berhasil", "✓"]
+        mcp_tools_any: [tool_rename_sheet]

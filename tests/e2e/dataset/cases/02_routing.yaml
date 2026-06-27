@@ -1,0 +1,63 @@
+# Routing disambiguation — the supervisor must pick the right data source.
+#   data_entry_team → Google Sheets (ALL financial/bookkeeping data)
+#   sql_agent       → SQLite (ONLY user-uploaded receipts)
+# These assert WHICH agent handles the turn, not deep content.
+
+- id: R01-financial-to-data-entry
+  category: routing
+  title: Financial question routes to data_entry_team, not sql_agent
+  tags: [routing, data_entry, single_turn]
+  turns:
+    - user: "What is the total purchase for June in Rangkuman Total?"
+      expect:
+        route: data_entry_team
+        forbid_agents: [sql_agent]
+        contains_amount: ["1501900"]
+
+- id: R02-receipt-to-sql
+  category: routing
+  title: Uploaded-receipt question routes to sql_agent, not data_entry_team
+  tags: [routing, sql_agent, multi_turn]
+  turns:
+    - user: "Saya upload struk ini ya."
+      attachment: sample-data/receipt/001-receipt.jpeg
+      note: "Turn 1 ingests the receipt so a later cold lookup has data."
+      expect:
+        route: any
+    - user: "Apa hasil ekstraksi dari struk yang barusan saya upload?"
+      expect:
+        route_any_of: [sql_agent, none]
+        forbid_agents: [data_entry_team]
+        content_any: ["alfamidi", "pucuk", "10.800", "10800", "shopeepay"]
+
+- id: R03-greeting-finish
+  category: routing
+  title: Greeting / capability question answered directly (FINISH, no tools)
+  tags: [routing, finish, single_turn]
+  turns:
+    - user: "Hi Klaudia! Singkatnya, kamu bisa bantu apa saja?"
+      expect:
+        route: none
+        mcp_tools_none: [tool_get_sheet_data, tool_update_cells, tool_get_extraction]
+
+- id: R04-ambiguous-data-source
+  category: routing
+  title: Purchases phrasing must resolve to sheets (financial), not receipts
+  tags: [routing, data_entry, disambiguation, single_turn]
+  turns:
+    - user: "List semua pembelian dari Indomaret di bulan Mei."
+      note: "Indomaret rows live in the Mei sheet, not the SQLite receipt archive."
+      expect:
+        route: data_entry_team
+        forbid_agents: [sql_agent]
+        content_any: ["indomaret", "cooking oil", "sugar", "minyak", "gula"]
+
+- id: R05-multi-agent-turn
+  category: routing
+  title: Compound request may engage both data sources in one turn
+  tags: [routing, multi_tool, multi_agent, single_turn]
+  turns:
+    - user: "Bandingkan total pembelian Mei di sheet dengan jumlah struk yang sudah aku upload."
+      note: "Acceptable to call data_entry_team and/or sql_agent; measured, not strict."
+      expect:
+        route_any_of: [data_entry_team, sql_agent]

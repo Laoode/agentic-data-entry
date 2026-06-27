@@ -1,0 +1,45 @@
+# SQL Agent — receipt archive (SQLite, read-only). Content tokens come from the
+# 001-receipt label (ALFAMIDI CAWANG BARU). The "list files" case should be
+# answerable from the SESSION FILES context (FINISH) OR via sql_agent — both ok.
+
+- id: SQ01-upload-and-list
+  category: sql_receipt
+  title: Upload a receipt then list session files
+  tags: [sql_agent, upload, context, multi_turn]
+  turns:
+    - user: "Saya upload struk ini. File apa saja yang sudah ada di sesi ini?"
+      attachment: sample-data/receipt/001-receipt.jpeg
+      expect:
+        route_any_of: [none, sql_agent]
+        forbid_agents: [data_entry_team]
+        content_any: ["001-receipt", "struk", "file", "uploaded", "diupload", "alfamidi"]
+
+- id: SQ02-extraction-warm-context
+  category: sql_receipt
+  title: Ask for extraction result while context is warm (same session)
+  tags: [sql_agent, extraction, multi_turn]
+  turns:
+    - user: "Saya upload struk ini ya."
+      attachment: sample-data/receipt/001-receipt.jpeg
+      expect:
+        route: any
+    - user: "Apa nama toko dan total dari struk yang barusan saya upload?"
+      expect:
+        route_any_of: [sql_agent, none]
+        forbid_agents: [data_entry_team]
+        content_any: ["alfamidi", "pucuk", "10.800", "10800", "shopeepay"]
+
+- id: SQ03-extraction-cold-lookup
+  category: sql_receipt
+  title: Cold lookup forces sql_agent (new session, no context)
+  tags: [sql_agent, extraction, cross_session, multi_turn]
+  turns:
+    - user: "Tampilkan hasil ekstraksi dari struk ALFAMIDI yang pernah saya upload."
+      note: >
+        Fresh session: no extraction in the conversation window, so the agent
+        must call sql_agent (tool_get_session_files / tool_get_extraction).
+      expect:
+        route: sql_agent
+        forbid_agents: [data_entry_team]
+        content_any: ["alfamidi", "pucuk", "10.800", "10800", "shopeepay"]
+        mcp_tools_any: [tool_get_extraction, tool_get_session_files, tool_get_document]

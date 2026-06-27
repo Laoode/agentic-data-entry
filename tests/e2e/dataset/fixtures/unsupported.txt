@@ -1,0 +1,2 @@
+This is a plain-text file used by the E2E suite to verify that the attachment
+shape guard rejects unsupported formats (not an image, not a PDF).

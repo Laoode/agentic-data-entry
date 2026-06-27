@@ -1,0 +1,4 @@
+# Generated run artifacts — not source.
+*.json
+*.md
+!.gitignore
