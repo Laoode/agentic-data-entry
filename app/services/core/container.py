@@ -255,6 +255,9 @@ class _NullDedupCache:
     async def set_extraction(self, *_a, **_kw):
         return None
 
+    async def delete_extraction(self, *_a, **_kw):
+        return None
+
     async def queue_depth(self, *_a, **_kw):
         return 0
 
