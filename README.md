@@ -19,7 +19,7 @@
   <img src="https://img.shields.io/badge/LangGraph-Agentic%20Workflow-blue" />
   <img src="https://img.shields.io/badge/LangChain-Orchestration-blueviolet" />
   <img src="https://img.shields.io/badge/Qwen3.5-4B-orange" />
-  <img src="https://img.shields.io/badge/Gemini3.5-flash-red" />
+  <img src="https://img.shields.io/badge/Deepseekv4-pro-4e6bfe" />
   <img src="https://img.shields.io/badge/MCP-Protocol-black" />
   <img src="https://img.shields.io/badge/Redis-Queue-red" />
   <img src="https://img.shields.io/badge/Taskiq-Workers-yellow" />
@@ -185,7 +185,7 @@ Across all evaluation metrics, Klaudia consistently outperformed the base Qwen 3
 | Backend                 | FastAPI              |
 | Agent Framework         | LangGraph            |
 | LLM Framework           | LangChain            |
-| Models                  | Gemini 3.5, Qwen 3.5 |
+| Models                  | Deepseek v4, Qwen 3.5 |
 | Fine-Tuning             | LoRA, PEFT           |
 | Inference               | vLLM                 |
 | Queue                   | Redis, Taskiq        |
