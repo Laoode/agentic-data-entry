@@ -124,6 +124,17 @@ class MinIOClient:
                 raise ObjectStoreError(f"put_object failed for {key!r}: {e}") from e
         return StoredObject(key=key, size_bytes=len(data), content_type=content_type)
 
+    async def delete(self, key: str) -> None:
+        """Delete an object. Idempotent: a missing key is not an error."""
+        async with self._client() as s3:
+            try:
+                await s3.delete_object(Bucket=self._bucket, Key=key)
+            except ClientError as e:
+                code = e.response.get("Error", {}).get("Code", "")
+                if code in ("404", "NoSuchKey", "NotFound"):
+                    return
+                raise ObjectStoreError(f"delete_object failed for {key!r}: {e}") from e
+
     async def get(self, key: str) -> bytes:
         async with self._client() as s3:
             try:

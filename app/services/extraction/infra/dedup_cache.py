@@ -97,6 +97,17 @@ class DedupCache:
             ex=self._ttl,
         )
 
+    async def delete_extraction(self, user_id: int, page_blake3: str) -> None:
+        """Drop the L1 extraction entry so the next ingest re-runs KIE.
+
+        Also clears the blob-metadata entry for the same hash. Used by the E2E
+        harness to make a cache-miss case reproducible across runs.
+        """
+        await self.client.delete(
+            self._extract_key(user_id, page_blake3),
+            self._blob_key(user_id, page_blake3),
+        )
+
     # ── Queue depth (read-only here; Taskiq publishes) ──────────────────
 
     async def queue_depth(self, queue_name: str) -> int:
