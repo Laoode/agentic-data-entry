@@ -173,20 +173,3 @@ Orchestrator.process() / .stream()
 | **Total** | | **32+** | `uv run pytest tests/ -v` |
 
 > Test yang butuh MCP (`test_sql_agent`, `test_data_entry_team`, `test_streaming`, `test_hitl`) — jalankan `./startup.sh` dulu.
-
----
-
-## Open Items (belum difix)
-
-| # | Item |
-|---|------|
-| O1 | Error handling kalau MCP server down (timeout, retry, circuit breaker) |
-| O2 | Rate limit Google Sheets API (100 req/100s) — butuh backoff |
-| O3 | Observability: structured logging (request_id, session_id, file_id) |
-| O4 | `MCPToolRegistry.connect()` tidak ada timeout — pytest hang kalau MCP down |
-| O5 | `VLLMKIEClient` (Qwen3.5-4B fine-tuned, image-only) baru construction/wiring — endpoint vLLM belum aktif. Verifikasi nanti: set `KIE_MODEL=<served-name>` + `VLLM_KIE_ENDPOINT`, 1 real upload receipt → cek JSON valid |
-| O6 | Frontend mobile (Klaudia native app) — next phase |
-| O7 | `MODEL_PROVIDER=openai`: sub-agent tool-calling (sql_agent, data_entry_team via `create_react_agent`) butuh vLLM jalan dengan `--enable-auto-tool-choice --tool-call-parser hermes`. Routing/structured-output sudah jalan tanpa flag itu (json_schema/guided decoding) |
-| O8 | Multi-provider switch (D20) belum live-tested terhadap endpoint vLLM asli — baru construction/wiring. Verifikasi: 1 real call tiap path (routing, worker tool-call) setelah GPU session tersedia |
-| O9 | DeepSeek (D21): plain chat + structured routing sudah live-tested hijau. Belum diuji end-to-end lewat full graph dengan tool-calling workers (sql_agent, data_entry_team) terhadap MCP. Verifikasi: jalankan `./startup.sh` + 1 alur upload/sheet dengan `MODEL_PROVIDER=deepseek` |
-| O10 | DeepSeek thinking mode (D22) belum dipakai — react workers harus round-trip `reasoning_content` dulu sebelum `LLM_DISABLE_THINKING=false` aman untuk deepseek |
