@@ -50,8 +50,10 @@ def _params():
 @requires_live
 @pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize("case", list(_params()))
-async def test_case(case, orchestrator, spy):
-    records = await run_case_inprocess(orchestrator, spy, case)
+async def test_case(case, orchestrator, spy, extraction_spy, sheet_guard, container):
+    records = await run_case_inprocess(
+        orchestrator, spy, extraction_spy, case, sheet_guard, container
+    )
     for r in records:
         _REPORT.add(r)
 
@@ -71,9 +73,25 @@ async def test_case(case, orchestrator, spy):
 
 @requires_live
 def test_zzz_report():
-    """Print the results table and dump JSON. Runs last (alphabetical)."""
+    """Print the table, dump JSON, and write a per-model markdown summary.
+
+    The markdown file is named tests/e2e/outputs/table-<model>.md so each model's
+    run is kept side-by-side for comparison over time.
+    """
     if not _REPORT.records:
         pytest.skip("no cases executed")
+
+    from config.settings import get_settings
+
+    settings = get_settings()
+    model = settings.llm_model
+    provider = settings.model_provider
+
     print(_REPORT.render_table())
     _REPORT.write_json(_OUT)
+
+    md_path = _REPORT.write_markdown(
+        _OUT.parent, model=model, provider=provider
+    )
     print(f"\nJSON written to {_OUT}")
+    print(f"Markdown table written to {md_path}")

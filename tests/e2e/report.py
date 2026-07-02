@@ -9,7 +9,9 @@ the goal is a faithful measurement.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from statistics import mean, median
 
@@ -140,3 +142,69 @@ class Report:
     def write_json(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(self.to_json(), indent=2, ensure_ascii=False))
+
+    # ── Per-model markdown summary ───────────────────────────────────────────
+
+    def render_markdown(self, model: str, provider: str = "") -> str:
+        """Render a markdown report (category summary + per-turn breakdown).
+
+        Mirrors the hand-curated table-<model>.md format so model runs can be
+        compared side by side over time.
+        """
+        s = self.summary()
+        cats = self._by_category()
+        prov = f" (provider `{provider}`)" if provider else ""
+        lines: list[str] = [
+            "# KLAUDIA WHITEBOX E2E — RESULTS",
+            "",
+            f"**Model:** `{model}`{prov}  ",
+            f"**Date:** {datetime.now().strftime('%Y-%m-%d %H:%M')}  ",
+            f"**Overall:** {s['passed']}/{s['total_turns']} "
+            f"({s['pass_rate'] * 100:.0f}%) · p50 {s['latency_ms_median']}ms · "
+            f"max {s['latency_ms_max']}ms",
+            "",
+            "## Summary by Category",
+            "",
+            "| Category | Turns | Pass | Rate | p50 (ms) | max (ms) |",
+            "|---|---|---|---|---|---|",
+        ]
+        for cat in sorted(cats):
+            rows = cats[cat]
+            n = len(rows)
+            p = sum(1 for r in rows if r.result.passed)
+            lat = [r.view.latency_ms for r in rows if r.view.latency_ms]
+            p50 = round(median(lat)) if lat else 0
+            mx = max(lat) if lat else 0
+            rate = f"{(p / n * 100):.0f}%" if n else "-"
+            lines.append(f"| {cat} | {n} | {p} | {rate} | {p50} | {mx} |")
+        lines.append(
+            f"| **OVERALL** | **{s['total_turns']}** | **{s['passed']}** | "
+            f"**{s['pass_rate'] * 100:.0f}%** | **{s['latency_ms_median']}** | "
+            f"**{s['latency_ms_max']}** |"
+        )
+
+        lines += [
+            "",
+            "## Per-Turn Breakdown",
+            "",
+            "| ID | T | P | Routed To | ms | Detail |",
+            "|---|---|---|---|---|---|",
+        ]
+        for r in self.records:
+            mark = "✓" if r.result.passed else "✗"
+            routed = ", ".join(sorted(set(r.view.tools_used))) or "FINISH"
+            detail = "; ".join(r.result.reasons).replace("|", "\\|") if r.result.reasons else ""
+            lines.append(
+                f"| {r.case_id} | {r.turn_index} | {mark} | {routed} | "
+                f"{r.view.latency_ms} | {detail} |"
+            )
+        lines.append("")
+        return "\n".join(lines)
+
+    def write_markdown(self, out_dir: Path, model: str, provider: str = "") -> Path:
+        """Write the markdown report to out_dir/table-<model-slug>.md and return it."""
+        slug = re.sub(r"[^a-z0-9.]+", "-", model.lower()).strip("-") or "model"
+        path = out_dir / f"table-{slug}.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(self.render_markdown(model, provider))
+        return path

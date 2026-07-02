@@ -60,6 +60,15 @@ class Expect(BaseModel):
     # Substrings expected somewhere in the JSON-serialized args of ANY call.
     mcp_args_contains: list[str] = Field(default_factory=list)
 
+    # ── KIE / extraction cache (in-process only) ─────────────────────────────
+    # Asserted against the ExtractionAgent result, aggregated over the turn's
+    # attachments. cache_hits = pages served from cache; cache_misses = fresh
+    # extractions. This is the correct signal for "did it hit cache?" — NOT
+    # latency. A fresh image (never ingested) => cache_misses=1, cache_hits=0;
+    # a previously-ingested file => cache_hits=1, cache_misses=0.
+    cache_hits: int | None = None
+    cache_misses: int | None = None
+
     # ── Latency ──────────────────────────────────────────────────────────────
     # Soft budget: recorded always; a breach is reported but only hard-fails the
     # turn when `latency_hard` is true.

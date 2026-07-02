@@ -1,4 +1,8 @@
-# Generated run artifacts — not source.
-*.json
-*.md
+# Transient run artifacts — not tracked.
+results_*.json
+*.out
+*legacy/
+
+# Per-model summary tables ARE tracked, for side-by-side comparison over time.
+!table-*.md
 !.gitignore

@@ -1,38 +1,59 @@
-# KIE / Extraction pipeline (real vLLM Qwen-3.5-4B-Klaudia, MOCK_KIE=false).
-#   002-receipt.png → FRESH content, cache MISS (slower; first-time extraction)
-#   001-receipt.pdf → previously seen, cache HIT (faster)
-# 002 content is unknown, so we assert the pipeline ran (a store/total/receipt is
-# surfaced) rather than specific values, and we record latency to compare hit/miss.
+# KIE / Extraction (real vLLM, MOCK_KIE=false). Cache hit/miss is asserted from
+# the ExtractionAgent result (cache_hits / cache_misses), NOT latency — this
+# mirrors the extraction_agent.process output in Langfuse.
+#
+# Sample content (from sample-data/labels/images/*.json):
+#   001-receipt.jpeg → ALFAMIDI, 1 item, total 10.800   (already ingested → HIT)
+#   002-receipt.png  → HAO KOPITIAM, 3 items, total 55.000 (already ingested → HIT)
+#   003-receipt.png  → AEON Pluit, 4 items, total 76.000  (FRESH, never run → MISS)
+#
+# NOTE: KIE01 is a one-shot cache-MISS — after the first run, 003 is cached and a
+# re-run would report cache_hits=1. To re-measure a miss, add a brand-new image.
 
 - id: KIE01-image-cache-miss
   category: kie_extraction
-  title: Fresh image extraction (cache miss) — PNG
-  tags: [kie, image, cache_miss, latency, single_turn]
+  title: Fresh image → cache MISS (003, never ingested)
+  tags: [kie, image, cache_miss, single_turn]
   turns:
     - user: "Tolong proses struk ini dan beri tahu toko serta totalnya."
-      attachment: sample-data/receipt/002-receipt.png
-      note: "002-receipt.png is new — exercises a real KIE call, no cache."
+      attachment: sample-data/receipt/003-receipt.png
+      note: "003 is fresh — first ingest, so cache_misses=1, cache_hits=0."
       expect:
         route: any
-        content_any: ["total", "toko", "store", "struk", "receipt", "rp"]
-        latency_ms_max: 45000
+        cache_hits: 0
+        cache_misses: 1
+        content_any: ["aeon", "76", "total", "struk", "rp"]
 
-- id: KIE02-pdf-cache-hit
+- id: KIE02-image-cache-hit
   category: kie_extraction
-  title: PDF extraction (cache hit) — multi-page
-  tags: [kie, pdf, cache_hit, latency, single_turn]
+  title: Previously-ingested image → cache HIT (002)
+  tags: [kie, image, cache_hit, single_turn]
+  turns:
+    - user: "Proses struk ini, ringkas toko dan totalnya."
+      attachment: sample-data/receipt/002-receipt.png
+      note: "002 (HAO KOPITIAM) already ingested → cache_hits=1, cache_misses=0."
+      expect:
+        route: any
+        cache_hits: 1
+        cache_misses: 0
+        content_any: ["hao kopitiam", "kwetiau", "55", "total"]
+
+- id: KIE03-pdf-cache-hit
+  category: kie_extraction
+  title: Previously-ingested PDF → cache HIT (multi-page)
+  tags: [kie, pdf, cache_hit, single_turn]
   turns:
     - user: "Proses PDF struk ini, ringkas isinya."
       attachment: sample-data/pdf/001-receipt.pdf
-      note: "001-receipt.pdf was seen before — should hit the dedup cache (faster)."
+      note: "001-receipt.pdf already ingested → all pages cache hits."
       expect:
         route: any
-        content_any: ["total", "halaman", "page", "struk", "receipt", "rp"]
-        latency_ms_max: 30000
+        cache_misses: 0
+        content_any: ["total", "halaman", "page", "struk", "rp"]
 
-- id: KIE03-extract-then-write
+- id: KIE04-extract-then-write
   category: kie_extraction
-  title: Extract a receipt then insert it into a sheet (cross-pipeline)
+  title: Extract a cached receipt then insert it into a sheet
   tags: [kie, image, write, mutating, multi_turn]
   mutating: true
   cleanup:
@@ -42,23 +63,27 @@
       attachment: sample-data/receipt/001-receipt.jpeg
       expect:
         route: any
-        content_any: ["alfamidi", "pucuk", "10.800", "10800", "total"]
+        cache_hits: 1
+        cache_misses: 0
+        content_any: ["alfamidi", "10.800", "10800", "total"]
     - user: "Masukkan struk itu sebagai baris baru ke sheet Jun pakai tanggal hari ini."
       expect:
         route: data_entry_team
         content_any: ["alfamidi", "ditambahkan", "added", "berhasil", "✓"]
         mcp_tools_any: [tool_append_rows, tool_update_cells]
 
-- id: KIE04-multi-image-upload
+- id: KIE05-multi-image-both-cached
   category: kie_extraction
-  title: Two images in one turn — both extracted
-  tags: [kie, image, multi_image, single_turn]
+  title: Two cached images in one turn → both extracted from cache
+  tags: [kie, image, multi_image, cache_hit, single_turn]
   turns:
     - user: "Proses kedua struk ini sekaligus ya."
       attachments:
         - sample-data/receipt/001-receipt.jpeg
         - sample-data/receipt/002-receipt.png
+      note: "Both already ingested → cache_hits=2, cache_misses=0."
       expect:
         route: any
-        content_any: ["alfamidi", "total", "struk", "receipt", "2", "dua"]
-        latency_ms_max: 60000
+        cache_hits: 2
+        cache_misses: 0
+        content_any: ["alfamidi", "hao kopitiam", "kwetiau", "total"]

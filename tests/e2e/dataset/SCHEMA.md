@@ -47,8 +47,20 @@ All fields optional. Empty list / null = "no assertion of this kind".
 | `mcp_tools_all` | in-process only | all of these MCP tools were called |
 | `mcp_tools_none` | in-process only | none of these MCP tools were called |
 | `mcp_args_contains` | in-process only | substring present in any tool's JSON args |
+| `cache_hits` | in-process only | KIE pages served from cache (from ExtractionAgent result) |
+| `cache_misses` | in-process only | KIE pages freshly extracted |
 | `latency_ms_max` | both | soft budget; breach is reported (warn), not failed |
 | `latency_hard` | both | make `latency_ms_max` a hard failure |
+
+### KIE cache assertions
+
+Cache hit/miss is measured from the `ExtractionAgent` result (per-page
+`from_cache`), aggregated over the turn's attachments — **never from latency**.
+This mirrors the `extraction_agent.process` output (`cache_hits` / `cache_misses`).
+A fresh image (never ingested) ⇒ `cache_misses: 1, cache_hits: 0`; a previously
+ingested file ⇒ `cache_hits: 1`. A cache-MISS case is one-shot: after the first
+run the file is cached, so re-running reports a hit. These checks are skipped on
+the HTTP layer (cache isn't visible in the response).
 
 ### Why two layers of assertion
 

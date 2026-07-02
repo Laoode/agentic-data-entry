@@ -19,6 +19,12 @@ from dotenv import load_dotenv
 # cwd, so the parent process never needs it.
 load_dotenv()
 
+# Pin "now" to a fixed June instant for the whole E2E run so the system prompt's
+# CURRENT DATE/TIME — and therefore any "use today's date" write — stays inside
+# June, matching the June-based docs/TABLE.md fixtures. Real time is used in
+# production (the app never sets this). setdefault lets a developer override.
+os.environ.setdefault("E2E_FREEZE_NOW", "2026-06-30T19:22:00")
+
 
 def pytest_configure(config):
     config.addinivalue_line(
@@ -73,3 +79,26 @@ def spy(container):
     from tests.e2e.spy import MCPSpy
 
     return MCPSpy([container.mcp_sqlite, container.mcp_gsheets])
+
+
+@pytest.fixture(scope="module")
+def extraction_spy(container):
+    from tests.e2e.spy import ExtractionSpy
+
+    return ExtractionSpy(container.extraction_agent)
+
+
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
+async def sheet_guard(container):
+    """Snapshot guarded sheets before the suite, restore them after.
+
+    Snapshot runs before any case mutates the sheet, so it captures the pristine
+    TABLE.md state. Per-mutating-case restore is driven from run_case_inprocess;
+    the teardown restore here leaves the sheet clean at suite end.
+    """
+    from tests.e2e.sheet_guard import SheetGuard
+
+    guard = SheetGuard(container.mcp_gsheets)
+    await guard.snapshot()
+    yield guard
+    await guard.restore()

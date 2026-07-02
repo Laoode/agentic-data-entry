@@ -77,12 +77,14 @@ def _post_turn(
             tools_used=list(data.get("tools_used", [])),
             latency_ms=wall_ms,
             session_id=data.get("session_id"),
+            cache_observable=False,  # HTTP cannot see KIE cache hits/misses
         )
     except Exception as exc:
         wall_ms = int((time.time() - start) * 1000)
         return ResponseView(
             content="", tools_used=[], latency_ms=wall_ms,
-            session_id=session_id, error=f"{type(exc).__name__}: {exc}",
+            session_id=session_id, cache_observable=False,
+            error=f"{type(exc).__name__}: {exc}",
         )
 
 

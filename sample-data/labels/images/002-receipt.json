@@ -1,0 +1,59 @@
+{
+  "info": {
+    "store_name": "HAO KOPITIAM",
+    "store_location": "Jl. Munggur No.44 Kota Yogyakarta",
+    "store_contacts": [
+      {
+        "type": "",
+        "value": "081390255757"
+      }
+    ],
+    "tax_id": "",
+    "receipt_id": "F71A24041100000074",
+    "payment_date": "Apr 11, 2024",
+    "payment_time": "19:07",
+    "time_unit": ""
+  },
+  "items": [
+    {
+      "item_name": "KWETIAU GORENG SAPI",
+      "quantity": "1",
+      "unit_price": "",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "32.000"
+    },
+    {
+      "item_name": "TAMBAHAN NASI PUTIH",
+      "quantity": "1",
+      "unit_price": "",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "7.000"
+    },
+    {
+      "item_name": "ES CINCAU SUSU",
+      "quantity": "1",
+      "unit_price": "",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "16.000"
+    }
+  ],
+  "payment": {
+    "total_items": "",
+    "currency": "Rp",
+    "subtotal_price": "55.000",
+    "discounts": [],
+    "taxes": [],
+    "additional_charges": [],
+    "grand_total": "55.000",
+    "rounding": "",
+    "payment_method": "CASH",
+    "tendered": "100.000",
+    "change": "45.000"
+  }
+}

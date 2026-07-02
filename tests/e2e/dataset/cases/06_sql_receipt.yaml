@@ -31,15 +31,20 @@
 
 - id: SQ03-extraction-cold-lookup
   category: sql_receipt
-  title: Cold lookup forces sql_agent (new session, no context)
-  tags: [sql_agent, extraction, cross_session, multi_turn]
+  title: Cold lookup routes to sql_agent and reports no file gracefully
+  tags: [sql_agent, extraction, cross_session, no_data]
   turns:
     - user: "Tampilkan hasil ekstraksi dari struk ALFAMIDI yang pernah saya upload."
       note: >
-        Fresh session: no extraction in the conversation window, so the agent
-        must call sql_agent (tool_get_session_files / tool_get_extraction).
+        Fresh session with no uploaded files: there is genuinely no extraction to
+        return. Correct behavior is to treat this as a receipt-domain question
+        (route sql_agent, NOT data_entry_team) and report gracefully that no file
+        exists in this session — without leaking internal field/agent/tool names
+        and without a guardrail refusal. Asserting receipt content here would be
+        impossible: nothing was seeded.
       expect:
         route: sql_agent
         forbid_agents: [data_entry_team]
-        content_any: ["alfamidi", "pucuk", "10.800", "10800", "shopeepay"]
-        mcp_tools_any: [tool_get_extraction, tool_get_session_files, tool_get_document]
+        content_any: ["belum ada", "tidak ada", "no file", "upload"]
+        content_none:
+          ["session files", "available google sheets", "data_entry_team", "sql_agent"]

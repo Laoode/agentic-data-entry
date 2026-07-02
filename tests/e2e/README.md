@@ -17,7 +17,7 @@ the result is 100% or not, the suite's job is to surface it for the next phase
 tests/e2e/
   dataset/
     SCHEMA.md              # the case/turn/expect schema (read this to add cases)
-    cases/*.yaml           # the dataset — 44 cases, 11 categories (source of truth)
+    cases/*.yaml           # the dataset — 45 cases, 11 categories (source of truth)
     fixtures/              # tiny support files (e.g. unsupported.txt)
   schema.py                # pydantic models for the dataset
   loader.py                # load + validate YAML, resolve attachment paths
@@ -42,14 +42,15 @@ tests/e2e/
 | Routing + content + latency | yes | yes |
 | Postman | — | `gen_postman.py` |
 
-## Categories (44 cases / 59 turns)
+## Categories (45 cases / 60 turns)
 
 `guardrails` (prompt injection, SARA, NFA, control) · `routing` (data source
 disambiguation, FINISH) · `data_entry_read` · `data_entry_write` (mutating) ·
-`sheet_ops` (mutating) · `sql_receipt` · `kie_extraction` (cache hit/miss,
-multi-image, extract→write) · `hitl` (clarify, no silent deletion) · `multi_turn`
-(read→update, anti-anchor, **10-row memory-window recall**) · `attachment_shape`
-(pre-OCR rejects) · `tool_not_required` (answer from injected context, no tool).
+`sheet_ops` (mutating) · `sql_receipt` · `kie_extraction` (cache hit/miss measured
+via `cache_hits`/`cache_misses`, multi-image, extract→write) · `hitl` (clarify, no
+silent deletion) · `multi_turn` (read→update, anti-anchor, **10-row memory-window
+recall**) · `attachment_shape` (pre-OCR rejects) · `tool_not_required` (answer from
+injected context, no tool).
 
 ## Prerequisites
 
@@ -91,6 +92,9 @@ python -m tests.e2e.gen_postman          # → outputs/klaudia_e2e.postman_colle
 
 Results: a category table (pass rate + p50/max latency) and a per-turn breakdown
 print to stdout; JSON lands in `outputs/results_inprocess.json` / `results_http.json`.
+The in-process run also writes a per-model markdown summary to
+`outputs/table-<model>.md` (e.g. `table-deepseek-v4-pro.md`, `table-qwen3.6-27b.md`)
+— these are kept under version control so model runs can be compared over time.
 
 ## Mutating cases & safety
 

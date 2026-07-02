@@ -66,6 +66,13 @@ class ResponseView:
     latency_ms: int
     session_id: int | None = None
     mcp_calls: list[tuple[str, dict]] = field(default_factory=list)
+    # Aggregated extraction cache result over the turn's attachments. None means
+    # no extraction ran this turn (no attachment). Populated by ExtractionSpy.
+    cache_hits: int | None = None
+    cache_misses: int | None = None
+    # False for the HTTP layer, which cannot observe cache hits/misses — cache
+    # assertions are skipped there rather than failed.
+    cache_observable: bool = True
     error: str | None = None
 
     @property
@@ -221,6 +228,36 @@ def _mcp_ok(expect: Expect, view: ResponseView, reasons: list[str]) -> tuple[boo
     return ok, detail
 
 
+def _cache_ok(expect: Expect, view: ResponseView, reasons: list[str]) -> tuple[bool, dict]:
+    """Assert extraction cache hits/misses (in-process only).
+
+    Skipped when the dataset asserts nothing. If a cache count IS expected but no
+    extraction ran (view.cache_hits is None), that is a failure — the attachment
+    didn't go through KIE.
+    """
+    detail: dict = {}
+    if expect.cache_hits is None and expect.cache_misses is None:
+        return True, detail
+    if not view.cache_observable:
+        # HTTP layer: cache not visible — skip rather than fail.
+        detail["cache_skipped"] = True
+        return True, detail
+    ok = True
+    if expect.cache_hits is not None:
+        got = view.cache_hits
+        detail["cache_hits"] = got == expect.cache_hits
+        if got != expect.cache_hits:
+            ok = False
+            reasons.append(f"cache_hits: expected {expect.cache_hits}, got {got}")
+    if expect.cache_misses is not None:
+        got = view.cache_misses
+        detail["cache_misses"] = got == expect.cache_misses
+        if got != expect.cache_misses:
+            ok = False
+            reasons.append(f"cache_misses: expected {expect.cache_misses}, got {got}")
+    return ok, detail
+
+
 def evaluate(expect: Expect, view: ResponseView) -> CheckResult:
     """Score one turn. passed = routing AND content AND granular-tool checks."""
     reasons: list[str] = []
@@ -234,8 +271,10 @@ def evaluate(expect: Expect, view: ResponseView) -> CheckResult:
     route_ok = _route_ok(expect, view, reasons)
     content_ok, c_detail = _content_ok(expect, view, reasons)
     mcp_ok, m_detail = _mcp_ok(expect, view, reasons)
+    cache_ok, cache_detail = _cache_ok(expect, view, reasons)
     detail.update(c_detail)
     detail.update(m_detail)
+    detail.update(cache_detail)
 
     latency_warn = False
     if expect.latency_ms_max is not None and view.latency_ms > expect.latency_ms_max:
@@ -245,7 +284,7 @@ def evaluate(expect: Expect, view: ResponseView) -> CheckResult:
             reasons.append(msg)
         # soft budgets are reported via latency_warn, not as a failure reason
 
-    passed = route_ok and content_ok and mcp_ok
+    passed = route_ok and content_ok and mcp_ok and cache_ok
     if latency_warn and expect.latency_hard:
         passed = False
 

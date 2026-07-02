@@ -74,3 +74,49 @@ class MCPSpy:
                     tool.coroutine = original
                 except Exception:
                     pass
+
+
+class ExtractionSpy:
+    """Records KIE cache hits/misses by wrapping ExtractionAgent.process.
+
+    cache_hits/cache_misses are not in the public response (they live on the
+    Langfuse span), so we derive them from the returned ExtractionResult: a page
+    with `from_cache=True` is a hit, otherwise a miss — matching the
+    extraction_agent.process output schema (cache_hits / cache_misses).
+    """
+
+    def __init__(self, extraction_agent) -> None:
+        self._agent = extraction_agent
+        self._records: list[dict] = []
+
+    @property
+    def records(self) -> list[dict]:
+        return self._records
+
+    @contextmanager
+    def capture(self) -> Iterator[list[dict]]:
+        self._records = []
+        original = self._agent.process
+
+        async def wrapper(attachment, session_id, user_id):
+            result = await original(attachment, session_id, user_id)
+            pages = getattr(result, "pages", []) or []
+            hits = sum(1 for p in pages if p.get("from_cache"))
+            misses = len(pages) - hits
+            self._records.append(
+                {
+                    "file_name": getattr(result, "file_name", "?"),
+                    "pages": len(pages),
+                    "cache_hits": hits,
+                    "cache_misses": misses,
+                    "status": getattr(result, "status", "?"),
+                    "summary": getattr(result, "summary", ""),
+                }
+            )
+            return result
+
+        self._agent.process = wrapper  # plain class, attribute assignment is fine
+        try:
+            yield self._records
+        finally:
+            self._agent.process = original

@@ -1,0 +1,82 @@
+{
+  "info": {
+    "store_name": "AEON Emporium Pluit Mall",
+    "store_location": "",
+    "store_contacts": [
+      {
+        "type": "TEL",
+        "value": "021-39701158"
+      },
+      {
+        "type": "",
+        "value": "customer.hotline@aeonindonesia.co.id"
+      }
+    ],
+    "tax_id": "03.220.091.7-077.000",
+    "receipt_id": "0310314",
+    "payment_date": "09/06/2026",
+    "payment_time": "20:22",
+    "time_unit": ""
+  },
+  "items": [
+    {
+      "item_name": "CHOCO WASSANT A",
+      "quantity": "1",
+      "unit_price": "34,500",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "34,500"
+    },
+    {
+      "item_name": "ITN RAINBOW BRD",
+      "quantity": "1",
+      "unit_price": "17,000",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "17,000"
+    },
+    {
+      "item_name": "ITN TLS CHS DUO",
+      "quantity": "1",
+      "unit_price": "13,000",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "13,000"
+    },
+    {
+      "item_name": "ITN SRIKAYA PDN",
+      "quantity": "1",
+      "unit_price": "11,500",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "11,500"
+    }
+  ],
+  "payment": {
+    "total_items": "4",
+    "currency": "Rp",
+    "subtotal_price": "76,000",
+    "discounts": [
+      {
+        "discount_name": "TOTAL SAVING(Rp)",
+        "amount": "-"
+      }
+    ],
+    "taxes": [
+      {
+        "tax_name": "PAJAK",
+        "amount": "7,532"
+      }
+    ],
+    "additional_charges": [],
+    "grand_total": "76,000",
+    "rounding": "-",
+    "payment_method": "BCA Card",
+    "tendered": "76,000",
+    "change": "0"
+  }
+}
