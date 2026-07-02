@@ -1,9 +1,31 @@
+import os
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from pydantic import BaseModel, Field
 
 from app.models.attachment import FileAttachment, MetadataFile
+
+_GMT8 = timezone(timedelta(hours=8))
+
+
+def _now_gmt8() -> datetime:
+    """Current time in GMT+8.
+
+    If ``E2E_FREEZE_NOW`` is set (ISO-8601, e.g. ``2026-06-30T19:22:00``), that
+    fixed instant is returned instead. Only the E2E harness sets it, so the
+    system prompt's CURRENT DATE/TIME stays pinned to June across runs (keeping
+    "today" consistent with the June-based docs/TABLE.md fixtures). Production
+    never sets the var and always sees the real wall clock.
+    """
+    frozen = os.environ.get("E2E_FREEZE_NOW")
+    if frozen:
+        try:
+            dt = datetime.fromisoformat(frozen)
+            return dt.replace(tzinfo=_GMT8) if dt.tzinfo is None else dt.astimezone(_GMT8)
+        except ValueError:
+            pass
+    return datetime.now(tz=_GMT8)
 
 
 class KlaudiaMessage(BaseModel):
@@ -23,16 +45,8 @@ class ChatMetadata(BaseModel):
     """Per-turn metadata for personalization."""
 
     user_name: str = "User"
-    date: str = Field(
-        default_factory=lambda: datetime.now(
-            tz=timezone(timedelta(hours=8))
-        ).strftime("%A, %d %B %Y")
-    )
-    time: str = Field(
-        default_factory=lambda: datetime.now(
-            tz=timezone(timedelta(hours=8))
-        ).strftime("%H:%M")
-    )
+    date: str = Field(default_factory=lambda: _now_gmt8().strftime("%A, %d %B %Y"))
+    time: str = Field(default_factory=lambda: _now_gmt8().strftime("%H:%M"))
     timezone: str = "GMT+8"
 
 
