@@ -8,6 +8,7 @@ from app.services.core.llm_client import LLMClient
 from app.services.core.observability import LangfuseService
 from app.services.guardrails.base import check_prompt_injection
 from app.services.guardrails.config import GuardrailsConfig
+from app.services.guardrails.llm import GuardrailsLLMRouter
 from app.services.guardrails.output import check_output
 from app.services.guardrails.prompts import REJECTION_MESSAGES
 from app.services.guardrails.scope import ScopeViolation, check_scope
@@ -38,6 +39,9 @@ class GuardrailsAgent:
         self._llm_client = llm_client
         self._config = config
         self._langfuse = langfuse
+        # Routes the scope/output LLM checks to Gemini or DeepSeek per
+        # config.guardrails_provider. Prompt-injection stays on Groq (base.py).
+        self._guard_llm = GuardrailsLLMRouter(llm_client, config, langfuse)
 
     async def validate_input(self, text: str) -> GuardrailResult:
         """Run prompt injection and scope checks in parallel."""
@@ -56,7 +60,7 @@ class GuardrailsAgent:
 
         with span_cm as obs:
             injection_task = check_prompt_injection(text, self._config, self._langfuse)
-            scope_task = check_scope(text, self._llm_client, self._config)
+            scope_task = check_scope(text, self._guard_llm, self._config)
 
             is_injection, scope_result = await asyncio.gather(
                 injection_task, scope_task
@@ -90,6 +94,10 @@ class GuardrailsAgent:
                     pass
             return GuardrailResult(passed=True)
 
+    async def shutdown(self) -> None:
+        """Release the guardrail LLM router's owned resources (DeepSeek client)."""
+        await self._guard_llm.shutdown()
+
     async def validate_output(self, response_text: str) -> GuardrailResult:
         """Validate assistant output against blacklisted topics."""
         if not self._config.enabled:
@@ -105,7 +113,7 @@ class GuardrailsAgent:
         )
 
         with span_cm as obs:
-            is_blocked = await check_output(response_text, self._llm_client, self._config)
+            is_blocked = await check_output(response_text, self._guard_llm, self._config)
             if is_blocked:
                 msg = REJECTION_MESSAGES["blacklisted_topic"]
                 if obs is not None:

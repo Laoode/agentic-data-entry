@@ -1,14 +1,14 @@
 import logging
 
-from app.services.core.llm_client import LLMClient
 from app.services.guardrails.config import GuardrailsConfig
+from app.services.guardrails.llm import GuardrailChatLLM
 from app.services.guardrails.prompts import OUTPUT_CHECK_PROMPT
 
 logger = logging.getLogger(__name__)
 
 
 async def check_output(
-    response_text: str, llm_client: LLMClient, config: GuardrailsConfig
+    response_text: str, llm_client: GuardrailChatLLM, config: GuardrailsConfig
 ) -> bool:
     """Check if assistant output contains blacklisted content.
 

@@ -1,8 +1,9 @@
 # Model Providers — Agentic LLM Guide
 
 How the supervisor + sub-agents pick a chat backend, and what differs per
-provider. Guardrails and KIE/OCR are **not** covered by this switch — they stay
-Gemini-native regardless of `MODEL_PROVIDER`.
+provider. Guardrails and KIE/OCR are **not** covered by this switch (they ignore
+`MODEL_PROVIDER`). KIE stays Gemini/vLLM per `KIE_MODEL`; guardrails have their
+own independent `GUARDRAILS_PROVIDER` switch (see below).
 
 ## The one seam
 
@@ -73,6 +74,23 @@ against the official docs:
   prompt prefix maximizes hits.
 - **Prefix completion** — `/beta` endpoint; last message `{"role":"assistant",
   "content": "...", "prefix": true}`. Not wired into the agentic graph.
+
+## Guardrails provider
+
+The guardrail LLM checks (scope: SARA / Financial Advice, plus the output
+blacklist) route through `app/services/guardrails/llm.py::GuardrailsLLMRouter`,
+selected by `GUARDRAILS_PROVIDER` — independent of `MODEL_PROVIDER`. The
+prompt-injection guard always stays on Groq (`guardrails/base.py`).
+
+| `GUARDRAILS_PROVIDER` | Backend                         | `LLM_GUARDRAILS_MODEL` example | Thinking off via                     |
+|-----------------------|---------------------------------|--------------------------------|--------------------------------------|
+| `google` (default)    | Gemini (shared `LLMClient`)     | `gemini-3.1-flash-lite`        | `thinking_level="minimal"` (bound in `LLMClient`) |
+| `deepseek`            | DeepSeek V4 (OpenAI-compatible) | `deepseek-v4-flash`            | `extra_body={"thinking": {"type": "disabled"}}`   |
+
+DeepSeek reuses `DEEPSEEK_BASE_URL` / `DEEPSEEK_API_KEY`. Both backends run
+non-thinking; the mechanism differs (same split as the agentic stack above). The
+router owns the DeepSeek client's lifecycle and closes it on container shutdown;
+the Gemini client is shared and owned by the container.
 
 ## KIE / receipt extraction
 

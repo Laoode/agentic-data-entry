@@ -74,6 +74,11 @@ class Settings(BaseSettings):
         default="meta-llama/Llama-Prompt-Guard-2-86M",
         alias="LLM_GUARDRAILS_PROMPT_INJ",
     )
+    # Backend for the scope (SARA / Financial Advice) + output blacklist checks.
+    # Independent of MODEL_PROVIDER. "google" (Gemini, default) or "deepseek".
+    # DeepSeek reuses DEEPSEEK_BASE_URL / DEEPSEEK_API_KEY. Prompt-injection stays
+    # on Groq regardless. See docs/MODELS.md.
+    guardrails_provider: str = Field(default="google", alias="GUARDRAILS_PROVIDER")
     llm_guardrails_model: str = Field(
         default="gemini-3.1-flash-lite-preview", alias="LLM_GUARDRAILS_MODEL"
     )

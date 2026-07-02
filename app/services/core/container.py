@@ -189,6 +189,10 @@ class KlaudiaContainer:
             groq_api_key=settings.groq_api_key,
             groq_model=settings.llm_guardrails_prompt_inj,
             guardrails_model=settings.llm_guardrails_model,
+            guardrails_provider=settings.guardrails_provider,
+            deepseek_base_url=settings.deepseek_base_url,
+            deepseek_api_key=settings.deepseek_api_key,
+            disable_thinking=settings.llm_disable_thinking,
         )
         container.guardrails = GuardrailsAgent(
             container.llm_client, guardrails_config, langfuse=container.langfuse
@@ -219,6 +223,8 @@ class KlaudiaContainer:
 
     async def shutdown(self) -> None:
         logger.info("Starting graceful shutdown...")
+        if self.guardrails:
+            await self.guardrails.shutdown()
         if self.llm_client:
             await self.llm_client.shutdown()
         if self.kie_client:

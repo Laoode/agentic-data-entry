@@ -3,8 +3,8 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
-from app.services.core.llm_client import LLMClient
 from app.services.guardrails.config import GuardrailsConfig
+from app.services.guardrails.llm import GuardrailChatLLM
 from app.services.guardrails.prompts import (
     FINANCIAL_ADVICE_CHECK_PROMPT,
     SARA_CHECK_PROMPT,
@@ -23,7 +23,7 @@ async def _check_policy(
     text: str,
     prompt_template: str,
     policy_name: str,
-    llm_client: LLMClient,
+    llm_client: GuardrailChatLLM,
     config: GuardrailsConfig,
 ) -> bool:
     """Run a single policy prompt against the LLM. Returns True if violated."""
@@ -48,7 +48,7 @@ async def _check_policy(
 
 async def check_scope(
     text: str,
-    llm_client: LLMClient,
+    llm_client: GuardrailChatLLM,
     config: GuardrailsConfig,
 ) -> ScopeViolation:
     """Run SARA and Financial Advice policy checks in parallel.
