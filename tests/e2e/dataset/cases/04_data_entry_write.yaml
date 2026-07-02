@@ -36,13 +36,13 @@
       expect:
         route: data_entry_team
         mcp_tools_any: [tool_append_rows, tool_update_cells]
-    - user: "Update harga (satuan dan total) baris ITEM QA BETA tadi menjadi 9999."
+    - user: "Update harga (satuan dan total) baris ITEM QA BETA tadi menjadi 9000."
       expect:
         route: data_entry_team
-        content_any: ["9999", "9.999", "diperbarui", "updated", "berhasil", "✓"]
-        contains_amount: ["9999"]
+        content_any: ["9000", "9.000", "diperbarui", "updated", "berhasil", "✓"]
+        contains_amount: ["9000"]
         mcp_tools_any: [tool_update_cells, tool_batch_update_cells]
-        mcp_args_contains: ["9999"]
+        mcp_args_contains: ["9000"]
 
 - id: DW03-batch-update
   category: data_entry_write
