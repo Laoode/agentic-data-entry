@@ -1,0 +1,36 @@
+{
+  "info": {
+    "store_name": "CAARYAWAN 02 COFFEE",
+    "store_location": "",
+    "store_contacts": [],
+    "tax_id": "",
+    "receipt_id": "657026070200000063",
+    "payment_date": "02 Jul 2026",
+    "payment_time": "17:21",
+    "time_unit": ""
+  },
+  "items": [
+    {
+      "item_name": "BEEF BULGOGI",
+      "quantity": "1",
+      "unit_price": "35.000",
+      "discount_label": "",
+      "discount_price": "",
+      "tax_label": "",
+      "total_price": "35.000"
+    }
+  ],
+  "payment": {
+    "total_items": "1",
+    "currency": "Rp",
+    "subtotal_price": "",
+    "discounts": [],
+    "taxes": [],
+    "additional_charges": [],
+    "grand_total": "35.000",
+    "rounding": "",
+    "payment_method": "CASH",
+    "tendered": "50.000",
+    "change": "15.000"
+  }
+}
