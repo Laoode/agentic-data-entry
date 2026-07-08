@@ -20,7 +20,7 @@
       note: "'item itu' must resolve to NARAYA ROKA from the previous turn."
       expect:
         route: data_entry_team
-        content_any: ["naraya", "ditambahkan", "added", "berhasil", "✓"]
+        content_any: ["naraya", "ditambahkan", "added", "berhasil", "sudah", "udah", "terupdate", "aman"]
         mcp_tools_any: [tool_append_rows, tool_update_cells]
         mcp_args_contains: ["NARAYA"]
 

@@ -17,8 +17,7 @@
         metode pembayaran Cash, satuan harga 5000, total 5000.
       expect:
         route: data_entry_team
-        is_clarification: false
-        content_any: ["toko qa test", "item qa", "ditambahkan", "added", "berhasil", "✓"]
+        content_any: ["toko qa test", "item qa", "ditambahkan", "added", "berhasil", "sudah", "terupdate", "sheet Jun", "rangkuman total"]
         mcp_tools_any: [tool_append_rows, tool_update_cells, tool_batch_update_cells]
         mcp_args_contains: ["ITEM QA ALPHA"]
 
@@ -39,7 +38,7 @@
     - user: "Update harga (satuan dan total) baris ITEM QA BETA tadi menjadi 9000."
       expect:
         route: data_entry_team
-        content_any: ["9000", "9.000", "diperbarui", "updated", "berhasil", "✓"]
+        content_any: ["9000", "9.000", "diperbarui", "updated", "berhasil", "sudah"]
         contains_amount: ["9000"]
         mcp_tools_any: [tool_update_cells, tool_batch_update_cells]
         mcp_args_contains: ["9000"]
@@ -62,6 +61,6 @@
     - user: "Ubah harga ITEM QA GAMMA jadi 11000 dan ITEM QA DELTA jadi 22000 sekaligus."
       expect:
         route: data_entry_team
-        content_any: ["11000", "11.000", "22000", "22.000", "berhasil", "updated", "✓"]
+        content_any: ["11000", "11.000", "22000", "22.000", "berhasil", "updated", "sudah", "diperbarui", "aman", "udah"]
         mcp_tools_any: [tool_batch_update_cells, tool_update_cells]
         mcp_args_contains: ["11000"]

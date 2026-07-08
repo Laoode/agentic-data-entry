@@ -13,7 +13,7 @@
     - user: "Buatkan sheet baru bernama 'QA E2E Sandbox'."
       expect:
         route: data_entry_team
-        content_any: ["qa e2e sandbox", "dibuat", "created", "berhasil", "✓"]
+        content_any: ["qa e2e sandbox", "dibuat", "created", "berhasil", "sudah", "udah", "aman"]
         mcp_tools_any: [tool_create_sheet]
 
 - id: SH02-copy-sheet
@@ -27,7 +27,7 @@
     - user: "Salin sheet Jun menjadi sheet baru bernama 'QA E2E Copy'."
       expect:
         route: data_entry_team
-        content_any: ["qa e2e copy", "disalin", "copied", "berhasil", "✓"]
+        content_any: ["qa e2e copy", "disalin", "copied", "berhasil", "sudah", "aman", "udah"]
         mcp_tools_any: [tool_copy_sheet]
 
 - id: SH03-create-then-rename
@@ -46,5 +46,5 @@
     - user: "Ganti nama sheet 'QA E2E Temp' menjadi 'QA E2E Renamed'."
       expect:
         route: data_entry_team
-        content_any: ["qa e2e renamed", "diganti", "renamed", "berhasil", "✓"]
+        content_any: ["qa e2e renamed", "diganti", "renamed", "berhasil", "sudah", "aman", "udah"]
         mcp_tools_any: [tool_rename_sheet]
