@@ -252,6 +252,9 @@ class KlaudiaOrchestrator:
             extraction_data=last_extraction,
             session_id=session_id,
             user_id=user_id,
+            sheets_context=available_sheets or "",
+            files_context=session_files_ctx or "",
+            date_context=f"CURRENT DATE/TIME: {meta.date} {meta.time} ({meta.timezone})",
         )
 
         # 8. Post-process: remove thinking tokens
@@ -464,6 +467,9 @@ class KlaudiaOrchestrator:
                 extraction_data=last_extraction,
                 session_id=session_id,
                 user_id=user_id,
+                sheets_context=available_sheets or "",
+                files_context=session_files_ctx or "",
+                date_context=f"CURRENT DATE/TIME: {meta.date} {meta.time} ({meta.timezone})",
             ):
                 if event["type"] == "final":
                     final_content = event["data"]["content"]
