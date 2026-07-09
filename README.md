@@ -7,7 +7,8 @@
 </div>
 
 <p align="center">
-  <b>Zero Error is the Baseline. Absolute Balance is the Goal.</b>
+  <b>Zero Error is the Baseline. Absolute Balance is the Goal.</b> <br>
+  <i>Make it exist first, then make it good later.</i>
 </p>
 
 <p align="center">
