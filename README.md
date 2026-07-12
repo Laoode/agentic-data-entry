@@ -230,6 +230,30 @@ Across all evaluation metrics, Klaudia consistently outperformed the base Qwen 3
 
 ---
 
+## 🌱 Harness Engineering (Planned)
+
+> [!NOTE]
+> This architecture is currently under active development on the `development` branch and is not yet part of the stable release.
+
+The next evolution of Klaudia focuses on a production-grade agent harness that brings long-term memory, procedural skills, evaluation loops, and continuous LLMOps into a unified runtime.
+
+<div align="center">
+  <img src="https://github.com/Laoode/agentic-data-entry/blob/development/docs/Harness-Eng-Feat.png" alt="Harness Engineering">
+</div>
+
+### Planned Capabilities
+
+- 🧠 Persistent agent memory (episodic & semantic)
+- 📚 Skill-based procedural knowledge
+- 🔍 Hybrid RAG for retrieval and context
+- 🛠️ Tool execution & scheduled agent jobs
+- 📈 Continuous LLM evaluation with Langfuse
+- 🤖 LLM-as-a-Judge evaluation pipeline
+- 🚦 Safe release gates before deployment
+- 🔄 Self-improving feedback loop
+
+---
+
 ## 🗂️ Repository Structure
 
 ```text
