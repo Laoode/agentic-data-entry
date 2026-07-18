@@ -1,0 +1,104 @@
+version: 2.1
+
+executors:
+  python:
+    docker:
+      - image: cimg/python:3.11
+  python-with-services:
+    docker:
+      - image: cimg/python:3.11
+      - image: cimg/redis:7.2
+      - image: minio/minio:latest
+        command: server /data
+
+commands:
+  install-deps:
+    description: Install uv and sync all workspace packages
+    steps:
+      - restore_cache:
+          keys:
+            - uv-cache-v1-{{ checksum "uv.lock" }}
+            - uv-cache-v1-
+      - run:
+          name: Install uv
+          command: pip install uv
+      - run:
+          name: Sync dependencies
+          command: uv sync --all-packages --group dev
+      - save_cache:
+          key: uv-cache-v1-{{ checksum "uv.lock" }}
+          paths:
+            - ~/.cache/uv
+
+jobs:
+  lint:
+    executor: python
+    steps:
+      - checkout
+      - run:
+          name: Sync submodules
+          command: git submodule update --init --recursive
+      - install-deps
+      - run:
+          name: Ruff check
+          command: uv run ruff check app/ klaudia/ config/ tests/
+      - run:
+          name: Ruff format check
+          command: uv run ruff format --check app/ klaudia/ config/ tests/
+
+  unit-test:
+    executor: python
+    steps:
+      - checkout
+      - run:
+          name: Sync submodules
+          command: git submodule update --init --recursive
+      - install-deps
+      - run:
+          name: Run unit tests
+          command: uv run pytest tests/unit -q --junitxml=test-results/unit.xml
+      - store_test_results:
+          path: test-results
+
+  integration-test:
+    executor: python-with-services
+    environment:
+      MOCK_KIE: "true"
+      LANGFUSE_ENABLED: "false"
+    steps:
+      - checkout
+      - run:
+          name: Sync submodules
+          command: git submodule update --init --recursive
+      - install-deps
+      - run:
+          name: Wait for Redis and MinIO
+          command: |
+            for i in $(seq 1 30); do
+              if curl -sf http://127.0.0.1:9000/minio/health/live > /dev/null \
+                 && (echo PING | nc -w 1 127.0.0.1 6379 | grep -q PONG); then
+                echo "services up"; exit 0
+              fi
+              sleep 1
+            done
+            echo "services did not come up" >&2; exit 1
+      - run:
+          name: Run extraction pipeline integration tests (mock KIE)
+          command: >
+            uv run pytest
+            tests/integration/extraction/test_ingest_pipeline.py
+            tests/integration/extraction/test_async_pipeline.py
+            -q --junitxml=test-results/integration.xml
+      - store_test_results:
+          path: test-results
+
+workflows:
+  ci:
+    jobs:
+      - lint
+      - unit-test:
+          requires:
+            - lint
+      - integration-test:
+          requires:
+            - unit-test

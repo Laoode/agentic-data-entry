@@ -15,6 +15,7 @@ request body, not the model name. See docs/MODELS.md.
 scope.py / output.py depend only on the `GuardrailChatLLM.chat()` surface, so
 routing is transparent to them.
 """
+
 from __future__ import annotations
 
 import logging
@@ -67,13 +68,9 @@ class DeepSeekGuardrailLLM:
         langfuse: Optional[LangfuseService] = None,
     ) -> None:
         if not base_url:
-            raise ValueError(
-                "GUARDRAILS_PROVIDER=deepseek requires DEEPSEEK_BASE_URL"
-            )
+            raise ValueError("GUARDRAILS_PROVIDER=deepseek requires DEEPSEEK_BASE_URL")
         if not api_key:
-            raise ValueError(
-                "GUARDRAILS_PROVIDER=deepseek requires DEEPSEEK_API_KEY"
-            )
+            raise ValueError("GUARDRAILS_PROVIDER=deepseek requires DEEPSEEK_API_KEY")
         self._base_url = base_url
         self._api_key = api_key
         self._disable_thinking = disable_thinking
@@ -84,9 +81,7 @@ class DeepSeekGuardrailLLM:
         if self._client is None:
             from openai import AsyncOpenAI
 
-            self._client = AsyncOpenAI(
-                base_url=self._base_url, api_key=self._api_key
-            )
+            self._client = AsyncOpenAI(base_url=self._base_url, api_key=self._api_key)
         return self._client
 
     async def chat(

@@ -25,8 +25,19 @@ _SIGNATURES: tuple[tuple[bytes, str], ...] = (
 )
 
 # HEIC/HEIF have an ftyp box at offset 4. We check the brand inside.
-_HEIF_BRANDS = (b"heic", b"heix", b"hevc", b"hevx", b"heim", b"heis",
-                b"hevm", b"hevs", b"mif1", b"msf1", b"heif")
+_HEIF_BRANDS = (
+    b"heic",
+    b"heix",
+    b"hevc",
+    b"hevx",
+    b"heim",
+    b"heis",
+    b"hevm",
+    b"hevs",
+    b"mif1",
+    b"msf1",
+    b"heif",
+)
 
 
 def detect_mime(data: bytes) -> str | None:

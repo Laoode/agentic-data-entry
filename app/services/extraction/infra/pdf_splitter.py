@@ -14,7 +14,6 @@ import logging
 from typing import Iterator
 
 import pypdfium2 as pdfium
-from PIL import Image
 
 from app.services.extraction.infra.normalizer import (
     DEFAULT_JPEG_QUALITY,
@@ -98,6 +97,9 @@ def split_to_jpg(
     """Convenience wrapper that materializes the iterator. Use for small PDFs
     or tests; prefer iter_pages_as_jpg for memory-tight worker code paths.
     """
-    return [jpg for _, jpg in iter_pages_as_jpg(
-        pdf_bytes, max_long_edge=max_long_edge, quality=quality
-    )]
+    return [
+        jpg
+        for _, jpg in iter_pages_as_jpg(
+            pdf_bytes, max_long_edge=max_long_edge, quality=quality
+        )
+    ]

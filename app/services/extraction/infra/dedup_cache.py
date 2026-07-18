@@ -61,9 +61,7 @@ class DedupCache:
     def _blob_key(user_id: int, blake3_hex: str) -> str:
         return f"blob:u{user_id}:{blake3_hex}"
 
-    async def get_blob(
-        self, user_id: int, blake3_hex: str
-    ) -> dict[str, Any] | None:
+    async def get_blob(self, user_id: int, blake3_hex: str) -> dict[str, Any] | None:
         raw = await self.client.get(self._blob_key(user_id, blake3_hex))
         return json.loads(raw) if raw else None
 

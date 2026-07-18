@@ -168,7 +168,9 @@ class AppDBClient:
         await self.conn.commit()
         return cursor.lastrowid or 0
 
-    async def create_session(self, user_id: int, session_name: str | None = None) -> int:
+    async def create_session(
+        self, user_id: int, session_name: str | None = None
+    ) -> int:
         return await self.execute(
             "INSERT INTO session (user_id, session_name) VALUES (?, ?)",
             (user_id, session_name),
@@ -217,7 +219,7 @@ class AppDBClient:
             "SELECT * FROM metadata_file WHERE session_id = ? ORDER BY created_at",
             (session_id,),
         )
-    
+
     async def get_sessions(self, user_id: int) -> list[dict[str, Any]]:
         return await self.fetchall(
             """
@@ -228,10 +230,8 @@ class AppDBClient:
             """,
             (user_id,),
         )
-    
-    async def get_session_messages(
-        self, session_id: int
-    ) -> list[dict[str, Any]]:
+
+    async def get_session_messages(self, session_id: int) -> list[dict[str, Any]]:
         return await self.fetchall(
             """
             SELECT sender, message_text, file_id, timestamp
@@ -322,7 +322,9 @@ class AppDBClient:
             (user_id, page_blake3, extraction_json, ocr_model, schema_version),
         )
 
-    async def link_metadata_file_blob(self, metadata_file_id: int, blob_id: int) -> None:
+    async def link_metadata_file_blob(
+        self, metadata_file_id: int, blob_id: int
+    ) -> None:
         await self.execute(
             """
             INSERT INTO metadata_file_blob (metadata_file_id, blob_id)

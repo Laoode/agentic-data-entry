@@ -22,7 +22,10 @@ from pathlib import PurePosixPath
 # clients on Windows may try to download with these names.
 _WIN_RESERVED = frozenset(
     {
-        "con", "prn", "aux", "nul",
+        "con",
+        "prn",
+        "aux",
+        "nul",
         *(f"com{i}" for i in range(1, 10)),
         *(f"lpt{i}" for i in range(1, 10)),
     }
@@ -66,7 +69,7 @@ def sanitize_filename(raw: str | None, *, fallback: str = "upload") -> str:
         if "." in name:
             stem_part, _, ext = name.rpartition(".")
             keep = _MAX_NAME_LEN - len(ext) - 1
-            name = f"{stem_part[:max(keep, 1)]}.{ext}"
+            name = f"{stem_part[: max(keep, 1)]}.{ext}"
         else:
             name = name[:_MAX_NAME_LEN]
 

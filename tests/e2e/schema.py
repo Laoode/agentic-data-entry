@@ -46,12 +46,12 @@ class Expect(BaseModel):
     forbid_agents: list[str] = Field(default_factory=list)
 
     # ── Content (assertable everywhere) ──────────────────────────────────────
-    content_any: list[str] = Field(default_factory=list)   # ≥1 must appear (ci)
-    content_all: list[str] = Field(default_factory=list)   # all must appear (ci)
+    content_any: list[str] = Field(default_factory=list)  # ≥1 must appear (ci)
+    content_all: list[str] = Field(default_factory=list)  # all must appear (ci)
     content_none: list[str] = Field(default_factory=list)  # none may appear (ci)
     contains_amount: list[str] = Field(default_factory=list)  # digit-normalized
-    is_rejection: bool | None = None       # guardrail-style refusal
-    is_clarification: bool | None = None    # HITL clarifying question
+    is_rejection: bool | None = None  # guardrail-style refusal
+    is_clarification: bool | None = None  # HITL clarifying question
 
     # ── Granular MCP tool calls (in-process spy only) ────────────────────────
     mcp_tools_any: list[str] = Field(default_factory=list)  # ≥1 of these called

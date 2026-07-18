@@ -49,7 +49,9 @@ def _ensure_gcp_credentials(settings: Settings) -> None:
     logger.info("GOOGLE_APPLICATION_CREDENTIALS resolved to %s", candidate)
 
 
-def _build_mcp_registries(settings: Settings) -> tuple[MCPToolRegistry, MCPToolRegistry]:
+def _build_mcp_registries(
+    settings: Settings,
+) -> tuple[MCPToolRegistry, MCPToolRegistry]:
     """Construct (mcp_sqlite, mcp_gsheets) registries based on configured transport.
 
     stdio: spawn the server as a subprocess of FastAPI. No port, no SSE keep-alive
@@ -149,9 +151,7 @@ class KlaudiaContainer:
         try:
             await container.object_store.ensure_bucket()
         except Exception as e:
-            logger.error(
-                "MinIO unavailable (%s). Image/PDF uploads will fail.", e
-            )
+            logger.error("MinIO unavailable (%s). Image/PDF uploads will fail.", e)
             # Keep instance; calls will surface specific errors at upload time
 
         # MCP registries (transport selected via MCP_TRANSPORT setting)
@@ -163,7 +163,6 @@ class KlaudiaContainer:
         # Ingest service — drives dedup pipeline. ExtractionAgent is now a thin
         # observability facade over this.
         if container.dedup_cache is None:
-            from app.services.extraction.infra.dedup_cache import DedupCache as _DC
             # Provide a minimal in-memory shim so IngestService works without
             # Redis. Cache misses always; persistence still goes to SQLite.
             container.dedup_cache = _NullDedupCache()  # type: ignore[assignment]

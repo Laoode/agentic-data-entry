@@ -90,8 +90,6 @@ def test_zzz_report():
     print(_REPORT.render_table())
     _REPORT.write_json(_OUT)
 
-    md_path = _REPORT.write_markdown(
-        _OUT.parent, model=model, provider=provider
-    )
+    md_path = _REPORT.write_markdown(_OUT.parent, model=model, provider=provider)
     print(f"\nJSON written to {_OUT}")
     print(f"Markdown table written to {md_path}")

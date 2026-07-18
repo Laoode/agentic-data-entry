@@ -37,7 +37,7 @@ class ProgressEvent:
 async def stream_progress(
     redis_client: aioredis.Redis,
     *,
-    file_pages: dict[int, int],   # file_id -> expected page count
+    file_pages: dict[int, int],  # file_id -> expected page count
     timeout_seconds: float,
 ) -> AsyncIterator[ProgressEvent]:
     """Yield ProgressEvent per worker publish until all expected pages have
@@ -51,9 +51,7 @@ async def stream_progress(
         return
 
     pubsub = redis_client.pubsub()
-    channels = [
-        PROGRESS_CHANNEL_FMT.format(file_id=fid) for fid in file_pages
-    ]
+    channels = [PROGRESS_CHANNEL_FMT.format(file_id=fid) for fid in file_pages]
     await pubsub.subscribe(*channels)
 
     expected = sum(file_pages.values())

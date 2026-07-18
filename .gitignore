@@ -45,9 +45,8 @@ AGENTS.md
 # Test artifacts
 .coverage
 .pytest_cache/
+# tests/api contains live-API curl snippets with real keys; never track it.
 tests/api/
-tests/integration/
-tests/unit/
 endpoint_test/
 
 # Credentials (defense in depth)

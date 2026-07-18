@@ -28,11 +28,11 @@ os.environ.setdefault("E2E_FREEZE_NOW", "2026-06-30T19:22:00")
 
 def pytest_configure(config):
     config.addinivalue_line(
-        "markers", "mutating: case mutates the real Google Sheet (deselect with -m 'not mutating')"
+        "markers",
+        "mutating: case mutates the real Google Sheet (deselect with -m 'not mutating')",
     )
-    config.addinivalue_line(
-        "markers", "e2e: Klaudia whitebox end-to-end case"
-    )
+    config.addinivalue_line("markers", "e2e: Klaudia whitebox end-to-end case")
+
 
 # ── Skip guard: the in-process layer needs real LLM credentials ──────────────
 # Any one of: Gemini Developer key, Vertex (use_vertexai + project), or DeepSeek.

@@ -22,7 +22,9 @@ def _now_gmt8() -> datetime:
     if frozen:
         try:
             dt = datetime.fromisoformat(frozen)
-            return dt.replace(tzinfo=_GMT8) if dt.tzinfo is None else dt.astimezone(_GMT8)
+            return (
+                dt.replace(tzinfo=_GMT8) if dt.tzinfo is None else dt.astimezone(_GMT8)
+            )
         except ValueError:
             pass
     return datetime.now(tz=_GMT8)

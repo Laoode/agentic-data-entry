@@ -144,7 +144,12 @@ def _build_mock_lookup() -> dict[str, dict[str, Any]]:
     images_dir = _PROJECT_ROOT / "sample-data" / "receipt"
     image_labels_dir = _PROJECT_ROOT / "sample-data" / "labels" / "images"
     if images_dir.is_dir() and image_labels_dir.is_dir():
-        for img_path in sorted(images_dir.glob("*.jpg")):
+        image_paths = sorted(
+            p
+            for pattern in ("*.jpg", "*.jpeg", "*.png")
+            for p in images_dir.glob(pattern)
+        )
+        for img_path in image_paths:
             label_path = image_labels_dir / f"{img_path.stem}.json"
             if not label_path.is_file():
                 continue

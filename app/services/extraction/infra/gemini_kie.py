@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+from contextlib import contextmanager
 from typing import Any
 
 from google import genai
@@ -112,7 +113,9 @@ class GeminiKIEClient:
         config = types.GenerateContentConfig(
             system_instruction=self._system_prompt,
             response_mime_type="application/json",
-            thinking_config=types.ThinkingConfig(thinking_level=types.ThinkingLevel.MINIMAL),
+            thinking_config=types.ThinkingConfig(
+                thinking_level=types.ThinkingLevel.MINIMAL
+            ),
             temperature=0.1,
             top_p=0.95,
             max_output_tokens=8192,
@@ -216,9 +219,6 @@ class GeminiKIEClient:
                 except Exception:
                     pass
             return parsed
-
-
-from contextlib import contextmanager
 
 
 @contextmanager

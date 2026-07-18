@@ -89,7 +89,7 @@ class EnqueuedFile:
     file_type: str
     blob_id: int
     pages: list[EnqueuedPage]
-    queued: int       # tasks dispatched
+    queued: int  # tasks dispatched
     cached_hits: int  # pages already in cache, no task fired
 
 
@@ -456,7 +456,9 @@ class IngestService:
         if outcome.status == "completed":
             msg = f"All {len(outcome.pages)} page(s) extracted ({outcome.cache_hits} from cache)"
         elif outcome.status == "partial":
-            ok = len(outcome.pages) - sum(1 for p in outcome.pages if p.status == "failed")
+            ok = len(outcome.pages) - sum(
+                1 for p in outcome.pages if p.status == "failed"
+            )
             msg = f"{ok}/{len(outcome.pages)} page(s) extracted"
         else:
             msg = "All pages failed"
@@ -610,9 +612,7 @@ class IngestService:
                     ),
                 )
                 if cached["layer"] == "sqlite":
-                    await self._safe_cache_set(
-                        user_id, page_hash, cached["extraction"]
-                    )
+                    await self._safe_cache_set(user_id, page_hash, cached["extraction"])
                 cached_hits += 1
                 page_results.append(
                     EnqueuedPage(
@@ -663,9 +663,7 @@ class IngestService:
             file_id = await self._record_failure_row(
                 attachment, session_id, user_id, "image", str(e)
             )
-            raise IngestRejectedError(
-                f"undecodable image: {e}", reason="decode"
-            )
+            raise IngestRejectedError(f"undecodable image: {e}", reason="decode")
 
         page_hash = hash_bytes(jpg)
         blob_id, _, blob_key = await self._upsert_blob(
@@ -766,7 +764,10 @@ class IngestService:
         row = await self._db.get_cached_extraction(user_id, page_hash)
         if row is not None:
             try:
-                return {"layer": "sqlite", "extraction": json.loads(row["extraction_json"])}
+                return {
+                    "layer": "sqlite",
+                    "extraction": json.loads(row["extraction_json"]),
+                }
             except json.JSONDecodeError:
                 return None
         return None

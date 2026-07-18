@@ -20,17 +20,42 @@ from tests.e2e.schema import Expect
 #    vocabulary in app/services/guardrails/prompts.py and the worker prompts) ──
 
 _REJECTION_MARKERS = (
-    "sorry", "cannot", "outside", "not within", "nfa", "not financial advice",
-    "maaf", "tidak bisa", "tidak dapat", "di luar", "bukan tugas",
+    "sorry",
+    "cannot",
+    "outside",
+    "not within",
+    "nfa",
+    "not financial advice",
+    "maaf",
+    "tidak bisa",
+    "tidak dapat",
+    "di luar",
+    "bukan tugas",
 )
 _CLARIFY_MARKERS = (
-    "?", "could you", "please", "which sheet", "clarify", "not found",
-    "bisakah", "mohon", "jelaskan", "maksud", "klarifikasi", "tidak ditemukan",
-    "tidak ada sheet", "berapa ribu", "berapa juta", "konfirmasi",
+    "?",
+    "could you",
+    "please",
+    "which sheet",
+    "clarify",
+    "not found",
+    "bisakah",
+    "mohon",
+    "jelaskan",
+    "maksud",
+    "klarifikasi",
+    "tidak ditemukan",
+    "tidak ada sheet",
+    "berapa ribu",
+    "berapa juta",
+    "konfirmasi",
 )
 # Phrases that would indicate a silent destructive write actually happened.
 _SILENT_WRITE_MARKERS = (
-    "[write_done]", "semua data dihapus", "all data deleted", "seluruh isi dihapus",
+    "[write_done]",
+    "semua data dihapus",
+    "all data deleted",
+    "seluruh isi dihapus",
 )
 
 
@@ -84,7 +109,8 @@ class ResponseView:
         try:
             return json.dumps(
                 [{"tool": n, "args": a} for n, a in self.mcp_calls],
-                ensure_ascii=False, default=str,
+                ensure_ascii=False,
+                default=str,
             ).lower()
         except Exception:
             return str(self.mcp_calls).lower()
@@ -93,8 +119,8 @@ class ResponseView:
 @dataclass
 class CheckResult:
     passed: bool
-    reasons: list[str]            # human-readable failure reasons (empty if pass)
-    detail: dict                  # per-check booleans for the report
+    reasons: list[str]  # human-readable failure reasons (empty if pass)
+    detail: dict  # per-check booleans for the report
     latency_warn: bool = False
 
 
@@ -123,7 +149,9 @@ def _route_ok(expect: Expect, view: ResponseView, reasons: list[str]) -> bool:
     return ok
 
 
-def _content_ok(expect: Expect, view: ResponseView, reasons: list[str]) -> tuple[bool, dict]:
+def _content_ok(
+    expect: Expect, view: ResponseView, reasons: list[str]
+) -> tuple[bool, dict]:
     text = view.content or ""
     tl = text.lower()
     detail: dict = {}
@@ -177,15 +205,19 @@ def _content_ok(expect: Expect, view: ResponseView, reasons: list[str]) -> tuple
     return ok, detail
 
 
-def _mcp_ok(expect: Expect, view: ResponseView, reasons: list[str]) -> tuple[bool, dict]:
+def _mcp_ok(
+    expect: Expect, view: ResponseView, reasons: list[str]
+) -> tuple[bool, dict]:
     """Granular tool assertions — only meaningful when the spy captured calls.
 
     If no spy data is present (HTTP layer) these checks are skipped, not failed.
     """
     detail: dict = {}
     if not (
-        expect.mcp_tools_any or expect.mcp_tools_all
-        or expect.mcp_tools_none or expect.mcp_args_contains
+        expect.mcp_tools_any
+        or expect.mcp_tools_all
+        or expect.mcp_tools_none
+        or expect.mcp_args_contains
     ):
         return True, detail
     if not view.mcp_calls and (expect.mcp_tools_any or expect.mcp_tools_all):
@@ -228,7 +260,9 @@ def _mcp_ok(expect: Expect, view: ResponseView, reasons: list[str]) -> tuple[boo
     return ok, detail
 
 
-def _cache_ok(expect: Expect, view: ResponseView, reasons: list[str]) -> tuple[bool, dict]:
+def _cache_ok(
+    expect: Expect, view: ResponseView, reasons: list[str]
+) -> tuple[bool, dict]:
     """Assert extraction cache hits/misses (in-process only).
 
     Skipped when the dataset asserts nothing. If a cache count IS expected but no

@@ -94,14 +94,14 @@ FEW_SHOT_OUTPUT = {
         "store_location": "No. 12, Jalan Bahagia 3, Taman Sejahtera 81300 Johor Bahru, Johor",
         "store_contacts": [
             {"type": "Tel.", "value": "07-3881234"},
-            {"type": "Fax",  "value": "07-3885678"},
-            {"type": "",     "value": "ryuk@gmail.com"}
+            {"type": "Fax", "value": "07-3885678"},
+            {"type": "", "value": "ryuk@gmail.com"},
         ],
         "tax_id": "001234567890",
         "receipt_id": "INV-20190115-0042",
         "payment_date": "15/01/2019",
         "payment_time": "14:35:22",
-        "time_unit": "+08:00"
+        "time_unit": "+08:00",
     },
     "items": [
         {
@@ -111,7 +111,7 @@ FEW_SHOT_OUTPUT = {
             "discount_label": "MEMBER",
             "discount_price": "-9.50",
             "tax_label": "SR",
-            "total_price": "180.50"
+            "total_price": "180.50",
         },
         {
             "item_name": "WORK GLOVES",
@@ -120,8 +120,8 @@ FEW_SHOT_OUTPUT = {
             "discount_label": "",
             "discount_price": "",
             "tax_label": "",
-            "total_price": "7.50"
-        }
+            "total_price": "7.50",
+        },
     ],
     "payment": {
         "total_items": "5",
@@ -129,18 +129,14 @@ FEW_SHOT_OUTPUT = {
         "subtotal_price": "188.00",
         "discounts": [
             {"discount_name": "MEMBER DISC", "amount": "-5.00"},
-            {"discount_name": "DISC TOTAL", "amount": "-5.00"}
+            {"discount_name": "DISC TOTAL", "amount": "-5.00"},
         ],
-        "taxes": [
-            {"tax_name": "SST 6%", "amount": "11.28"}
-        ],
-        "additional_charges": [
-            {"charge_name": "SERVICE CHARGE 5%", "amount": "9.40"}
-        ],
+        "taxes": [{"tax_name": "SST 6%", "amount": "11.28"}],
+        "additional_charges": [{"charge_name": "SERVICE CHARGE 5%", "amount": "9.40"}],
         "grand_total": "203.70",
         "rounding": "+0.02",
         "payment_method": "VISA CARD",
         "tendered": "203.70",
-        "change": ""
-    }
+        "change": "",
+    },
 }

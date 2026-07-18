@@ -23,7 +23,9 @@ from pathlib import Path
 from tests.e2e.loader import attachment_bytes, load_cases
 from tests.e2e.schema import Case, Turn
 
-_OUT = Path(__file__).resolve().parent / "outputs" / "klaudia_e2e.postman_collection.json"
+_OUT = (
+    Path(__file__).resolve().parent / "outputs" / "klaudia_e2e.postman_collection.json"
+)
 
 # Captures session_id from the response into a collection variable so subsequent
 # turns of a multi-turn case reuse the same session.
@@ -77,12 +79,19 @@ def _turn_request(case: Case, turn: Turn, idx: int, reset_session: bool) -> dict
     return {
         "name": name,
         "event": [
-            {"listen": "test", "script": {"type": "text/javascript", "exec": _CAPTURE_SCRIPT}}
+            {
+                "listen": "test",
+                "script": {"type": "text/javascript", "exec": _CAPTURE_SCRIPT},
+            }
         ],
         "request": {
             "method": "POST",
             "header": [{"key": "Content-Type", "value": "application/json"}],
-            "body": {"mode": "raw", "raw": raw, "options": {"raw": {"language": "json"}}},
+            "body": {
+                "mode": "raw",
+                "raw": raw,
+                "options": {"raw": {"language": "json"}},
+            },
             "url": {
                 "raw": "{{base_url}}/v1/chat",
                 "host": ["{{base_url}}"],
@@ -96,13 +105,9 @@ def _turn_request(case: Case, turn: Turn, idx: int, reset_session: bool) -> dict
 def build_collection(cases: list[Case]) -> dict:
     folders: dict[str, dict] = {}
     for c in cases:
-        folder = folders.setdefault(
-            c.category, {"name": c.category, "item": []}
-        )
+        folder = folders.setdefault(c.category, {"name": c.category, "item": []})
         for idx, turn in enumerate(c.turns):
-            folder["item"].append(
-                _turn_request(c, turn, idx, reset_session=(idx == 0))
-            )
+            folder["item"].append(_turn_request(c, turn, idx, reset_session=(idx == 0)))
 
     return {
         "info": {
@@ -126,7 +131,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Generate Postman collection from dataset")
     ap.add_argument("--out", default=str(_OUT))
     ap.add_argument(
-        "--include-mutating", action="store_true",
+        "--include-mutating",
+        action="store_true",
         help="include sheet-mutating cases (default: skip for a safe collection)",
     )
     args = ap.parse_args()
@@ -140,7 +146,9 @@ def main() -> int:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(collection, ensure_ascii=False, indent=2))
     n_req = sum(len(f["item"]) for f in collection["item"])
-    print(f"Wrote {out_path} — {len(cases)} cases, {n_req} requests, {len(collection['item'])} folders")
+    print(
+        f"Wrote {out_path} — {len(cases)} cases, {n_req} requests, {len(collection['item'])} folders"
+    )
     return 0
 
 

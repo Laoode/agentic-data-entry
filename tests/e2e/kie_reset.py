@@ -99,7 +99,10 @@ async def purge_kie_file(container: Any, user_id: int, file_name: str) -> int:
 
     logger.info(
         "purged KIE artifacts for %s (user %d): %d page hash(es), %d blob(s)",
-        file_name, user_id, len(page_hashes), len(blob_ids),
+        file_name,
+        user_id,
+        len(page_hashes),
+        len(blob_ids),
     )
     return len(page_hashes)
 

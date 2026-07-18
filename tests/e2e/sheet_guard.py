@@ -47,7 +47,9 @@ def _col_letter(idx0: int) -> str:
     return s
 
 
-def load_table_md(path: Path = _TABLE_MD) -> tuple[list[str], dict[str, list[list[str]]]]:
+def load_table_md(
+    path: Path = _TABLE_MD,
+) -> tuple[list[str], dict[str, list[list[str]]]]:
     """Parse docs/TABLE.md into (ordered sheet names, {name: rows}).
 
     Format per block: 'Index: N,' / 'Name: <name>,' / 'Table:' then tab-
@@ -64,7 +66,7 @@ def load_table_md(path: Path = _TABLE_MD) -> tuple[list[str], dict[str, list[lis
             current, in_table = None, False
             continue
         if line.startswith("Name:"):
-            name = line[len("Name:"):].strip().strip(",").strip().strip('"').strip()
+            name = line[len("Name:") :].strip().strip(",").strip().strip('"').strip()
             current, in_table = name, False
             names.append(name)
             data[name] = []

@@ -117,7 +117,9 @@ class Report:
         for r in self.records:
             mark = "✓" if r.result.passed else "✗"
             routed = ",".join(sorted(set(r.view.tools_used))) or "FINISH"
-            note = "" if r.result.passed else (" | " + "; ".join(r.result.reasons))[:120]
+            note = (
+                "" if r.result.passed else (" | " + "; ".join(r.result.reasons))[:120]
+            )
             warn = " ⚠lat" if r.result.latency_warn else ""
             out.append(
                 f"  {r.case_id:<14}{r.turn_index:>2}  {mark:<2}{routed:<22}"
@@ -193,7 +195,11 @@ class Report:
         for r in self.records:
             mark = "✓" if r.result.passed else "✗"
             routed = ", ".join(sorted(set(r.view.tools_used))) or "FINISH"
-            detail = "; ".join(r.result.reasons).replace("|", "\\|") if r.result.reasons else ""
+            detail = (
+                "; ".join(r.result.reasons).replace("|", "\\|")
+                if r.result.reasons
+                else ""
+            )
             lines.append(
                 f"| {r.case_id} | {r.turn_index} | {mark} | {routed} | "
                 f"{r.view.latency_ms} | {detail} |"

@@ -82,8 +82,11 @@ def _post_turn(
     except Exception as exc:
         wall_ms = int((time.time() - start) * 1000)
         return ResponseView(
-            content="", tools_used=[], latency_ms=wall_ms,
-            session_id=session_id, cache_observable=False,
+            content="",
+            tools_used=[],
+            latency_ms=wall_ms,
+            session_id=session_id,
+            cache_observable=False,
             error=f"{type(exc).__name__}: {exc}",
         )
 
@@ -98,9 +101,14 @@ def run_case_http(client: httpx.Client, base_url: str, case: Case) -> list[TurnR
                 session_id = view.session_id
             records.append(
                 TurnRecord(
-                    case_id=case.id, category=case.category, title=case.title,
-                    turn_index=idx, user=turn.user, view=view,
-                    result=evaluate(turn.expect, view), layer="http",
+                    case_id=case.id,
+                    category=case.category,
+                    title=case.title,
+                    turn_index=idx,
+                    user=turn.user,
+                    view=view,
+                    result=evaluate(turn.expect, view),
+                    layer="http",
                 )
             )
     finally:
@@ -116,7 +124,8 @@ def main() -> int:
     ap.add_argument("--filter", help="only run cases in this category")
     ap.add_argument("--id", help="only run the case with this exact id")
     ap.add_argument(
-        "--include-mutating", action="store_true",
+        "--include-mutating",
+        action="store_true",
         help="include cases that write to the real sheet (default: skip)",
     )
     ap.add_argument("--out", default=str(_OUT))

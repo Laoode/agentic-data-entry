@@ -115,18 +115,26 @@ async def run_case_inprocess(
                 )
             except asyncio.TimeoutError:
                 logger.error(
-                    "case %s turn %d timed out after %.0fs", case.id, idx, TURN_TIMEOUT_S
+                    "case %s turn %d timed out after %.0fs",
+                    case.id,
+                    idx,
+                    TURN_TIMEOUT_S,
                 )
                 view = ResponseView(
-                    content="", tools_used=[], latency_ms=int(TURN_TIMEOUT_S * 1000),
+                    content="",
+                    tools_used=[],
+                    latency_ms=int(TURN_TIMEOUT_S * 1000),
                     session_id=session_id,
                     error=f"timeout after {TURN_TIMEOUT_S:.0f}s (agent hung or looping)",
                 )
             except Exception as exc:  # transport / pipeline failure
                 logger.exception("case %s turn %d crashed", case.id, idx)
                 view = ResponseView(
-                    content="", tools_used=[], latency_ms=0,
-                    session_id=session_id, error=f"{type(exc).__name__}: {exc}",
+                    content="",
+                    tools_used=[],
+                    latency_ms=0,
+                    session_id=session_id,
+                    error=f"{type(exc).__name__}: {exc}",
                 )
 
             result = evaluate(turn.expect, view)

@@ -19,7 +19,6 @@ import logging
 from typing import Any
 
 from app.exceptions import OCRError
-from app.services.extraction.agents.config import get_default_extraction
 from app.services.extraction.agents.schema import validate_and_merge
 from app.services.extraction.queue.broker import broker
 from app.services.extraction.queue.state import get_context

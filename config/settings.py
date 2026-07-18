@@ -41,8 +41,12 @@ class Settings(BaseSettings):
     # Valid values: "minimal", "low", "medium", "high" (model default = "high").
     # routing = supervisor router + team_supervisor + _emit_final_reply (classification / summarization)
     # worker  = write_agent, read_agent, sheet_agent, sql_agent (tool-augmented reasoning)
-    llm_thinking_level_routing: str = Field(default="minimal", alias="LLM_THINKING_LEVEL_ROUTING")
-    llm_thinking_level_worker: str = Field(default="minimal", alias="LLM_THINKING_LEVEL_WORKER")
+    llm_thinking_level_routing: str = Field(
+        default="minimal", alias="LLM_THINKING_LEVEL_ROUTING"
+    )
+    llm_thinking_level_worker: str = Field(
+        default="minimal", alias="LLM_THINKING_LEVEL_WORKER"
+    )
 
     # Vertex AI (when google_genai_use_vertexai=True, all Gemini calls route
     # through GCP Vertex AI instead of the Gemini Developer API. ADC is read
@@ -89,14 +93,10 @@ class Settings(BaseSettings):
 
     # Redis (hot cache + Taskiq broker + pubsub)
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
-    dedup_cache_ttl_seconds: int = Field(
-        default=86400, alias="DEDUP_CACHE_TTL_SECONDS"
-    )
+    dedup_cache_ttl_seconds: int = Field(default=86400, alias="DEDUP_CACHE_TTL_SECONDS")
 
     # MinIO (object storage)
-    minio_endpoint: str = Field(
-        default="http://127.0.0.1:9000", alias="MINIO_ENDPOINT"
-    )
+    minio_endpoint: str = Field(default="http://127.0.0.1:9000", alias="MINIO_ENDPOINT")
     minio_region: str = Field(default="us-east-1", alias="MINIO_REGION")
     minio_access_key: str = Field(default="minioadmin", alias="MINIO_ACCESS_KEY")
     minio_secret_key: str = Field(default="minioadmin", alias="MINIO_SECRET_KEY")
