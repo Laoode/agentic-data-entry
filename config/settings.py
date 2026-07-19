@@ -16,6 +16,13 @@ class Settings(BaseSettings):
     debug: bool = Field(default=True, alias="DEBUG")
     stage: str = Field(default="development", alias="STAGE")
 
+    # Auth (self-issued JWT). The dev default secret is refused when
+    # STAGE=production — see validate_production_secrets().
+    jwt_secret: str = Field(
+        default="dev-secret-change-me-before-any-deploy", alias="JWT_SECRET"
+    )
+    jwt_expires_days: int = Field(default=7, alias="JWT_EXPIRES_DAYS")
+
     # Agentic LLM provider (supervisor + sub-agents). Guardrails + KIE stay on
     # Gemini regardless. Values: "google" | "vllm" | "deepseek". See docs/MODELS.md.
     model_provider: str = Field(default="google", alias="MODEL_PROVIDER")
@@ -163,6 +170,24 @@ class Settings(BaseSettings):
         if self.model_provider.strip().lower() in ("deepseek",):
             return self.deepseek_base_url, self.deepseek_api_key
         return self.vllm_llm_endpoint, self.vllm_llm_api_key
+
+    def validate_production_secrets(self) -> None:
+        """Fail fast on insecure production configuration.
+
+        Called once at app startup (main.py lifespan), not in the model
+        validator, so tests can freely construct Settings(stage="production").
+
+        Raises:
+            ValueError: If STAGE=production still uses the dev JWT secret.
+        """
+        if (
+            self.stage == "production"
+            and self.jwt_secret == "dev-secret-change-me-before-any-deploy"
+        ):
+            raise ValueError(
+                "JWT_SECRET must be set to a strong random value when "
+                "STAGE=production (dev default refused)."
+            )
 
 
 @lru_cache

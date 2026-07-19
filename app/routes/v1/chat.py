@@ -2,9 +2,10 @@ import json
 import logging
 from typing import AsyncIterator
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
+from app.helpers.auth import get_current_user
 from app.models.chat import KlaudiaRequest, KlaudiaResponse
 
 logger = logging.getLogger(__name__)
@@ -19,13 +20,17 @@ SSE_HEADERS = {
 
 
 @router.post("/chat", response_model=KlaudiaResponse)
-async def chat(request: KlaudiaRequest, req: Request) -> KlaudiaResponse:
+async def chat(
+    request: KlaudiaRequest,
+    req: Request,
+    user_id: int = Depends(get_current_user),
+) -> KlaudiaResponse:
     """Process a chat message through the Klaudia pipeline (non-streaming)."""
     orchestrator = req.app.state.orchestrator
     return await orchestrator.process(
         messages=request.messages,
         session_id=request.session_id,
-        user_id=request.user_id,
+        user_id=user_id,
         user_name=request.user_name,
     )
 
@@ -38,7 +43,11 @@ def _format_sse(event: dict) -> str:
 
 
 @router.post("/chat/stream")
-async def chat_stream(request: KlaudiaRequest, req: Request) -> StreamingResponse:
+async def chat_stream(
+    request: KlaudiaRequest,
+    req: Request,
+    user_id: int = Depends(get_current_user),
+) -> StreamingResponse:
     """Stream the Klaudia pipeline as Server-Sent Events."""
     orchestrator = req.app.state.orchestrator
 
@@ -47,7 +56,7 @@ async def chat_stream(request: KlaudiaRequest, req: Request) -> StreamingRespons
             async for event in orchestrator.stream(
                 messages=request.messages,
                 session_id=request.session_id,
-                user_id=request.user_id,
+                user_id=user_id,
                 user_name=request.user_name,
             ):
                 if await req.is_disconnected():

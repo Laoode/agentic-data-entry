@@ -32,9 +32,24 @@ from tests.e2e.schema import Case, Turn
 
 DEFAULT_BASE_URL = "http://localhost:8000"
 CHAT_PATH = "/v1/chat"
-TEST_USER_ID = 1
 TEST_USER_NAME = "QARunner"
+E2E_USERNAME = "e2e-runner"
+E2E_PASSWORD = "e2e-runner-local-password"
 _OUT = Path(__file__).resolve().parent / "outputs" / "results_http.json"
+
+
+def _authenticate(client: httpx.Client, base_url: str) -> str:
+    """Login (or first-run register) the e2e user; return a bearer token."""
+    creds = {"username": E2E_USERNAME, "password": E2E_PASSWORD}
+    resp = client.post(f"{base_url}/v1/auth/login", json=creds, timeout=30.0)
+    if resp.status_code == 401:
+        resp = client.post(
+            f"{base_url}/v1/auth/register",
+            json={**creds, "email": "e2e-runner@local.test"},
+            timeout=30.0,
+        )
+    resp.raise_for_status()
+    return resp.json()["access_token"]
 
 
 def _encode_attachments(turn: Turn) -> list[dict]:
@@ -63,7 +78,6 @@ def _post_turn(
             }
         ],
         "session_id": session_id,
-        "user_id": TEST_USER_ID,
         "user_name": TEST_USER_NAME,
     }
     start = time.time()
@@ -146,6 +160,8 @@ def main() -> int:
     print(f"Running {len(cases)} cases against {args.base_url}{CHAT_PATH}")
     report = Report()
     with httpx.Client() as client:
+        token = _authenticate(client, args.base_url)
+        client.headers["Authorization"] = f"Bearer {token}"
         for c in cases:
             print(f"  → {c.id} ({c.category})")
             for rec in run_case_http(client, args.base_url, c):

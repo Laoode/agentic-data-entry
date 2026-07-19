@@ -168,6 +168,32 @@ class AppDBClient:
         await self.conn.commit()
         return cursor.lastrowid or 0
 
+    async def get_user_by_username(self, username: str) -> dict[str, Any] | None:
+        return await self.fetchone(
+            "SELECT user_id, username, email, password_hash FROM user "
+            "WHERE username = ?",
+            (username,),
+        )
+
+    async def create_user(self, username: str, email: str, password_hash: str) -> int:
+        return await self.execute(
+            "INSERT INTO user (username, email, password_hash) VALUES (?, ?, ?)",
+            (username, email, password_hash),
+        )
+
+    async def update_last_login(self, user_id: int) -> None:
+        await self.execute(
+            "UPDATE user SET last_login = CURRENT_TIMESTAMP WHERE user_id = ?",
+            (user_id,),
+        )
+
+    async def get_session_owner(self, session_id: int) -> int | None:
+        row = await self.fetchone(
+            "SELECT user_id FROM session WHERE session_id = ?",
+            (session_id,),
+        )
+        return row["user_id"] if row else None
+
     async def create_session(
         self, user_id: int, session_name: str | None = None
     ) -> int:

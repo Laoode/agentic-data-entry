@@ -2,9 +2,10 @@ import json
 import logging
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
+from app.helpers.auth import get_current_user
 from klaudia.interfaces.tool_registry import MCPToolRegistry
 
 logger = logging.getLogger(__name__)
@@ -32,7 +33,10 @@ async def _invoke(tool, args: dict[str, Any]) -> Any:
 
 
 @router.get("/info")
-async def get_spreadsheet_info(request: Request) -> JSONResponse:
+async def get_spreadsheet_info(
+    request: Request,
+    _user_id: int = Depends(get_current_user),
+) -> JSONResponse:
     """
     Return spreadsheet title and all sheet tab names.
     Uses the server's default SHEET_ID — no params required.
@@ -54,6 +58,7 @@ async def get_sheet_data(
     request: Request,
     sheet: str = Query(..., description="Sheet tab name, e.g. 'Sheet1'"),
     range: Optional[str] = Query(None, description="A1 notation range, e.g. 'A1:F50'"),
+    _user_id: int = Depends(get_current_user),
 ) -> JSONResponse:
     """
     Return cell values from a sheet tab.

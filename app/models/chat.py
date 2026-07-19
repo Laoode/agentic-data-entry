@@ -39,7 +39,7 @@ class KlaudiaMessage(BaseModel):
 class KlaudiaRequest(BaseModel):
     messages: list[KlaudiaMessage]
     session_id: Optional[int] = None  # None = create new session
-    user_id: int = 1  # hardcoded for dev
+    # Identity comes from the Bearer token (app.helpers.auth), never the body.
     user_name: str = "User"
 
 

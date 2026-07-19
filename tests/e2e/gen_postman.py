@@ -65,7 +65,6 @@ def _turn_request(case: Case, turn: Turn, idx: int, reset_session: bool) -> dict
         ],
         # First turn of a case starts fresh; later turns reuse the captured id.
         "session_id": None if reset_session else "{{session_id}}",
-        "user_id": 1,
         "user_name": "QARunner",
     }
     raw = json.dumps(body, ensure_ascii=False, indent=2)
@@ -114,14 +113,21 @@ def build_collection(cases: list[Case]) -> dict:
             "name": "Klaudia Whitebox E2E",
             "description": (
                 "Auto-generated from tests/e2e/dataset. One POST /v1/chat per turn, "
-                "grouped by category. Set {{base_url}} (e.g. http://localhost:8000). "
+                "grouped by category. Set {{base_url}} (e.g. http://localhost:8000) "
+                "and {{access_token}} (from POST /v1/auth/login or /register). "
                 "{{session_id}} is captured automatically for multi-turn cases."
             ),
             "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
         },
+        "auth": {
+            "type": "bearer",
+            "bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}],
+        },
         "variable": [
             {"key": "base_url", "value": "http://localhost:8000"},
             {"key": "session_id", "value": ""},
+            # Fill via POST {{base_url}}/v1/auth/login before running.
+            {"key": "access_token", "value": ""},
         ],
         "item": list(folders.values()),
     }

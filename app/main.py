@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    settings.validate_production_secrets()
     logger.info(f"Starting {settings.service_name} v{settings.version}")
 
     container = await KlaudiaContainer.create(settings)
