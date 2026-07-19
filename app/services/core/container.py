@@ -78,19 +78,43 @@ def _build_mcp_registries(
             cwd=str(_PROJECT_ROOT / "mcp-sqlite"),
             env=sqlite_env,
         )
-        gsheets_reg = MCPToolRegistry.from_stdio(
-            "mcp-gsheets",
-            command=python_bin,
-            args=["main.py", "--transport", "stdio"],
-            cwd=str(_PROJECT_ROOT / "mcp-gsheets"),
-            env=dict(os.environ),
-        )
-        return sqlite_reg, gsheets_reg
+        # The sheets registry keeps its wiring name regardless of backend:
+        # mcp-ledger exposes the identical tool surface, so downstream
+        # consumers (agents, routes, caches) never know which one runs.
+        if settings.sheets_backend == "ledger":
+            if not settings.database_url:
+                raise ValueError(
+                    "SHEETS_BACKEND=ledger requires DATABASE_URL (Postgres DSN)"
+                )
+            sheets_reg = MCPToolRegistry.from_stdio(
+                "mcp-ledger",
+                command=python_bin,
+                args=["main.py", "--transport", "stdio"],
+                cwd=str(_PROJECT_ROOT / "mcp-ledger"),
+                env=dict(os.environ),
+            )
+        else:
+            sheets_reg = MCPToolRegistry.from_stdio(
+                "mcp-gsheets",
+                command=python_bin,
+                args=["main.py", "--transport", "stdio"],
+                cwd=str(_PROJECT_ROOT / "mcp-gsheets"),
+                env=dict(os.environ),
+            )
+        return sqlite_reg, sheets_reg
 
     if transport == "sse":
+        sheets_url = (
+            "http://localhost:8003/sse"
+            if settings.sheets_backend == "ledger"
+            else "http://localhost:8002/sse"
+        )
+        sheets_name = (
+            "mcp-ledger" if settings.sheets_backend == "ledger" else "mcp-gsheets"
+        )
         return (
             MCPToolRegistry("mcp-sqlite", "http://localhost:8001/sse"),
-            MCPToolRegistry("mcp-gsheets", "http://localhost:8002/sse"),
+            MCPToolRegistry(sheets_name, sheets_url),
         )
 
     raise ValueError(

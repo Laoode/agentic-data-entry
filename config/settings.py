@@ -159,6 +159,10 @@ class Settings(BaseSettings):
     # "sse" connects to already-running mcp-sqlite/mcp-gsheets on 8001/8002.
     mcp_transport: str = Field(default="stdio", alias="MCP_TRANSPORT")
 
+    # Sheets tool backend: "gsheets" (Google Sheets API) or "ledger"
+    # (Postgres-backed mcp-ledger, identical tool surface; needs DATABASE_URL).
+    sheets_backend: str = Field(default="gsheets", alias="SHEETS_BACKEND")
+
     # Langfuse Observability
     langfuse_public_key: str = Field(default="", alias="LANGFUSE_PUBLIC_KEY")
     langfuse_secret_key: str = Field(default="", alias="LANGFUSE_SECRET_KEY")
