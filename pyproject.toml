@@ -23,6 +23,7 @@ dependencies = [
     "klaudia",
     "mcp-sqlite",
     "mcp-gsheets",
+    "mcp-ledger",
     "langfuse>=4.5.0",
     "langchain-google-vertexai>=3.2.3",
     "blake3>=1.0.0",
@@ -42,12 +43,14 @@ dependencies = [
 klaudia = { workspace = true }
 mcp-sqlite = { workspace = true }
 mcp-gsheets = { workspace = true }
+mcp-ledger = { workspace = true }
 
 [tool.uv.workspace]
 members = [
     "mcp-gsheets",
     "klaudia",
     "mcp-sqlite",
+    "mcp-ledger",
 ]
 
 [dependency-groups]

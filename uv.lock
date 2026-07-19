@@ -13,6 +13,7 @@ members = [
     "agentic-data-entry",
     "klaudia",
     "mcp-gsheets",
+    "mcp-ledger",
     "mcp-sqlite",
 ]
 
@@ -36,6 +37,7 @@ dependencies = [
     { name = "langchain-google-vertexai" },
     { name = "langfuse" },
     { name = "mcp-gsheets" },
+    { name = "mcp-ledger" },
     { name = "mcp-sqlite" },
     { name = "openai" },
     { name = "pillow" },
@@ -78,6 +80,7 @@ requires-dist = [
     { name = "langchain-google-vertexai", specifier = ">=3.2.3" },
     { name = "langfuse", specifier = ">=4.5.0" },
     { name = "mcp-gsheets", editable = "mcp-gsheets" },
+    { name = "mcp-ledger", editable = "mcp-ledger" },
     { name = "mcp-sqlite", editable = "mcp-sqlite" },
     { name = "openai", specifier = ">=1.54.0" },
     { name = "pillow", specifier = ">=10.0.0" },
@@ -2084,6 +2087,23 @@ requires-dist = [
     { name = "google-auth-oauthlib", specifier = ">=1.2.0" },
     { name = "httpx-sse", specifier = ">=0.4.0" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.5.0" },
+    { name = "python-dotenv", specifier = ">=1.0.0" },
+]
+
+[[package]]
+name = "mcp-ledger"
+version = "0.1.0"
+source = { editable = "mcp-ledger" }
+dependencies = [
+    { name = "asyncpg" },
+    { name = "fastmcp" },
+    { name = "python-dotenv" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "asyncpg", specifier = ">=0.30.0" },
+    { name = "fastmcp", specifier = ">=0.5.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
 ]
 
