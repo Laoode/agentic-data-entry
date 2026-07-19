@@ -3,9 +3,7 @@ from typing import Any
 from app.infra.db_client import DBClient
 
 
-async def list_pages(
-    db: DBClient, metadata_file_id: int
-) -> list[dict[str, Any]]:
+async def list_pages(db: DBClient, metadata_file_id: int) -> list[dict[str, Any]]:
     return await db.fetchall(
         "SELECT * FROM pages WHERE metadata_file_id = ? ORDER BY page",
         (metadata_file_id,),
@@ -56,6 +54,4 @@ async def update_page(
     if not sets:
         return
     params.append(page_id)
-    await db.execute(
-        f"UPDATE pages SET {', '.join(sets)} WHERE id = ?", tuple(params)
-    )
+    await db.execute(f"UPDATE pages SET {', '.join(sets)} WHERE id = ?", tuple(params))

@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from mcp.server.fastmcp import Context, FastMCP
 
 from app.infra.db_client import DBClient
+from app.infra.db_client_pg import build_db_client
 from app.tools import (
     create_document,
     create_page,
@@ -29,14 +30,14 @@ load_dotenv()
 
 @asynccontextmanager
 async def sqlite_lifespan(server: FastMCP) -> AsyncIterator[DBClient]:
-    db = DBClient()
+    db = build_db_client()
     await db.connect()
-    logger.info("SQLite MCP server ready")
+    logger.info(f"MCP DB server ready (backend={type(db).__name__})")
     try:
         yield db
     finally:
         await db.close()
-        logger.info("SQLite MCP server shut down")
+        logger.info("MCP DB server shut down")
 
 
 HOST = os.environ.get("FASTMCP_HOST", "0.0.0.0")
@@ -114,7 +115,9 @@ async def tool_create_document(
         JSON with the new document ID.
     """
     db: DBClient = ctx.request_context.lifespan_context
-    doc_id = await create_document(db, session_id, user_id, file_type, file_name, total_pages)
+    doc_id = await create_document(
+        db, session_id, user_id, file_type, file_name, total_pages
+    )
     return json.dumps({"id": doc_id})
 
 
@@ -293,7 +296,9 @@ def main() -> None:
         if arg == "--transport" and i + 1 < len(sys.argv):
             transport = sys.argv[i + 1]
             break
-    logger.info(f"Starting MCP SQLite server on {HOST}:{PORT} with {transport} transport")
+    logger.info(
+        f"Starting MCP SQLite server on {HOST}:{PORT} with {transport} transport"
+    )
     mcp.run(transport=transport)
 
 

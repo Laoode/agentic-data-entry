@@ -27,9 +27,7 @@ async def save_extraction(
     )
 
 
-async def get_session_files(
-    db: DBClient, session_id: int
-) -> list[dict[str, Any]]:
+async def get_session_files(db: DBClient, session_id: int) -> list[dict[str, Any]]:
     """Get all files with their page/extraction summary for a session."""
     files = await db.fetchall(
         "SELECT * FROM metadata_file WHERE session_id = ? ORDER BY created_at",

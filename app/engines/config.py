@@ -5,6 +5,11 @@ from pathlib import Path
 DB_PATH = os.getenv("SQLITE_DB", "app_dev.db")
 
 
+def get_database_url() -> str:
+    """Postgres DSN; empty string means use SQLite (DB_PATH)."""
+    return os.getenv("DATABASE_URL", "")
+
+
 def get_db_path() -> str:
     """Resolve absolute path for the SQLite database."""
     path = Path(DB_PATH)

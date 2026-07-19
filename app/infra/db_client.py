@@ -110,7 +110,9 @@ class DBClient:
         await self.conn.commit()
         return cursor.lastrowid or 0
 
-    async def execute_returning(self, sql: str, params: tuple = ()) -> dict[str, Any] | None:
+    async def execute_returning(
+        self, sql: str, params: tuple = ()
+    ) -> dict[str, Any] | None:
         cursor = await self.conn.execute(sql, params)
         await self.conn.commit()
         row = await cursor.fetchone()

@@ -4,14 +4,10 @@ from app.infra.db_client import DBClient
 
 
 async def get_document(db: DBClient, document_id: int) -> dict[str, Any] | None:
-    return await db.fetchone(
-        "SELECT * FROM metadata_file WHERE id = ?", (document_id,)
-    )
+    return await db.fetchone("SELECT * FROM metadata_file WHERE id = ?", (document_id,))
 
 
-async def list_documents(
-    db: DBClient, session_id: int
-) -> list[dict[str, Any]]:
+async def list_documents(db: DBClient, session_id: int) -> list[dict[str, Any]]:
     return await db.fetchall(
         "SELECT * FROM metadata_file WHERE session_id = ? ORDER BY created_at",
         (session_id,),
