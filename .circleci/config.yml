@@ -10,6 +10,11 @@ executors:
       - image: cimg/redis:7.2
       - image: minio/minio:latest
         command: server /data
+      - image: cimg/postgres:16.4
+        environment:
+          POSTGRES_USER: klaudia
+          POSTGRES_PASSWORD: klaudia
+          POSTGRES_DB: klaudia
 
 commands:
   install-deps:
@@ -77,11 +82,12 @@ jobs:
           command: git submodule update --init --recursive
       - install-deps
       - run:
-          name: Wait for Redis and MinIO
+          name: Wait for Redis, MinIO, and Postgres
           command: |
             for i in $(seq 1 30); do
               if curl -sf http://127.0.0.1:9000/minio/health/live > /dev/null \
-                 && (echo PING | nc -w 1 127.0.0.1 6379 | grep -q PONG); then
+                 && (echo PING | nc -w 1 127.0.0.1 6379 | grep -q PONG) \
+                 && nc -z 127.0.0.1 5432; then
                 echo "services up"; exit 0
               fi
               sleep 1
@@ -93,6 +99,7 @@ jobs:
             uv run pytest
             tests/integration/extraction/test_ingest_pipeline.py
             tests/integration/extraction/test_async_pipeline.py
+            tests/integration/database
             -q --junitxml=test-results/integration.xml
       - store_test_results:
           path: test-results

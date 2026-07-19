@@ -103,6 +103,10 @@ class Settings(BaseSettings):
 
     # Database
     sqlite_db: str = Field(default="app_dev.db", alias="SQLITE_DB")
+    # Postgres DSN (postgresql://user:pass@host:5432/db). When set, the app
+    # data layer uses PgDBClient instead of SQLite. Leave empty until the MCP
+    # SQL-tool server is ported too — see db_client_pg.py module docstring.
+    database_url: str = Field(default="", alias="DATABASE_URL")
 
     # Redis (hot cache + Taskiq broker + pubsub)
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")

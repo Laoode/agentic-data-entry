@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from taskiq import TaskiqEvents
 
 from app.services.extraction.infra.db_client import AppDBClient
+from app.services.extraction.infra.db_client_pg import build_db_client
 from app.services.extraction.infra.dedup_cache import DedupCache
 from app.services.extraction.infra.object_store import MinIOClient
 from app.services.extraction.infra.kie_client import KIEClient
@@ -47,7 +48,7 @@ def get_context() -> WorkerContext:
 async def _startup(_state) -> None:
     global _ctx
     settings = get_settings()
-    db = AppDBClient(settings)
+    db = build_db_client(settings)
     await db.connect()
     cache = DedupCache(settings)
     await cache.connect()

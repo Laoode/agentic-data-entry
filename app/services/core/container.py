@@ -8,6 +8,7 @@ from config.settings import Settings
 from app.services.core.llm_client import LLMClient
 from app.services.core.observability import LangfuseService
 from app.services.extraction.infra.db_client import AppDBClient
+from app.services.extraction.infra.db_client_pg import build_db_client
 from app.services.extraction.infra.dedup_cache import DedupCache
 from app.services.extraction.infra.kie_client import KIEClient
 from app.services.extraction.infra.object_store import MinIOClient
@@ -132,7 +133,7 @@ class KlaudiaContainer:
         container.kie_client = KIEClient(settings, langfuse=container.langfuse)
 
         # Database
-        container.db_client = AppDBClient(settings)
+        container.db_client = build_db_client(settings)
         await container.db_client.connect()
 
         # Dedup cache (Redis) — fail-soft so dev can run without Redis

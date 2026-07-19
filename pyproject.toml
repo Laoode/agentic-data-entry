@@ -35,6 +35,7 @@ dependencies = [
     "pyjwt>=2.13.0",
     "bcrypt>=5.0.0",
     "slowapi>=0.1.10",
+    "asyncpg>=0.31.0",
 ]
 
 [tool.uv.sources]
