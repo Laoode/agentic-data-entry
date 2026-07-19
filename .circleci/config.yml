@@ -100,6 +100,7 @@ jobs:
             tests/integration/extraction/test_ingest_pipeline.py
             tests/integration/extraction/test_async_pipeline.py
             tests/integration/database
+            tests/integration/mcp-sqlite
             -q --junitxml=test-results/integration.xml
       - store_test_results:
           path: test-results
