@@ -2,10 +2,11 @@ import json
 import logging
 from typing import AsyncIterator
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import StreamingResponse
 
 from app.helpers.auth import get_current_user
+from app.helpers.ratelimit import chat_limit, limiter
 from app.models.chat import KlaudiaRequest, KlaudiaResponse
 
 logger = logging.getLogger(__name__)
@@ -20,18 +21,20 @@ SSE_HEADERS = {
 
 
 @router.post("/chat", response_model=KlaudiaResponse)
+@limiter.limit(chat_limit)
 async def chat(
-    request: KlaudiaRequest,
-    req: Request,
+    body: KlaudiaRequest,
+    request: Request,
+    response: Response,
     user_id: int = Depends(get_current_user),
 ) -> KlaudiaResponse:
     """Process a chat message through the Klaudia pipeline (non-streaming)."""
-    orchestrator = req.app.state.orchestrator
+    orchestrator = request.app.state.orchestrator
     return await orchestrator.process(
-        messages=request.messages,
-        session_id=request.session_id,
+        messages=body.messages,
+        session_id=body.session_id,
         user_id=user_id,
-        user_name=request.user_name,
+        user_name=body.user_name,
     )
 
 
@@ -43,23 +46,24 @@ def _format_sse(event: dict) -> str:
 
 
 @router.post("/chat/stream")
+@limiter.limit(chat_limit)
 async def chat_stream(
-    request: KlaudiaRequest,
-    req: Request,
+    body: KlaudiaRequest,
+    request: Request,
     user_id: int = Depends(get_current_user),
 ) -> StreamingResponse:
     """Stream the Klaudia pipeline as Server-Sent Events."""
-    orchestrator = req.app.state.orchestrator
+    orchestrator = request.app.state.orchestrator
 
     async def event_source() -> AsyncIterator[str]:
         try:
             async for event in orchestrator.stream(
-                messages=request.messages,
-                session_id=request.session_id,
+                messages=body.messages,
+                session_id=body.session_id,
                 user_id=user_id,
-                user_name=request.user_name,
+                user_name=body.user_name,
             ):
-                if await req.is_disconnected():
+                if await request.is_disconnected():
                     logger.info("Client disconnected; stopping stream")
                     return
                 yield _format_sse(event)

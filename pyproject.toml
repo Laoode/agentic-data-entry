@@ -34,6 +34,7 @@ dependencies = [
     "taskiq-redis>=1.0.0",
     "pyjwt>=2.13.0",
     "bcrypt>=5.0.0",
+    "slowapi>=0.1.10",
 ]
 
 [tool.uv.sources]

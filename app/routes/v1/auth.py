@@ -3,9 +3,10 @@
 import datetime
 import logging
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, EmailStr, Field
 
+from app.helpers.ratelimit import auth_limit, limiter
 from app.services.auth.passwords import hash_password, verify_password
 from app.services.auth.tokens import create_access_token
 from config.settings import get_settings
@@ -45,9 +46,12 @@ def _issue_token(user_id: int) -> str:
 
 
 @router.post("/register", response_model=TokenResponse, status_code=201)
-async def register(body: RegisterRequest, req: Request) -> TokenResponse:
+@limiter.limit(auth_limit)
+async def register(
+    body: RegisterRequest, request: Request, response: Response
+) -> TokenResponse:
     """Create a user account and return an access token."""
-    db = req.app.state.container.db_client
+    db = request.app.state.container.db_client
     if await db.get_user_by_username(body.username) is not None:
         raise HTTPException(status_code=409, detail="Username already taken")
     try:
@@ -69,9 +73,12 @@ async def register(body: RegisterRequest, req: Request) -> TokenResponse:
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(body: LoginRequest, req: Request) -> TokenResponse:
+@limiter.limit(auth_limit)
+async def login(
+    body: LoginRequest, request: Request, response: Response
+) -> TokenResponse:
     """Verify credentials and return an access token."""
-    db = req.app.state.container.db_client
+    db = request.app.state.container.db_client
     user = await db.get_user_by_username(body.username)
     if user is None or not verify_password(body.password, user["password_hash"]):
         # Same error for unknown user and wrong password (no enumeration).

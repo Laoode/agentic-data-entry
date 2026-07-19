@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.helpers.ratelimit import attach_rate_limiter
 from app.routes import v1_router
 from app.services.core.container import KlaudiaContainer
 from app.services.core.orchestrator import KlaudiaOrchestrator
@@ -39,4 +40,5 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+attach_rate_limiter(app)
 app.include_router(v1_router)

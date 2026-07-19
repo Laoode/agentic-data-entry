@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     )
     jwt_expires_days: int = Field(default=7, alias="JWT_EXPIRES_DAYS")
 
+    # Edge rate limits (slowapi syntax, e.g. "10/minute"). Auth is keyed by
+    # client IP, chat by authenticated user id. Per-node in-memory windows.
+    rate_limit_enabled: bool = Field(default=True, alias="RATE_LIMIT_ENABLED")
+    rate_limit_auth: str = Field(default="10/minute", alias="RATE_LIMIT_AUTH")
+    rate_limit_chat: str = Field(default="30/minute", alias="RATE_LIMIT_CHAT")
+
     # Agentic LLM provider (supervisor + sub-agents). Guardrails + KIE stay on
     # Gemini regardless. Values: "google" | "vllm" | "deepseek". See docs/MODELS.md.
     model_provider: str = Field(default="google", alias="MODEL_PROVIDER")
