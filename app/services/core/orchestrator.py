@@ -709,11 +709,16 @@ class KlaudiaOrchestrator:
         if result.passed:
             return content
 
+        # Reply excerpt is logged because attributing a flag to its turn from
+        # the results file alone proved unreliable (snippets are truncated),
+        # and an unattributable flag cannot be triaged as true or false.
         logger.warning(
-            "Numeric verification: ungrounded amounts %s (mode=%s, tool_calls=%d)",
+            "Numeric verification: ungrounded amounts %s (mode=%s, tool_calls=%d) "
+            "reply=%r",
             result.ungrounded,
             mode,
             len(tool_trace),
+            content[:160],
         )
         if self._langfuse is not None:
             try:
