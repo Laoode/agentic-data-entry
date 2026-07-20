@@ -119,6 +119,33 @@ def _titles(raw: str) -> list[str]:
     return [t for o in _iter_json_objects(raw) if (t := o.get("title"))]
 
 
+def _norm_cell(value: Any) -> str:
+    """Comparable form of one cell.
+
+    Amounts round-trip in different shapes depending on backend and locale
+    ("2.164.500" written, 2164500 read back), so digits are compared
+    separator-free. Anything non-numeric compares case-insensitively.
+    """
+    text = "" if value is None else str(value).strip()
+    digits = text.replace(".", "").replace(",", "").replace(" ", "")
+    if digits.isdigit():
+        return digits.lstrip("0") or "0"
+    return text.lower()
+
+
+def _norm_grid(grid: list[list[Any]] | None) -> tuple:
+    """Comparable form of a grid, ignoring trailing empty cells and rows."""
+    rows: list[tuple] = []
+    for row in grid or []:
+        cells = [_norm_cell(c) for c in row]
+        while cells and cells[-1] == "":
+            cells.pop()
+        rows.append(tuple(cells))
+    while rows and not any(rows[-1]):
+        rows.pop()
+    return tuple(rows)
+
+
 class SheetGuard:
     """Restore guarded sheets + drop stray tabs, from the TABLE.md template.
 
@@ -180,14 +207,60 @@ class SheetGuard:
         await self._drop_extra_sheets()
 
     async def restore(self) -> None:
+        """Repair every baseline tab that drifted from TABLE.md.
+
+        Deliberately not limited to GUARDED_SHEETS: a destructive case can
+        empty ANY tab (H03 asked to "delete all sheet data" cleared all
+        seven), and rewriting only Jun + Rangkuman Total left the rest
+        empty for every later case — which is how MT02/R04/R05 ended up
+        asserting against blank sheets. Reads first and rewrites only what
+        actually differs, so the common no-drift path stays cheap.
+        """
         # 1. Drop any tab TABLE.md does not define (copy/new/rename leftovers).
         await self._drop_extra_sheets()
 
-        # 2. Rewrite guarded sheets to the template contents (recreating any
-        # that a mutating case deleted).
+        # 2. Repair missing or drifted baseline tabs.
         existing = set(await self._list_titles())
-        for sheet in GUARDED_SHEETS:
-            await self._write_sheet(sheet, create=sheet not in existing)
+        current = await self._read_grids([n for n in self._names if n in existing])
+        for name in self._names:
+            if name not in existing:
+                await self._write_sheet(name, create=True)
+                continue
+            if _norm_grid(current.get(name)) != _norm_grid(self._data.get(name)):
+                logger.info("SheetGuard: repairing drifted sheet %r", name)
+                await self._write_sheet(name, create=False)
+
+    async def _read_grids(self, titles: list[str]) -> dict[str, list[list[Any]]]:
+        """Read several tabs at once, falling back to per-sheet reads."""
+        if not titles:
+            return {}
+        grids: dict[str, list[list[Any]]] = {}
+        multi = _tool(self._reg, "tool_get_multiple_sheet_data")
+        if multi is not None:
+            try:
+                raw = await multi.ainvoke(
+                    {"queries": [self._args(sheet=t) for t in titles]}
+                )
+                for obj in _iter_json_objects(raw):
+                    title = obj.get("sheet")
+                    if title is not None and "data" in obj:
+                        grids[title] = obj["data"] or []
+                if grids:
+                    return grids
+            except Exception as exc:
+                logger.warning("SheetGuard: multi-read failed: %s", exc)
+
+        reader = _tool(self._reg, "tool_get_sheet_data")
+        if reader is None:
+            return grids
+        for title in titles:
+            try:
+                raw = await reader.ainvoke(self._args(sheet=title))
+                obj = next(_iter_json_objects(raw), {})
+                grids[title] = obj.get("values") or []
+            except Exception as exc:
+                logger.warning("SheetGuard: read of %r failed: %s", title, exc)
+        return grids
 
     async def _write_sheet(self, name: str, create: bool) -> None:
         """Create (or clear) one tab, then write its TABLE.md rows."""
