@@ -34,13 +34,13 @@ echo -e "${YELLOW}Waiting for MinIO to start...${NC}"
 sleep 2
 
 if [ "$MCP_TRANSPORT" = "sse" ]; then
-  # Start MCP-SQLite
-  echo -e "${YELLOW}Starting MCP-SQLite on port $MCP_SQLITE_PORT...${NC}"
-  cd "$PROJECT_DIR/mcp-sqlite"
+  # Start MCP-Archive
+  echo -e "${YELLOW}Starting MCP-Archive on port $MCP_SQLITE_PORT...${NC}"
+  cd "$PROJECT_DIR/mcp-archive"
   FASTMCP_PORT=$MCP_SQLITE_PORT SQLITE_DB="$PROJECT_DIR/app_dev.db" \
-    "$PYTHON" main.py --transport sse > "$PROJECT_DIR/logs/mcp-sqlite.log" 2>&1 &
-  echo $! > "$PROJECT_DIR/logs/mcp-sqlite.pid"
-  echo -e "${GREEN}MCP-SQLite started (PID: $(cat "$PROJECT_DIR/logs/mcp-sqlite.pid"))${NC}"
+    "$PYTHON" main.py --transport sse > "$PROJECT_DIR/logs/mcp-archive.log" 2>&1 &
+  echo $! > "$PROJECT_DIR/logs/mcp-archive.pid"
+  echo -e "${GREEN}MCP-Archive started (PID: $(cat "$PROJECT_DIR/logs/mcp-archive.pid"))${NC}"
 
   # Start MCP-GSheets
   echo -e "${YELLOW}Starting MCP-GSheets on port $MCP_GSHEETS_PORT...${NC}"
@@ -70,6 +70,6 @@ echo -e "  FastAPI:     http://localhost:$FASTAPI_PORT"
 echo -e "  MinIO API:   http://localhost:$MINIO_API_PORT"
 echo -e "  MinIO UI:    http://localhost:$MINIO_CONSOLE_PORT"
 if [ "$MCP_TRANSPORT" = "sse" ]; then
-  echo -e "  MCP-SQLite:  http://localhost:$MCP_SQLITE_PORT"
+  echo -e "  MCP-Archive: http://localhost:$MCP_SQLITE_PORT"
   echo -e "  MCP-GSheets: http://localhost:$MCP_GSHEETS_PORT"
 fi

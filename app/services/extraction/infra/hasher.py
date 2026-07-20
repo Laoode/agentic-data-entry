@@ -1,7 +1,7 @@
 """BLAKE3 hashing for content-addressed dedup.
 
 Hashes are an internal identifier. They never appear in agent prompts or in
-tables exposed via MCP-SQLite tools. Storage layer uses them as keys; the
+tables exposed via MCP-Archive tools. Storage layer uses them as keys; the
 LLM only ever sees `metadata_file.id` / `pages.id`.
 """
 

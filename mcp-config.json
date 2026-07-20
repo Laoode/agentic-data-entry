@@ -4,7 +4,7 @@
             "transport": "sse",
             "url": "http://localhost:8002/sse"
         },
-        "mcp-sqlite": {
+        "mcp-archive": {
             "transport": "sse",
             "url": "http://localhost:8001/sse"
         }

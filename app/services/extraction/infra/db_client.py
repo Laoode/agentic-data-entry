@@ -9,11 +9,11 @@ from config.settings import Settings
 logger = logging.getLogger(__name__)
 
 
-# Public schema mirrors mcp-sqlite/app/infra/db_client.py. Both processes
+# Public schema mirrors mcp-archive/app/infra/db_client.py. Both processes
 # create the same tables idempotently (`CREATE TABLE IF NOT EXISTS`); whichever
 # connects first wins. We duplicate the DDL here so:
 #   - Tests with a fresh temp DB don't need an MCP server running.
-#   - The app boots even if mcp-sqlite hasn't started yet (race-free startup).
+#   - The app boots even if mcp-archive hasn't started yet (race-free startup).
 _PUBLIC_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS user (
     user_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -75,7 +75,7 @@ VALUES (1, 'dev', 'dev@local', 'not-a-real-hash');
 """
 
 
-# Private app-side tables for blob storage + dedup. NOT exposed via MCP-SQLite
+# Private app-side tables for blob storage + dedup. NOT exposed via MCP-Archive
 # tools — the LLM only sees metadata_file/pages. Hash + minio_key never reach
 # the agent context.
 _PRIVATE_SCHEMA_SQL = """
@@ -134,7 +134,7 @@ class AppDBClient:
     async def connect(self) -> None:
         self._conn = await aiosqlite.connect(self._db_path)
         self._conn.row_factory = aiosqlite.Row
-        # WAL improves concurrent read while mcp-sqlite subprocess writes.
+        # WAL improves concurrent read while mcp-archive subprocess writes.
         await self._conn.execute("PRAGMA journal_mode=WAL")
         await self._conn.execute("PRAGMA foreign_keys=ON")
         await self._conn.executescript(_PUBLIC_SCHEMA_SQL)

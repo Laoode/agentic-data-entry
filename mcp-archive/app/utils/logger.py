@@ -4,7 +4,7 @@ import sys
 
 
 def setup_logger(
-    name: str = "mcp-sqlite",
+    name: str = "mcp-archive",
     level: str | None = None,
 ) -> logging.Logger:
     log_level = level or os.environ.get("LOG_LEVEL", "INFO")

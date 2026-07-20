@@ -156,7 +156,7 @@ class Settings(BaseSettings):
     )
 
     # MCP transport: "stdio" spawns servers as subprocesses (no idle SSE drop);
-    # "sse" connects to already-running mcp-sqlite/mcp-gsheets on 8001/8002.
+    # "sse" connects to already-running mcp-archive/mcp-gsheets on 8001/8002.
     mcp_transport: str = Field(default="stdio", alias="MCP_TRANSPORT")
 
     # Sheets tool backend: "gsheets" (Google Sheets API) or "ledger"

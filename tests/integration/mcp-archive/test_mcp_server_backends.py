@@ -1,6 +1,6 @@
 """End-to-end MCP server test across both DB backends.
 
-Spawns the real mcp-sqlite server as a stdio subprocess (exactly how the
+Spawns the real mcp-archive server as a stdio subprocess (exactly how the
 app container runs it) and drives document/page/extraction tools through
 an MCP ClientSession. Parametrized over sqlite (temp file) and postgres
 (compose instance; skipped when unreachable).
@@ -17,7 +17,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
-_SERVER_DIR = _PROJECT_ROOT / "mcp-sqlite"
+_SERVER_DIR = _PROJECT_ROOT / "mcp-archive"
 _PG_URL = os.environ.get(
     "PG_TEST_URL", "postgresql://klaudia:klaudia@localhost:5432/klaudia"
 )

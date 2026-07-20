@@ -32,7 +32,7 @@ def _ensure_gcp_credentials(settings: Settings) -> None:
 
     The Google SDKs (google-genai, google-auth used by langchain-google-vertexai)
     read this env var directly. A relative path breaks for MCP subprocesses that
-    chdir into mcp-sqlite/ or mcp-gsheets/. Resolving once at startup keeps the
+    chdir into mcp-archive/ or mcp-gsheets/. Resolving once at startup keeps the
     file discoverable regardless of CWD and lets subprocesses inherit it.
     """
     raw = settings.google_application_credentials
@@ -68,16 +68,16 @@ def _build_mcp_registries(
         sqlite_db_abs = str((_PROJECT_ROOT / settings.sqlite_db).resolve())
         # Subprocess inherits the FastAPI env so that LLM/OCR/etc. credentials
         # configured for the parent are also visible to the MCP server.
-        # We override SQLITE_DB with an absolute path because mcp-sqlite's cwd
+        # We override SQLITE_DB with an absolute path because mcp-archive's cwd
         # is its own directory, and a relative "app_dev.db" would resolve to
         # the wrong place there.
         sqlite_env = {**os.environ, "SQLITE_DB": sqlite_db_abs}
 
         sqlite_reg = MCPToolRegistry.from_stdio(
-            "mcp-sqlite",
+            "mcp-archive",
             command=python_bin,
             args=["main.py", "--transport", "stdio"],
-            cwd=str(_PROJECT_ROOT / "mcp-sqlite"),
+            cwd=str(_PROJECT_ROOT / "mcp-archive"),
             env=sqlite_env,
         )
         # The sheets registry keeps its wiring name regardless of backend:
@@ -115,7 +115,7 @@ def _build_mcp_registries(
             "mcp-ledger" if settings.sheets_backend == "ledger" else "mcp-gsheets"
         )
         return (
-            MCPToolRegistry("mcp-sqlite", "http://localhost:8001/sse"),
+            MCPToolRegistry("mcp-archive", "http://localhost:8001/sse"),
             MCPToolRegistry(sheets_name, sheets_url),
         )
 

@@ -44,7 +44,7 @@ HOST = os.environ.get("FASTMCP_HOST", "0.0.0.0")
 PORT = int(os.environ.get("FASTMCP_PORT", "8001"))
 
 mcp = FastMCP(
-    name="mcp-sqlite",
+    name="mcp-archive",
     instructions=(
         "SQLite MCP Server for receipt data management. "
         "Provides tools for document, page, and extraction CRUD operations."

@@ -1,5 +1,5 @@
 class MCPSQLiteError(Exception):
-    """Base exception for MCP-SQLite server."""
+    """Base exception for MCP-Archive server."""
 
 
 class DocumentNotFoundError(MCPSQLiteError):

@@ -4,9 +4,9 @@
             "command": "python",
             "args": ["mcp-gsheets/main.py"]
         },
-        "mcp-sqlite": {
+        "mcp-archive": {
             "command": "python",
-            "args": ["mcp-sqlite/main.py"]
+            "args": ["mcp-archive/main.py"]
         }
     }
 }

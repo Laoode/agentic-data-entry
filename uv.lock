@@ -12,9 +12,9 @@ resolution-markers = [
 members = [
     "agentic-data-entry",
     "klaudia",
+    "mcp-archive",
     "mcp-gsheets",
     "mcp-ledger",
-    "mcp-sqlite",
 ]
 
 [[package]]
@@ -36,9 +36,9 @@ dependencies = [
     { name = "klaudia" },
     { name = "langchain-google-vertexai" },
     { name = "langfuse" },
+    { name = "mcp-archive" },
     { name = "mcp-gsheets" },
     { name = "mcp-ledger" },
-    { name = "mcp-sqlite" },
     { name = "openai" },
     { name = "pillow" },
     { name = "pillow-heif" },
@@ -79,9 +79,9 @@ requires-dist = [
     { name = "klaudia", editable = "klaudia" },
     { name = "langchain-google-vertexai", specifier = ">=3.2.3" },
     { name = "langfuse", specifier = ">=4.5.0" },
+    { name = "mcp-archive", editable = "mcp-archive" },
     { name = "mcp-gsheets", editable = "mcp-gsheets" },
     { name = "mcp-ledger", editable = "mcp-ledger" },
-    { name = "mcp-sqlite", editable = "mcp-sqlite" },
     { name = "openai", specifier = ">=1.54.0" },
     { name = "pillow", specifier = ">=10.0.0" },
     { name = "pillow-heif", specifier = ">=0.18.0" },
@@ -2068,6 +2068,27 @@ cli = [
 ]
 
 [[package]]
+name = "mcp-archive"
+version = "0.1.0"
+source = { editable = "mcp-archive" }
+dependencies = [
+    { name = "aiosqlite" },
+    { name = "asyncpg" },
+    { name = "fastmcp" },
+    { name = "python-dotenv" },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "aiosqlite", specifier = ">=0.20.0" },
+    { name = "asyncpg", specifier = ">=0.30.0" },
+    { name = "fastmcp", specifier = ">=0.5.0" },
+    { name = "python-dotenv", specifier = ">=1.0.0" },
+    { name = "uvicorn", specifier = ">=0.27.0" },
+]
+
+[[package]]
 name = "mcp-gsheets"
 version = "0.1.0"
 source = { editable = "mcp-gsheets" }
@@ -2105,27 +2126,6 @@ requires-dist = [
     { name = "asyncpg", specifier = ">=0.30.0" },
     { name = "fastmcp", specifier = ">=0.5.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
-]
-
-[[package]]
-name = "mcp-sqlite"
-version = "0.1.0"
-source = { editable = "mcp-sqlite" }
-dependencies = [
-    { name = "aiosqlite" },
-    { name = "asyncpg" },
-    { name = "fastmcp" },
-    { name = "python-dotenv" },
-    { name = "uvicorn" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "aiosqlite", specifier = ">=0.20.0" },
-    { name = "asyncpg", specifier = ">=0.30.0" },
-    { name = "fastmcp", specifier = ">=0.5.0" },
-    { name = "python-dotenv", specifier = ">=1.0.0" },
-    { name = "uvicorn", specifier = ">=0.27.0" },
 ]
 
 [[package]]

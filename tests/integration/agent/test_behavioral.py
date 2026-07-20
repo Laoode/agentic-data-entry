@@ -16,7 +16,7 @@ Multi-step DAG accuracy (MCPToolBench++ §4.1.1):
   For multi-agent turns, DAG_score = fraction of required agents that ran.
 
 Requirements:
-  ./startup.sh must be running (MCP-SQLite + MCP-GSheets)
+  ./startup.sh must be running (MCP-Archive + MCP-GSheets)
   LLM_API_KEY  OR  (GOOGLE_GENAI_USE_VERTEXAI=True + GOOGLE_CLOUD_PROJECT)
   SHEET_ID pointing to the Bookkeeping 2026 spreadsheet
 

@@ -21,7 +21,7 @@ dependencies = [
     "google-genai>=1.0.0",
     "python-multipart>=0.0.9",
     "klaudia",
-    "mcp-sqlite",
+    "mcp-archive",
     "mcp-gsheets",
     "mcp-ledger",
     "langfuse>=4.5.0",
@@ -41,7 +41,7 @@ dependencies = [
 
 [tool.uv.sources]
 klaudia = { workspace = true }
-mcp-sqlite = { workspace = true }
+mcp-archive = { workspace = true }
 mcp-gsheets = { workspace = true }
 mcp-ledger = { workspace = true }
 
@@ -49,7 +49,7 @@ mcp-ledger = { workspace = true }
 members = [
     "mcp-gsheets",
     "klaudia",
-    "mcp-sqlite",
+    "mcp-archive",
     "mcp-ledger",
 ]
 

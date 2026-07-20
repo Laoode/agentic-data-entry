@@ -5,7 +5,7 @@ Routing & quality integration tests for the 4 core agent scenarios.
 Tests verify both WHICH agent handles the request (routing) and WHAT it returns (quality).
 
 Requirements:
-  - startup.sh must be running (MCP-SQLite + MCP-GSheets servers)
+  - startup.sh must be running (MCP-Archive + MCP-GSheets servers)
   - LLM_API_KEY  OR  (GOOGLE_GENAI_USE_VERTEXAI=True + GOOGLE_CLOUD_PROJECT)
   - SHEET_ID pointing to the Bookkeeping 2026 spreadsheet
 

@@ -8,7 +8,7 @@ from config.settings import Settings
 
 def test_default_backend_is_gsheets():
     sqlite_reg, sheets_reg = _build_mcp_registries(Settings())
-    assert sqlite_reg._name == "mcp-sqlite"
+    assert sqlite_reg._name == "mcp-archive"
     assert sheets_reg._name == "mcp-gsheets"
 
 

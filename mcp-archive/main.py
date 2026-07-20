@@ -12,7 +12,7 @@ logger = setup_logger(__name__)
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="MCP-SQLite Server")
+    parser = argparse.ArgumentParser(description="MCP-Archive Server")
     parser.add_argument(
         "--transport",
         choices=["sse", "stdio"],
@@ -24,5 +24,5 @@ if __name__ == "__main__":
     host = os.getenv("FASTMCP_HOST", "0.0.0.0")
     port = int(os.getenv("FASTMCP_PORT", "8001"))
 
-    logger.info(f"Starting MCP-SQLite server on {host}:{port} with {args.transport} transport")
+    logger.info(f"Starting MCP-Archive server on {host}:{port} with {args.transport} transport")
     mcp.run(transport=args.transport)
