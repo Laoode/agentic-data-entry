@@ -21,7 +21,9 @@ from app.services.extraction.infra.db_client import AppDBClient
 class FakeOrchestrator:
     """Minimal stand-in so /v1/chat succeeds without the LLM stack."""
 
-    async def process(self, messages, session_id, user_id, user_name, spreadsheet_id=None):
+    async def process(
+        self, messages, session_id, user_id, user_name, spreadsheet_id=None
+    ):
         return KlaudiaResponse(
             message=KlaudiaMessage(role="assistant", content="ok"),
             session_id=session_id or 1,
