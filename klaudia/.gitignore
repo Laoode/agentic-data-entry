@@ -1,0 +1,33 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# General
+.DS_Store
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+
+# IDE / Editor
+.vscode/
+.idea/
+
+# Claude Code
+.claude/
+CLAUDE.md
+.claudeignore
+
+# Test artifacts
+.coverage
+.pytest_cache/
+
+# Logs
+logs/
+*.log
