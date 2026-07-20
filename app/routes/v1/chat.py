@@ -2,12 +2,13 @@ import json
 import logging
 from typing import AsyncIterator
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 
 from app.helpers.auth import get_current_user
 from app.helpers.ratelimit import chat_limit, limiter
 from app.models.chat import KlaudiaRequest, KlaudiaResponse
+from ledger.store import SpreadsheetNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -30,12 +31,16 @@ async def chat(
 ) -> KlaudiaResponse:
     """Process a chat message through the Klaudia pipeline (non-streaming)."""
     orchestrator = request.app.state.orchestrator
-    return await orchestrator.process(
-        messages=body.messages,
-        session_id=body.session_id,
-        user_id=user_id,
-        user_name=body.user_name,
-    )
+    try:
+        return await orchestrator.process(
+            messages=body.messages,
+            session_id=body.session_id,
+            user_id=user_id,
+            user_name=body.user_name,
+            spreadsheet_id=body.spreadsheet_id,
+        )
+    except SpreadsheetNotFoundError:
+        raise HTTPException(status_code=404, detail="Spreadsheet not found")
 
 
 def _format_sse(event: dict) -> str:
@@ -55,6 +60,16 @@ async def chat_stream(
     """Stream the Klaudia pipeline as Server-Sent Events."""
     orchestrator = request.app.state.orchestrator
 
+    # Pre-validate an explicit spreadsheet selection so absent/foreign ids
+    # get a clean 404 before any SSE bytes are sent. Default resolution
+    # (spreadsheet_id=None) happens inside the stream and cannot 404.
+    spreadsheets = request.app.state.container.spreadsheets
+    if body.spreadsheet_id and spreadsheets is not None:
+        try:
+            await spreadsheets.resolve_scope(user_id, body.spreadsheet_id)
+        except SpreadsheetNotFoundError:
+            raise HTTPException(status_code=404, detail="Spreadsheet not found")
+
     async def event_source() -> AsyncIterator[str]:
         try:
             async for event in orchestrator.stream(
@@ -62,6 +77,7 @@ async def chat_stream(
                 session_id=body.session_id,
                 user_id=user_id,
                 user_name=body.user_name,
+                spreadsheet_id=body.spreadsheet_id,
             ):
                 if await request.is_disconnected():
                     logger.info("Client disconnected; stopping stream")

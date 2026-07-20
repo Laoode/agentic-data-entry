@@ -14,6 +14,7 @@ from klaudia.core.supervisor.agents.sql_agent.agent import make_sql_agent_node
 from klaudia.core.supervisor.llm import build_chat_llm
 from klaudia.core.supervisor.router import make_supervisor_node
 from klaudia.core.supervisor.state import SupervisorState
+from klaudia.core.supervisor.tools.context import get_active_spreadsheet
 from klaudia.interfaces.tool_registry import MCPToolRegistry
 from klaudia.models.message import AgentResponse
 
@@ -147,8 +148,11 @@ class SupervisorAgent:
         # Sheet list cache — populated programmatically via tool_list_sheets.
         # Injected into system prompt every turn so workers resolve sheet names
         # without burning an agent LLM hop on tool_list_sheets at runtime.
-        self._sheets_cache: str = ""
-        self._sheets_fetched_at: float = 0.0
+        # Keyed by the active spreadsheet scope ("" = unscoped default
+        # workspace) so tenants never see each other's tab names. Entries are
+        # a formatted string + fetch time; growth is bounded by spreadsheets
+        # actively chatting on this node, so no eviction yet.
+        self._sheets_cache: dict[str, tuple[str, float]] = {}
         self._list_sheets_tool = next(
             (t for t in mcp_gsheets.tools if t.name == "tool_list_sheets"), None
         )
@@ -163,42 +167,47 @@ class SupervisorAgent:
 
         Called automatically by make_data_entry_team_node whenever the team
         reports [SHEET_DONE] (create/rename/delete). Ensures the next turn's
-        system prompt reflects the post-mutation sheet layout.
+        system prompt reflects the post-mutation sheet layout. Only the
+        active scope's entry is dropped — the mutation ran inside it.
         """
-        self._sheets_fetched_at = 0.0
+        self._sheets_cache.pop(get_active_spreadsheet() or "", None)
 
     async def get_available_sheets(self, ttl: float = 10.0) -> str:
         """Return a formatted sheet list, refreshed at most every ttl seconds.
 
         Python calls tool_list_sheets directly — no LLM involvement, no agent
-        hop. Fails soft: returns stale cache (or empty string) on error.
+        hop. Scoped to the active spreadsheet (ContextVar set by the
+        orchestrator); the raw registry tool takes spreadsheet_id explicitly.
+        Fails soft: returns stale cache (or empty string) on error.
         """
+        scope = get_active_spreadsheet() or ""
+        cached, fetched_at = self._sheets_cache.get(scope, ("", 0.0))
         now = time.monotonic()
-        if self._sheets_cache and (now - self._sheets_fetched_at) < ttl:
-            return self._sheets_cache
+        if cached and (now - fetched_at) < ttl:
+            return cached
 
         if self._list_sheets_tool is None:
-            return self._sheets_cache
+            return cached
 
         try:
-            raw = await self._list_sheets_tool.ainvoke({})
+            args = {"spreadsheet_id": scope} if scope else {}
+            raw = await self._list_sheets_tool.ainvoke(args)
             sheets = _parse_tool_json_output(raw)
             if sheets:
                 lines = [
                     f"  - Index {s.get('index', i)}: {s.get('title', '?')}"
                     for i, s in enumerate(sheets)
                 ]
-                self._sheets_cache = "\n".join(lines)
-                self._sheets_fetched_at = now
+                cached = "\n".join(lines)
+                self._sheets_cache[scope] = (cached, now)
             else:
                 logger.warning(
                     "tool_list_sheets returned empty/unparseable output: %r", raw
                 )
-            # self._sheets_fetched_at = now
         except Exception as exc:
             logger.warning("Sheet list cache refresh failed: %s", exc)
 
-        return self._sheets_cache
+        return cached
 
     # ------------------------------------------------------------------
 

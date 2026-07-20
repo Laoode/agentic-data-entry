@@ -16,6 +16,8 @@ from app.services.extraction.infra.normalizer import is_pdf, is_supported_image
 from klaudia.core.supervisor.tools.context import (
     build_extraction_context,
     build_session_context,
+    reset_active_spreadsheet,
+    set_active_spreadsheet,
 )
 
 logger = logging.getLogger(__name__)
@@ -88,9 +90,30 @@ class KlaudiaOrchestrator:
         session_id: int | None,
         user_id: int,
         user_name: str = "User",
+        spreadsheet_id: str | None = None,
     ) -> KlaudiaResponse:
         start = time.time()
 
+        # 0. Bind the tenant scope for this request. Everything downstream
+        # (sheets cache, agent tool calls) reads it from the ContextVar.
+        # Raises SpreadsheetNotFoundError for absent/foreign ids (route -> 404).
+        scope = await self._resolve_scope(user_id, spreadsheet_id)
+        scope_token = set_active_spreadsheet(scope)
+        try:
+            return await self._process_scoped(
+                messages, session_id, user_id, user_name, start
+            )
+        finally:
+            reset_active_spreadsheet(scope_token)
+
+    async def _process_scoped(
+        self,
+        messages: list[KlaudiaMessage],
+        session_id: int | None,
+        user_id: int,
+        user_name: str,
+        start: float,
+    ) -> KlaudiaResponse:
         # 1. Ensure session exists
         if session_id is None:
             session_id = await self._c.db_client.create_session(user_id)
@@ -286,6 +309,7 @@ class KlaudiaOrchestrator:
         session_id: int | None,
         user_id: int,
         user_name: str = "User",
+        spreadsheet_id: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Stream the pipeline as structured SSE-ready events.
 
@@ -293,8 +317,15 @@ class KlaudiaOrchestrator:
         Types: session, guardrail, extraction, step, tool, token, done, error.
         """
         start = time.time()
+        scope_token = None
 
         try:
+            # Tenant scope, same as process(). A resolution failure surfaces
+            # as an error event here; the HTTP route pre-validates explicit
+            # ids so clients still get a clean 404 before streaming starts.
+            scope = await self._resolve_scope(user_id, spreadsheet_id)
+            scope_token = set_active_spreadsheet(scope)
+
             if session_id is None:
                 session_id = await self._c.db_client.create_session(user_id)
             yield {"type": "session", "data": {"session_id": session_id}}
@@ -549,6 +580,21 @@ class KlaudiaOrchestrator:
             except Exception:
                 pass
             yield {"type": "error", "data": {"message": str(exc)}}
+        finally:
+            if scope_token is not None:
+                reset_active_spreadsheet(scope_token)
+
+    async def _resolve_scope(
+        self, user_id: int, spreadsheet_id: str | None
+    ) -> str | None:
+        """Resolve the spreadsheet this request operates on.
+
+        Returns None when per-user spreadsheets are off (gsheets backend):
+        tools then fall through to the single default workspace.
+        """
+        if self._c.spreadsheets is None:
+            return None
+        return await self._c.spreadsheets.resolve_scope(user_id, spreadsheet_id)
 
     def _rejection_response(
         self, session_id: int, message: str, start: float

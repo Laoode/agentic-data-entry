@@ -95,10 +95,23 @@ async def sheet_guard(container):
     Snapshot runs before any case mutates the sheet, so it captures the pristine
     TABLE.md state. Per-mutating-case restore is driven from run_case_inprocess;
     the teardown restore here leaves the sheet clean at suite end.
+
+    With the ledger backend, the guard is scoped to the test user's default
+    spreadsheet — resolved through the SAME SpreadsheetService path the
+    orchestrator uses per request — and the full TABLE.md baseline is seeded
+    into it, because a per-user spreadsheet starts empty (unlike the gsheets
+    fixture sheet, which is assumed to match TABLE.md already).
     """
+    from tests.e2e.engine_inprocess import TEST_USER_ID
     from tests.e2e.sheet_guard import SheetGuard
 
-    guard = SheetGuard(container.mcp_gsheets)
+    scope = None
+    if container.spreadsheets is not None:
+        scope = await container.spreadsheets.resolve_scope(TEST_USER_ID)
+
+    guard = SheetGuard(container.mcp_gsheets, spreadsheet_id=scope)
     await guard.snapshot()
+    if scope is not None:
+        await guard.seed()
     yield guard
     await guard.restore()

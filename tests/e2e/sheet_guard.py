@@ -120,12 +120,25 @@ def _titles(raw: str) -> list[str]:
 
 
 class SheetGuard:
-    """Restore guarded sheets + drop stray tabs, from the TABLE.md template."""
+    """Restore guarded sheets + drop stray tabs, from the TABLE.md template.
 
-    def __init__(self, gsheets_registry: Any) -> None:
+    spreadsheet_id scopes every tool call to the test user's spreadsheet
+    (ledger backend, per-user tenancy). None = the backend's default
+    workspace (gsheets, or ledger before tenancy resolution).
+    """
+
+    def __init__(
+        self, gsheets_registry: Any, spreadsheet_id: str | None = None
+    ) -> None:
         self._reg = gsheets_registry
+        self._spreadsheet_id = spreadsheet_id
         self._names: list[str] = []
         self._data: dict[str, list[list[str]]] = {}
+
+    def _args(self, **kwargs: Any) -> dict[str, Any]:
+        if self._spreadsheet_id is not None:
+            kwargs["spreadsheet_id"] = self._spreadsheet_id
+        return kwargs
 
     @property
     def _baseline_titles(self) -> set[str]:
@@ -146,32 +159,56 @@ class SheetGuard:
         if lister is None:
             return []
         try:
-            return _titles(await lister.ainvoke({}))
+            return _titles(await lister.ainvoke(self._args()))
         except Exception as exc:
             logger.warning("SheetGuard: list_sheets failed: %s", exc)
             return []
+
+    async def seed(self) -> None:
+        """Materialize the FULL TABLE.md baseline (all tabs, exact contents).
+
+        Only used for spreadsheet-scoped runs (ledger tenancy): the test
+        user's spreadsheet is provisioned empty, unlike the gsheets fixture
+        sheet which is assumed to match TABLE.md already.
+        """
+        if not self._names:
+            logger.warning("SheetGuard: no baseline loaded; seed skipped")
+            return
+        existing = set(await self._list_titles())
+        for name in self._names:
+            await self._write_sheet(name, create=name not in existing)
+        await self._drop_extra_sheets()
 
     async def restore(self) -> None:
         # 1. Drop any tab TABLE.md does not define (copy/new/rename leftovers).
         await self._drop_extra_sheets()
 
-        # 2. Rewrite guarded sheets to the template contents.
+        # 2. Rewrite guarded sheets to the template contents (recreating any
+        # that a mutating case deleted).
+        existing = set(await self._list_titles())
+        for sheet in GUARDED_SHEETS:
+            await self._write_sheet(sheet, create=sheet not in existing)
+
+    async def _write_sheet(self, name: str, create: bool) -> None:
+        """Create (or clear) one tab, then write its TABLE.md rows."""
+        create_tool = _tool(self._reg, "tool_create_sheet")
         clear = _tool(self._reg, "tool_clear_range")
         update = _tool(self._reg, "tool_update_cells")
-        if clear is None or update is None:
-            logger.warning("SheetGuard: clear/update tools missing; restore skipped")
+        if create_tool is None or clear is None or update is None:
+            logger.warning("SheetGuard: sheet tools missing; write skipped")
             return
-        for sheet in GUARDED_SHEETS:
-            rows = self._data.get(sheet)
-            if not rows:
-                continue
-            width = max(len(r) for r in rows)
-            rng = f"A1:{_col_letter(width - 1)}{len(rows)}"
-            try:
-                await clear.ainvoke({"sheet": sheet, "range": _CLEAR_RANGE})
-                await update.ainvoke({"sheet": sheet, "range": rng, "data": rows})
-            except Exception as exc:
-                logger.warning("SheetGuard: restore of %s failed: %s", sheet, exc)
+        rows = self._data.get(name)
+        try:
+            if create:
+                await create_tool.ainvoke(self._args(title=name))
+            else:
+                await clear.ainvoke(self._args(sheet=name, range=_CLEAR_RANGE))
+            if rows:
+                width = max(len(r) for r in rows)
+                rng = f"A1:{_col_letter(width - 1)}{len(rows)}"
+                await update.ainvoke(self._args(sheet=name, range=rng, data=rows))
+        except Exception as exc:
+            logger.warning("SheetGuard: write of %s failed: %s", name, exc)
 
     async def _drop_extra_sheets(self) -> None:
         baseline = self._baseline_titles
@@ -184,7 +221,7 @@ class SheetGuard:
             if title in baseline:
                 continue
             try:
-                await delete.ainvoke({"sheet": title})
+                await delete.ainvoke(self._args(sheet=title))
                 logger.info("SheetGuard: deleted non-baseline sheet %r", title)
             except Exception as exc:
                 logger.warning("SheetGuard: delete of %r failed: %s", title, exc)

@@ -14,9 +14,11 @@ from app.services.extraction.infra.kie_client import KIEClient
 from app.services.extraction.infra.object_store import MinIOClient
 from app.services.extraction.ingest import IngestService
 from app.services.extraction.agents.base import ExtractionAgent
+from app.services.core.spreadsheets import SpreadsheetService
 from app.services.guardrails import GuardrailsAgent, GuardrailsConfig
 from klaudia.core.supervisor.agent import SupervisorAgent
 from klaudia.interfaces.tool_registry import MCPToolRegistry
+from ledger.store import LedgerStore
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +139,8 @@ class KlaudiaContainer:
         self.mcp_gsheets: Optional[MCPToolRegistry] = None
         self.guardrails: Optional[GuardrailsAgent] = None
         self.supervisor: Optional[SupervisorAgent] = None
+        self.ledger_store: Optional[LedgerStore] = None
+        self.spreadsheets: Optional[SpreadsheetService] = None
         self.extraction_agent: Optional[ExtractionAgent] = None
         self.langfuse: Optional[LangfuseService] = None
 
@@ -178,6 +182,18 @@ class KlaudiaContainer:
         except Exception as e:
             logger.error("MinIO unavailable (%s). Image/PDF uploads will fail.", e)
             # Keep instance; calls will surface specific errors at upload time
+
+        # Per-user spreadsheets (ledger backend only). The app talks to the
+        # ledger schema directly for management ops — CRUD and chat scope
+        # resolution never burn an MCP round-trip; only agent tool calls do.
+        if settings.sheets_backend == "ledger":
+            if not settings.database_url:
+                raise ValueError(
+                    "SHEETS_BACKEND=ledger requires DATABASE_URL (Postgres DSN)"
+                )
+            container.ledger_store = LedgerStore(settings.database_url)
+            await container.ledger_store.connect()
+            container.spreadsheets = SpreadsheetService(container.ledger_store)
 
         # MCP registries (transport selected via MCP_TRANSPORT setting)
         container.mcp_sqlite, container.mcp_gsheets = _build_mcp_registries(settings)
@@ -257,6 +273,8 @@ class KlaudiaContainer:
             await self.mcp_sqlite.disconnect()
         if self.mcp_gsheets:
             await self.mcp_gsheets.disconnect()
+        if self.ledger_store:
+            await self.ledger_store.close()
         if isinstance(self.dedup_cache, DedupCache):
             await self.dedup_cache.close()
         if self.db_client:

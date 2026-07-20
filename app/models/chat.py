@@ -41,6 +41,10 @@ class KlaudiaRequest(BaseModel):
     session_id: Optional[int] = None  # None = create new session
     # Identity comes from the Bearer token (app.helpers.auth), never the body.
     user_name: str = "User"
+    # Which of the user's spreadsheets to operate on (ledger backend).
+    # None = the user's default spreadsheet, provisioned on first use.
+    # Ownership is validated server-side; foreign ids 404.
+    spreadsheet_id: Optional[str] = None
 
 
 class ChatMetadata(BaseModel):

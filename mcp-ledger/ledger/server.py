@@ -21,6 +21,7 @@ from ledger.store import (
     LedgerStore,
     SheetExistsError,
     SheetNotFoundError,
+    SpreadsheetNotFoundError,
 )
 
 load_dotenv()
@@ -35,6 +36,9 @@ async def ledger_lifespan(server: FastMCP) -> AsyncIterator[LedgerStore]:
         raise RuntimeError("mcp-ledger requires DATABASE_URL (Postgres DSN)")
     store = LedgerStore(dsn)
     await store.connect()
+    # The default workspace's key comes from env, not create_spreadsheet, so
+    # provision its spreadsheet row here or sheet writes would violate the FK.
+    await store.ensure_spreadsheet(DEFAULT_WORKSPACE)
     try:
         yield store
     finally:
@@ -458,7 +462,7 @@ async def tool_create_sheet(
     workspace = _workspace(spreadsheet_id)
     try:
         created = await _store(ctx).create_sheet(workspace, title)
-    except SheetExistsError as exc:
+    except (SheetExistsError, SpreadsheetNotFoundError) as exc:
         return {"error": str(exc)}
     return {**created, "spreadsheetId": workspace}
 
@@ -518,7 +522,7 @@ async def tool_copy_sheet(
     try:
         src_grid = await store.get_grid(src_ws, title)
         created = await store.create_sheet(dst_ws, dst_sheet, grid=src_grid)
-    except (SheetNotFoundError, SheetExistsError) as exc:
+    except (SheetNotFoundError, SheetExistsError, SpreadsheetNotFoundError) as exc:
         return {"error": str(exc)}
     return {"copy": {**created, "spreadsheetId": dst_ws}}
 
@@ -578,7 +582,7 @@ async def tool_batch_update(
             try:
                 created = await store.create_sheet(workspace, title)
                 replies.append({"addSheet": {"properties": created}})
-            except SheetExistsError as exc:
+            except (SheetExistsError, SpreadsheetNotFoundError) as exc:
                 replies.append({"error": str(exc)})
         elif "deleteSheet" in request:
             sheet_id = request["deleteSheet"].get("sheetId")

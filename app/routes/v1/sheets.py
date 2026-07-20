@@ -7,10 +7,24 @@ from fastapi.responses import JSONResponse
 
 from app.helpers.auth import get_current_user
 from klaudia.interfaces.tool_registry import MCPToolRegistry
+from ledger.store import SpreadsheetNotFoundError
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sheets", tags=["sheets"])
+
+
+async def _resolve_scope(
+    request: Request, user_id: int, spreadsheet_id: Optional[str]
+) -> Optional[str]:
+    """Resolve the user's spreadsheet scope (None when backend is gsheets)."""
+    service = request.app.state.container.spreadsheets
+    if service is None:
+        return None
+    try:
+        return await service.resolve_scope(user_id, spreadsheet_id)
+    except SpreadsheetNotFoundError:
+        raise HTTPException(status_code=404, detail="Spreadsheet not found")
 
 
 def _get_tool(registry: MCPToolRegistry, name: str):
@@ -35,16 +49,18 @@ async def _invoke(tool, args: dict[str, Any]) -> Any:
 @router.get("/info")
 async def get_spreadsheet_info(
     request: Request,
-    _user_id: int = Depends(get_current_user),
+    spreadsheet_id: Optional[str] = Query(None, description="Spreadsheet to read"),
+    user_id: int = Depends(get_current_user),
 ) -> JSONResponse:
     """
-    Return spreadsheet title and all sheet tab names.
-    Uses the server's default SHEET_ID — no params required.
+    Return spreadsheet title and all sheet tab names for the user's
+    spreadsheet (default one when spreadsheet_id is omitted).
     """
     registry: MCPToolRegistry = request.app.state.container.mcp_gsheets
     tool = _get_tool(registry, "tool_get_spreadsheet_info")
+    scope = await _resolve_scope(request, user_id, spreadsheet_id)
     try:
-        data = await _invoke(tool, {})
+        data = await _invoke(tool, {"spreadsheet_id": scope})
         return JSONResponse(content=data)
     except HTTPException:
         raise
@@ -58,16 +74,20 @@ async def get_sheet_data(
     request: Request,
     sheet: str = Query(..., description="Sheet tab name, e.g. 'Sheet1'"),
     range: Optional[str] = Query(None, description="A1 notation range, e.g. 'A1:F50'"),
-    _user_id: int = Depends(get_current_user),
+    spreadsheet_id: Optional[str] = Query(None, description="Spreadsheet to read"),
+    user_id: int = Depends(get_current_user),
 ) -> JSONResponse:
     """
-    Return cell values from a sheet tab.
-    Uses the server's default SHEET_ID — only sheet name (and optional range) required.
+    Return cell values from a sheet tab in the user's spreadsheet
+    (default one when spreadsheet_id is omitted).
     """
     registry: MCPToolRegistry = request.app.state.container.mcp_gsheets
     tool = _get_tool(registry, "tool_get_sheet_data")
+    scope = await _resolve_scope(request, user_id, spreadsheet_id)
     try:
-        data = await _invoke(tool, {"sheet": sheet, "range": range})
+        data = await _invoke(
+            tool, {"sheet": sheet, "range": range, "spreadsheet_id": scope}
+        )
         return JSONResponse(content=data)
     except HTTPException:
         raise

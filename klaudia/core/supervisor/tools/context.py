@@ -1,8 +1,32 @@
 import json
 import logging
+from contextvars import ContextVar, Token
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# Request-scoped tenant boundary: the spreadsheet all sheets tools operate on
+# for the current request. Set by the orchestrator before graph invocation
+# (child tasks inherit it), read by with_tenant_scope at tool-call time.
+# None means unscoped (dev default workspace / gsheets backend).
+_ACTIVE_SPREADSHEET: ContextVar[str | None] = ContextVar(
+    "active_spreadsheet", default=None
+)
+
+
+def set_active_spreadsheet(spreadsheet_id: str | None) -> Token:
+    """Bind the active spreadsheet for the current request context."""
+    return _ACTIVE_SPREADSHEET.set(spreadsheet_id)
+
+
+def reset_active_spreadsheet(token: Token) -> None:
+    """Restore the scope captured by the matching set_active_spreadsheet."""
+    _ACTIVE_SPREADSHEET.reset(token)
+
+
+def get_active_spreadsheet() -> str | None:
+    """Return the active spreadsheet id, or None when unscoped."""
+    return _ACTIVE_SPREADSHEET.get()
 
 
 def build_session_context(session_files: list[dict[str, Any]] | None) -> str:
