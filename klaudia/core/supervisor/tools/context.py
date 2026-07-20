@@ -29,6 +29,60 @@ def get_active_spreadsheet() -> str | None:
     return _ACTIVE_SPREADSHEET.get()
 
 
+# Per-request tool-call trace. The orchestrator starts one before invoking
+# the supervisor; with_recording-wrapped tools append (name, args, raw
+# output). Child tasks inherit the ContextVar, and appends mutate the same
+# list, so the starter sees every call. None = tracing off (no overhead).
+_TOOL_TRACE: ContextVar["list[tuple[str, dict, str]] | None"] = ContextVar(
+    "tool_trace", default=None
+)
+
+
+def start_tool_trace() -> tuple[list, Token]:
+    """Begin recording tool calls for the current request context.
+
+    Returns:
+        (trace list to read after the turn, token for reset_tool_trace).
+    """
+    trace: list[tuple[str, dict, str]] = []
+    return trace, _TOOL_TRACE.set(trace)
+
+
+def reset_tool_trace(token: Token) -> None:
+    """Stop recording; the trace list handed out by start remains readable."""
+    _TOOL_TRACE.reset(token)
+
+
+def record_tool_call(name: str, args: dict, output: str) -> None:
+    """Append one tool invocation to the active trace, if any."""
+    trace = _TOOL_TRACE.get()
+    if trace is not None:
+        trace.append((name, dict(args), output))
+
+
+# Approval gate for irreversible operations. The app installs an async
+# callable (tool_name, args, impact) -> approval_id that persists a pending
+# approval; the guard then refuses to execute. None = no gating (dev,
+# unit tests, offline scripts), in which case destructive calls run
+# straight through as before.
+_APPROVAL_GATE: ContextVar[Any] = ContextVar("approval_gate", default=None)
+
+
+def set_approval_gate(gate: Any) -> Token:
+    """Install the approval gate for the current request context."""
+    return _APPROVAL_GATE.set(gate)
+
+
+def reset_approval_gate(token: Token) -> None:
+    """Remove the approval gate installed by set_approval_gate."""
+    _APPROVAL_GATE.reset(token)
+
+
+def get_approval_gate() -> Any:
+    """Return the active approval gate, or None when gating is off."""
+    return _APPROVAL_GATE.get()
+
+
 def build_session_context(session_files: list[dict[str, Any]] | None) -> str:
     """Format session files into a context string for the system prompt."""
     if not session_files:

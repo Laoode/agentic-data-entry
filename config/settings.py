@@ -85,6 +85,12 @@ class Settings(BaseSettings):
     vllm_kie_api_key: str = Field(default="", alias="VLLM_KIE_API_KEY")
     # Offline fixture mode for KIE (sample-data/labels/).
     mock_kie: bool = Field(default=True, alias="MOCK_KIE")
+    # Deterministic numeric verification of replies (anti-hallucination).
+    # "off" | "log" (flag ungrounded amounts, ship anyway) | "enforce"
+    # (one grounded-rewrite retry; original ships if the rewrite still
+    # fails). Default "log" until the false-positive rate is measured.
+    numeric_verify_mode: str = Field(default="log", alias="NUMERIC_VERIFY_MODE")
+
     # Guardrails
     guardrails_enabled: bool = Field(default=True, alias="GUARDRAILS_ENABLED")
     llm_guardrails_prompt_inj: str = Field(

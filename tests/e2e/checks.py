@@ -98,6 +98,8 @@ class ResponseView:
     # False for the HTTP layer, which cannot observe cache hits/misses — cache
     # assertions are skipped there rather than failed.
     cache_observable: bool = True
+    # Irreversible operations the destructive guard parked for user approval.
+    pending_approvals: list[dict] = field(default_factory=list)
     error: str | None = None
 
     @property
@@ -192,6 +194,16 @@ def _content_ok(
         if got != expect.is_rejection:
             ok = False
             reasons.append(f"is_rejection: expected {expect.is_rejection}, got {got}")
+
+    if expect.pending_approvals_min is not None:
+        got = len(view.pending_approvals)
+        ok = got >= expect.pending_approvals_min
+        detail["pending_approvals_min"] = ok
+        if not ok:
+            reasons.append(
+                f"pending_approvals_min: expected >= "
+                f"{expect.pending_approvals_min}, got {got}"
+            )
 
     if expect.is_clarification is not None:
         got = looks_clarifying(text) and not has_silent_write(text)

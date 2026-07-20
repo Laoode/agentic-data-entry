@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.routes.v1.approvals import router as approvals_router
 from app.routes.v1.auth import router as auth_router
 from app.routes.v1.chat import router as chat_router
 from app.routes.v1.health import router as health_router
@@ -14,5 +15,6 @@ v1_router.include_router(chat_router)
 v1_router.include_router(sessions_router)
 v1_router.include_router(sheets_router)
 v1_router.include_router(spreadsheets_router)
+v1_router.include_router(approvals_router)
 
 __all__ = ["v1_router"]

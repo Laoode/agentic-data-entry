@@ -52,6 +52,8 @@ class Expect(BaseModel):
     contains_amount: list[str] = Field(default_factory=list)  # digit-normalized
     is_rejection: bool | None = None  # guardrail-style refusal
     is_clarification: bool | None = None  # HITL clarifying question
+    # Minimum destructive operations the guard must park for approval.
+    pending_approvals_min: int | None = None
 
     # ── Granular MCP tool calls (in-process spy only) ────────────────────────
     mcp_tools_any: list[str] = Field(default_factory=list)  # ≥1 of these called

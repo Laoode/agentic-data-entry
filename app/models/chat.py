@@ -82,3 +82,6 @@ class KlaudiaResponse(BaseModel):
     processing_time_ms: int
     tools_used: list[str] = Field(default_factory=list)
     metadata: ChatMetadata = Field(default_factory=ChatMetadata)
+    # Irreversible operations the guard refused to run unattended. Each
+    # entry backs an approve/reject button; POST /v1/approvals/{id}.
+    pending_approvals: list[dict] = Field(default_factory=list)

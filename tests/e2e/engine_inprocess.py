@@ -112,6 +112,7 @@ async def run_case_inprocess(
                     mcp_calls=list(calls),
                     cache_hits=cache_hits,
                     cache_misses=cache_misses,
+                    pending_approvals=list(resp.pending_approvals),
                 )
             except asyncio.TimeoutError:
                 logger.error(

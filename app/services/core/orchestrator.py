@@ -12,13 +12,23 @@ from app.models.chat import (
 )
 from app.services.core.container import KlaudiaContainer
 from app.services.core.prompts import KLAUDIA_SYSTEM_PROMPT
+from app.services.core.verifier import verify_reply
 from app.services.extraction.infra.normalizer import is_pdf, is_supported_image
 from klaudia.core.supervisor.tools.context import (
     build_extraction_context,
     build_session_context,
+    get_active_spreadsheet,
     reset_active_spreadsheet,
+    reset_approval_gate,
+    reset_tool_trace,
     set_active_spreadsheet,
+    set_approval_gate,
+    start_tool_trace,
 )
+
+# Bounds for the evidence block fed to the numeric-correction rewrite.
+_EVIDENCE_RECORD_CHARS = 2000
+_EVIDENCE_TOTAL_CHARS = 8000
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +81,19 @@ def _check_attachment_shape(
         names = ", ".join(a.filename for a in unknown)
         return f"Format tidak didukung: {names}. Upload JPG/PNG/HEIC/PDF saja."
     return None
+
+
+def _format_evidence(tool_trace: list[tuple[str, dict, str]]) -> str:
+    """Bounded raw tool outputs for the numeric-correction rewrite."""
+    parts: list[str] = []
+    total = 0
+    for name, _args, output in tool_trace:
+        snippet = (output or "")[:_EVIDENCE_RECORD_CHARS]
+        total += len(snippet)
+        if total > _EVIDENCE_TOTAL_CHARS:
+            break
+        parts.append(f"[{name}]\n{snippet}")
+    return "\n\n".join(parts)
 
 
 class KlaudiaOrchestrator:
@@ -270,20 +293,36 @@ class KlaudiaOrchestrator:
         # expect a single extraction_data still see something; the full list
         # is already encoded in llm_messages above.
         last_extraction = extraction_results[-1] if extraction_results else None
-        agent_response = await self._c.supervisor.process_conversation(
-            messages=llm_messages,
-            extraction_data=last_extraction,
-            session_id=session_id,
-            user_id=user_id,
-            sheets_context=available_sheets or "",
-            files_context=session_files_ctx or "",
-            date_context=f"CURRENT DATE/TIME: {meta.date} {meta.time} ({meta.timezone})",
-        )
+        tool_trace, trace_token = start_tool_trace()
+        gate_cm = self._approval_gate(user_id, session_id, get_active_spreadsheet())
+        try:
+            with gate_cm as parked_approvals:
+                agent_response = await self._c.supervisor.process_conversation(
+                    messages=llm_messages,
+                    extraction_data=last_extraction,
+                    session_id=session_id,
+                    user_id=user_id,
+                    sheets_context=available_sheets or "",
+                    files_context=session_files_ctx or "",
+                    date_context=(
+                        f"CURRENT DATE/TIME: {meta.date} {meta.time} ({meta.timezone})"
+                    ),
+                )
+        finally:
+            reset_tool_trace(trace_token)
 
         # 8. Post-process: remove thinking tokens
         content = re.sub(
             r"<think>.*?</think>", "", agent_response.content, flags=re.DOTALL
         ).strip()
+
+        # 8b. Deterministic numeric verification (never trust LLM arithmetic).
+        extra_texts = (
+            [user_text]
+            + [build_extraction_context(e) for e in extraction_results]
+            + [row["message_text"] for row in history]
+        )
+        content = await self._verify_numeric(content, tool_trace, extra_texts)
 
         # 9. Output guardrails
         output_guard = await self._c.guardrails.validate_output(content)
@@ -301,6 +340,7 @@ class KlaudiaOrchestrator:
             processing_time_ms=elapsed,
             tools_used=agent_response.tools_called,
             metadata=meta,
+            pending_approvals=[a.as_payload() for a in parked_approvals],
         )
 
     async def stream(
@@ -493,26 +533,48 @@ class KlaudiaOrchestrator:
             final_content = ""
             tools_used: list[str] = []
             any_token_emitted = False  # track whether supervisor emitted token events
-            async for event in self._c.supervisor.stream_conversation(
-                messages=llm_messages,
-                extraction_data=last_extraction,
-                session_id=session_id,
-                user_id=user_id,
-                sheets_context=available_sheets or "",
-                files_context=session_files_ctx or "",
-                date_context=f"CURRENT DATE/TIME: {meta.date} {meta.time} ({meta.timezone})",
-            ):
-                if event["type"] == "final":
-                    final_content = event["data"]["content"]
-                    tools_used = event["data"]["tools_called"]
-                    continue
-                if event["type"] == "token":
-                    any_token_emitted = True
-                yield event
+            tool_trace, trace_token = start_tool_trace()
+            gate_cm = self._approval_gate(user_id, session_id, get_active_spreadsheet())
+            parked_approvals: list[Any] = []
+            try:
+                with gate_cm as parked_approvals:
+                    async for event in self._c.supervisor.stream_conversation(
+                        messages=llm_messages,
+                        extraction_data=last_extraction,
+                        session_id=session_id,
+                        user_id=user_id,
+                        sheets_context=available_sheets or "",
+                        files_context=session_files_ctx or "",
+                        date_context=(
+                            f"CURRENT DATE/TIME: {meta.date} {meta.time} "
+                            f"({meta.timezone})"
+                        ),
+                    ):
+                        if event["type"] == "final":
+                            final_content = event["data"]["content"]
+                            tools_used = event["data"]["tools_called"]
+                            continue
+                        if event["type"] == "token":
+                            any_token_emitted = True
+                        yield event
+            finally:
+                reset_tool_trace(trace_token)
 
             content = re.sub(
                 r"<think>.*?</think>", "", final_content, flags=re.DOTALL
             ).strip()
+
+            # Numeric verification. Enforcement (rewrite) is only possible on
+            # the buffered inline-FINISH path; once tokens have streamed to
+            # the client the reply cannot be recalled — log-only there.
+            extra_texts = (
+                [user_text]
+                + [build_extraction_context(e) for e in extraction_results]
+                + [row["message_text"] for row in history]
+            )
+            content = await self._verify_numeric(
+                content, tool_trace, extra_texts, allow_enforce=not any_token_emitted
+            )
 
             if not any_token_emitted and content:
                 # RouterWithResponse inline FINISH path: supervisor assembled the
@@ -560,6 +622,9 @@ class KlaudiaOrchestrator:
                     )
                 except Exception:
                     pass
+            approvals = [a.as_payload() for a in parked_approvals]
+            for approval in approvals:
+                yield {"type": "approval_required", "data": approval}
             yield {
                 "type": "done",
                 "data": {
@@ -567,6 +632,7 @@ class KlaudiaOrchestrator:
                     "processing_time_ms": elapsed,
                     "tools_used": tools_used,
                     "content": content,
+                    "pending_approvals": approvals,
                 },
             }
             span_cm.__exit__(None, None, None)
@@ -583,6 +649,97 @@ class KlaudiaOrchestrator:
         finally:
             if scope_token is not None:
                 reset_active_spreadsheet(scope_token)
+
+    @contextmanager
+    def _approval_gate(self, user_id: int, session_id: int | None, scope: str | None):
+        """Install the destructive-op gate and collect what it parks.
+
+        Yields the list that receives one PendingApproval per refused
+        operation, so the caller can hand the client its approve/reject
+        buttons regardless of what the model says in prose.
+        """
+        parked: list[Any] = []
+        service = self._c.approvals
+        if service is None:
+            yield parked
+            return
+
+        async def gate(tool_name: str, args: dict[str, Any], impact: Any) -> str:
+            approval = await service.create(
+                user_id=user_id,
+                session_id=session_id,
+                spreadsheet_id=scope,
+                tool_name=tool_name,
+                args=args,
+                summary=impact.summary,
+                rows_affected=impact.rows,
+                columns_affected=impact.full_columns,
+            )
+            parked.append(approval)
+            return approval.approval_id
+
+        token = set_approval_gate(gate)
+        try:
+            yield parked
+        finally:
+            reset_approval_gate(token)
+
+    async def _verify_numeric(
+        self,
+        content: str,
+        tool_trace: list[tuple[str, dict, str]],
+        extra_texts: list[str],
+        allow_enforce: bool = True,
+    ) -> str:
+        """Gate monetary claims in the reply against tool-grounded values.
+
+        Modes (NUMERIC_VERIFY_MODE): "off" skips; "log" flags ungrounded
+        amounts and ships anyway; "enforce" additionally attempts ONE
+        grounded rewrite and ships it only if it re-verifies. Fails open:
+        verification errors never block the reply.
+        """
+        mode = self._c.settings.numeric_verify_mode
+        if mode == "off" or not content:
+            return content
+        try:
+            result = verify_reply(content, tool_trace, extra_texts)
+        except Exception as exc:
+            logger.error("Numeric verification crashed (fail-open): %s", exc)
+            return content
+        if result.passed:
+            return content
+
+        logger.warning(
+            "Numeric verification: ungrounded amounts %s (mode=%s, tool_calls=%d)",
+            result.ungrounded,
+            mode,
+            len(tool_trace),
+        )
+        if self._langfuse is not None:
+            try:
+                with self._langfuse.span(
+                    "klaudia.numeric_verify",
+                    input={"ungrounded": result.ungrounded[:20], "mode": mode},
+                    metadata={"tool_calls": len(tool_trace)},
+                ):
+                    pass
+            except Exception:
+                pass
+        if mode != "enforce" or not allow_enforce:
+            return content
+
+        corrected = await self._c.supervisor.correct_numeric_claims(
+            content, result.ungrounded, _format_evidence(tool_trace)
+        )
+        recheck = verify_reply(corrected, tool_trace, extra_texts)
+        if recheck.passed:
+            logger.info("Numeric enforcement: corrected reply verified")
+            return corrected
+        logger.error(
+            "Numeric enforcement: rewrite still ungrounded %s; shipping original",
+            recheck.ungrounded,
+        )
+        return content
 
     async def _resolve_scope(
         self, user_id: int, spreadsheet_id: str | None

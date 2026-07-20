@@ -159,6 +159,54 @@ class SupervisorAgent:
 
         self._graph = self._build_graph()
 
+    async def correct_numeric_claims(
+        self, draft: str, ungrounded: list[int], evidence: str
+    ) -> str:
+        """One-shot rewrite of a draft whose amounts failed verification.
+
+        Uses the routing LLM (no tools, single call — cheap compared to a
+        full agent re-run). The caller re-verifies the rewrite and ships
+        the original if it still fails.
+
+        Args:
+            draft: The reply that contains ungrounded amounts.
+            ungrounded: The amounts that did not match tool data.
+            evidence: Bounded raw tool outputs from this turn.
+
+        Returns:
+            The corrected reply, or the draft on any failure.
+        """
+        bad = ", ".join(f"{v:,}".replace(",", ".") for v in ungrounded)
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You correct financial figures in an assistant reply. "
+                    "The reply below states amounts that do NOT match the "
+                    "spreadsheet data it was based on. Rewrite the reply "
+                    "keeping the same language, tone, and structure, but "
+                    "make every amount match the DATA exactly. Recompute "
+                    "totals only from the DATA. Output only the corrected "
+                    "reply, nothing else."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"DATA (raw tool outputs):\n{evidence}\n\n"
+                    f"AMOUNTS THAT FAILED VERIFICATION: {bad}\n\n"
+                    f"REPLY TO CORRECT:\n{draft}"
+                ),
+            },
+        ]
+        try:
+            result = await self._routing_llm.ainvoke(messages)
+            corrected = coerce_to_text(result.content).strip()
+            return corrected or draft
+        except Exception as exc:
+            logger.warning("Numeric correction rewrite failed: %s", exc)
+            return draft
+
     # Sheet list cache helpers
     # ------------------------------------------------------------------
 

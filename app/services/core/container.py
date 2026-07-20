@@ -14,6 +14,7 @@ from app.services.extraction.infra.kie_client import KIEClient
 from app.services.extraction.infra.object_store import MinIOClient
 from app.services.extraction.ingest import IngestService
 from app.services.extraction.agents.base import ExtractionAgent
+from app.services.core.approvals import ApprovalService
 from app.services.core.spreadsheets import SpreadsheetService
 from app.services.guardrails import GuardrailsAgent, GuardrailsConfig
 from klaudia.core.supervisor.agent import SupervisorAgent
@@ -141,6 +142,7 @@ class KlaudiaContainer:
         self.supervisor: Optional[SupervisorAgent] = None
         self.ledger_store: Optional[LedgerStore] = None
         self.spreadsheets: Optional[SpreadsheetService] = None
+        self.approvals: Optional[ApprovalService] = None
         self.extraction_agent: Optional[ExtractionAgent] = None
         self.langfuse: Optional[LangfuseService] = None
 
@@ -200,6 +202,14 @@ class KlaudiaContainer:
         logger.info(f"MCP transport: {settings.mcp_transport}")
         await container.mcp_sqlite.connect()
         await container.mcp_gsheets.connect()
+
+        # Destructive-operation approvals (deterministic HITL). Needs the
+        # sheets registry so an approved call replays through the same tool
+        # the agent would have used.
+        container.approvals = ApprovalService(
+            container.db_client, container.mcp_gsheets
+        )
+        await container.approvals.ensure_schema()
 
         # Ingest service — drives dedup pipeline. ExtractionAgent is now a thin
         # observability facade over this.

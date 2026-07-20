@@ -1,9 +1,18 @@
+import json
 import logging
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from langchain_core.tools import BaseTool
 
-from klaudia.core.supervisor.tools.context import get_active_spreadsheet
+from klaudia.core.supervisor.tools.context import (
+    get_active_spreadsheet,
+    get_approval_gate,
+    record_tool_call,
+)
+from klaudia.core.supervisor.tools.destructive import (
+    DESTRUCTIVE_TOOLS,
+    assess_impact,
+)
 from klaudia.core.supervisor.tools.coordinates import annotate_sheet_output
 from klaudia.interfaces.tool_registry import MCPToolRegistry
 
@@ -93,6 +102,120 @@ def with_tenant_scope(tool: BaseTool) -> BaseTool:
     return tool.model_copy(update={"coroutine": _call, "args_schema": schema})
 
 
+def with_recording(tool: BaseTool) -> BaseTool:
+    """Return a copy of a tool that records calls into the active trace.
+
+    Composed INSIDE _with_coordinates so the recorded output is the raw
+    tool result (parseable JSON), not the coordinate-annotated text. The
+    numeric verifier grounds reply claims in these records. No active
+    trace = passthrough.
+    """
+    if tool.coroutine is None:
+        return tool
+    src = tool  # late-bind src.coroutine so spy/tracing re-wraps stay visible
+
+    async def _call(**kwargs: Any) -> str:
+        result = await src.coroutine(**kwargs)
+        record_tool_call(src.name, kwargs, result)
+        return result
+
+    return tool.model_copy(update={"coroutine": _call})
+
+
+GridReader = Callable[[str], Awaitable[list]]
+
+
+def _parse_values(raw: str) -> list:
+    """Best-effort extraction of a 2D value grid from a read-tool result."""
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    if isinstance(parsed, dict):
+        values = parsed.get("values")
+        return values if isinstance(values, list) else []
+    return parsed if isinstance(parsed, list) else []
+
+
+def make_grid_reader(registry: MCPToolRegistry) -> GridReader | None:
+    """Build a tenant-scoped reader of a sheet's current grid.
+
+    Used by the destructive guard to measure real impact before deciding
+    whether an operation may run unattended. Returns None when the
+    registry has no read tool.
+    """
+    read_tool = next(
+        (t for t in registry.tools if t.name == "tool_get_sheet_data"), None
+    )
+    if read_tool is None or read_tool.coroutine is None:
+        return None
+    scoped = with_tenant_scope(read_tool)
+
+    async def _read(sheet: str) -> list:
+        try:
+            return _parse_values(await scoped.coroutine(sheet=sheet))
+        except Exception as exc:
+            logger.warning("Destructive guard: grid read failed (%s): %s", sheet, exc)
+            return []
+
+    return _read
+
+
+def with_destructive_guard(tool: BaseTool, grid_reader: GridReader | None) -> BaseTool:
+    """Gate irreversible operations behind explicit user approval.
+
+    Deletions cannot be undone, and instructing the model to confirm first
+    does not hold: asked to "delete all sheet data" it cleared every sheet
+    on 3 of 3 runs. So impact is measured in code from the live grid and,
+    past the policy threshold, the call is REFUSED and a pending approval
+    is recorded. The user approves via a button; the stored call is then
+    replayed verbatim, with no model involvement.
+
+    Non-destructive tools and small edits pass through untouched. With no
+    approval gate installed (dev, tests) behavior is unchanged.
+    """
+    if tool.coroutine is None or tool.name not in DESTRUCTIVE_TOOLS:
+        return tool
+    src = tool
+
+    async def _call(**kwargs: Any) -> str:
+        gate = get_approval_gate()
+        if gate is None:
+            return await src.coroutine(**kwargs)
+        grid: list = []
+        if grid_reader is not None and kwargs.get("sheet"):
+            grid = await grid_reader(str(kwargs["sheet"]))
+        impact = assess_impact(src.name, kwargs, grid)
+        if not impact.requires_approval:
+            return await src.coroutine(**kwargs)
+        approval_id = await gate(src.name, dict(kwargs), impact)
+        logger.info(
+            "Destructive op held for approval (%s): %s rows=%d cols=%d id=%s",
+            src.name,
+            kwargs.get("sheet"),
+            impact.rows,
+            impact.full_columns,
+            approval_id,
+        )
+        return json.dumps(
+            {
+                "status": "approval_required",
+                "approval_id": approval_id,
+                "summary": impact.summary,
+                "rows_affected": impact.rows,
+                "columns_affected": impact.full_columns,
+                "note": (
+                    "NOT executed. Awaiting the user's approval button. "
+                    "Tell the user what needs confirming and stop; do not "
+                    "retry this operation or attempt another way."
+                ),
+            },
+            ensure_ascii=False,
+        )
+
+    return tool.model_copy(update={"coroutine": _call})
+
+
 def _with_coordinates(tool: BaseTool) -> BaseTool:
     """Return a copy of a read tool whose output is row/column annotated.
 
@@ -131,16 +254,21 @@ def get_sql_tools(registry: MCPToolRegistry) -> list[BaseTool]:
         "tool_get_page",
         "tool_get_extraction",
     }
-    return [t for t in registry.tools if t.name in allowed]
+    return [with_recording(t) for t in registry.tools if t.name in allowed]
 
 
 def get_data_entry_tools(registry: MCPToolRegistry) -> list[BaseTool]:
-    """Get all sheets tools for Data Entry Team, tenant-scoped."""
-    return [with_tenant_scope(t) for t in registry.tools]
+    """Get all sheets tools for Data Entry Team, tenant-scoped and guarded."""
+    reader = make_grid_reader(registry)
+    return [
+        with_destructive_guard(with_recording(with_tenant_scope(t)), reader)
+        for t in registry.tools
+    ]
 
 
 def get_read_tools(registry: MCPToolRegistry) -> list[BaseTool]:
     """Get read-only GSheets tools for Read Agent."""
+    reader = make_grid_reader(registry)
     allowed = {
         "tool_get_sheet_data",
         "tool_get_sheet_formulas",
@@ -149,7 +277,9 @@ def get_read_tools(registry: MCPToolRegistry) -> list[BaseTool]:
         "tool_get_multiple_sheet_data",
     }
     return [
-        _with_coordinates(with_tenant_scope(t))
+        _with_coordinates(
+            with_destructive_guard(with_recording(with_tenant_scope(t)), reader)
+        )
         for t in registry.tools
         if t.name in allowed
     ]
@@ -171,7 +301,12 @@ def get_sheet_tools(registry: MCPToolRegistry) -> list[BaseTool]:
         "tool_copy_sheet",
         "tool_delete_sheet",
     }
-    return [with_tenant_scope(t) for t in registry.tools if t.name in allowed]
+    reader = make_grid_reader(registry)
+    return [
+        with_destructive_guard(with_recording(with_tenant_scope(t)), reader)
+        for t in registry.tools
+        if t.name in allowed
+    ]
 
 
 def get_write_tools(registry: MCPToolRegistry) -> list[BaseTool]:
@@ -183,6 +318,7 @@ def get_write_tools(registry: MCPToolRegistry) -> list[BaseTool]:
     agent emits [CLARIFY] instead of executing — see incident 2026-04-25
     where the agent asked the user for a column letter it could have read.
     """
+    reader = make_grid_reader(registry)
     allowed = {
         # Read primitives needed to ground writes in actual sheet state.
         "tool_get_sheet_data",
@@ -197,7 +333,9 @@ def get_write_tools(registry: MCPToolRegistry) -> list[BaseTool]:
         "tool_clear_range",
     }
     return [
-        _with_coordinates(with_tenant_scope(t))
+        _with_coordinates(
+            with_destructive_guard(with_recording(with_tenant_scope(t)), reader)
+        )
         for t in registry.tools
         if t.name in allowed
     ]
