@@ -91,3 +91,18 @@ async def test_create_duplicate_name_rejected(service):
     await service.create(user, "Utama")
     with pytest.raises(SpreadsheetExistsError):
         await service.create(user, "Utama")
+
+
+async def test_recent_activity_surfaces_last_edited_sheet(service):
+    """Continuity read returns the workspace's most-recently-edited sheet."""
+    user = _user_id()
+    scope = await service.resolve_scope(user)  # provisions default "Utama"
+    await service._store.create_sheet(scope, "Jun", [["Tanggal", "Toko"]])
+    await service._store.mutate_grid(
+        scope, "Jun", lambda g: g + [["2026-06-30", "Indomaret"]]
+    )
+
+    activity = await service.recent_activity(scope, limit=3)
+
+    assert activity[0]["title"] == "Jun"
+    assert activity[0]["last_row"] == ["2026-06-30", "Indomaret"]

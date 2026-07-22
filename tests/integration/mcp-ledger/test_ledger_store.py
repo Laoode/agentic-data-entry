@@ -172,3 +172,43 @@ async def test_connect_adopts_orphan_workspaces(store):
         assert constraint is not None
     finally:
         await fresh.close()
+
+
+async def test_recent_activity_orders_by_last_edit_with_preview(store):
+    """Most-recently-edited sheet comes first, with a last-row preview."""
+    user = _user_id()
+    created = await store.create_spreadsheet(user, f"RA-{uuid.uuid4().hex[:8]}")
+    workspace = created["spreadsheetId"]
+    await store.create_sheet(workspace, "Jan", [["Tanggal", "Toko", "Jumlah"]])
+    await store.create_sheet(workspace, "Feb", [["Tanggal", "Toko", "Jumlah"]])
+    # Edit Feb, then Jan, so Jan is the most-recently-edited sheet.
+    await store.mutate_grid(workspace, "Feb", lambda g: g + [["2026-02-01", "A", "10"]])
+    await store.mutate_grid(
+        workspace, "Jan", lambda g: g + [["2026-01-01", "Indomaret", "152000"]]
+    )
+
+    activity = await store.get_recent_activity(workspace, limit=3)
+
+    assert [a["title"] for a in activity][0] == "Jan"
+    top = activity[0]
+    assert top["rows"] == 2  # header + one appended row
+    assert top["last_row"] == ["2026-01-01", "Indomaret", "152000"]
+    assert top["updated_at"] is not None
+
+
+async def test_recent_activity_empty_workspace_returns_empty(store):
+    user = _user_id()
+    created = await store.create_spreadsheet(user, f"RA-empty-{uuid.uuid4().hex[:8]}")
+    activity = await store.get_recent_activity(created["spreadsheetId"], limit=3)
+    assert activity == []
+
+
+async def test_recent_activity_respects_limit(store):
+    user = _user_id()
+    created = await store.create_spreadsheet(user, f"RA-lim-{uuid.uuid4().hex[:8]}")
+    workspace = created["spreadsheetId"]
+    for name in ("S1", "S2", "S3"):
+        await store.create_sheet(workspace, name, [["h"]])
+
+    activity = await store.get_recent_activity(workspace, limit=2)
+    assert len(activity) == 2

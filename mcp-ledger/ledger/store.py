@@ -207,6 +207,45 @@ class LedgerStore:
             for i, r in enumerate(rows)
         ]
 
+    async def get_recent_activity(
+        self, workspace: str, limit: int = 3
+    ) -> list[dict[str, Any]]:
+        """Return the most recently edited sheets in a workspace.
+
+        Deterministic cross-session continuity signal ("where did I leave
+        off"). Reads ``updated_at`` (bumped on every append/mutate/rename) and
+        derives a compact preview from the grid. Receipt-scale grids make the
+        per-sheet grid read cheap at the small ``limit`` used here; revisit with
+        a denormalized last-row column only if tabs grow far beyond that.
+
+        Args:
+            workspace: Spreadsheet id (workspace key).
+            limit: Maximum sheets to return, most-recently-edited first.
+
+        Returns:
+            List of dicts with ``title``, ``updated_at`` (ISO string or None),
+            ``rows`` (grid length), and ``last_row`` (list or None).
+        """
+        rows = await self.pool.fetch(
+            "SELECT title, updated_at, grid FROM ledger_sheet "
+            "WHERE workspace = $1 ORDER BY updated_at DESC, sheet_id DESC LIMIT $2",
+            workspace,
+            limit,
+        )
+        activity: list[dict[str, Any]] = []
+        for row in rows:
+            grid = json.loads(row["grid"]) if row["grid"] else []
+            updated = row["updated_at"]
+            activity.append(
+                {
+                    "title": row["title"],
+                    "updated_at": updated.isoformat() if updated else None,
+                    "rows": len(grid),
+                    "last_row": grid[-1] if grid else None,
+                }
+            )
+        return activity
+
     async def get_grid(self, workspace: str, title: str) -> list[list[Any]]:
         row = await self.pool.fetchrow(
             "SELECT grid FROM ledger_sheet WHERE workspace = $1 AND title = $2",

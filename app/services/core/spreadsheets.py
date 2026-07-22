@@ -49,6 +49,16 @@ class SpreadsheetService:
         await self._owned(user_id, spreadsheet_id)
         await self._store.delete_spreadsheet(spreadsheet_id)
 
+    async def recent_activity(
+        self, spreadsheet_id: str, limit: int = 3
+    ) -> list[dict[str, Any]]:
+        """Most-recently-edited sheets in a spreadsheet (continuity signal).
+
+        The caller passes the already-resolved active scope (ownership was
+        validated in resolve_scope), so no ownership re-check is done here.
+        """
+        return await self._store.get_recent_activity(spreadsheet_id, limit)
+
     async def resolve_scope(self, user_id: int, requested: str | None = None) -> str:
         """Return the spreadsheet the current request operates on.
 

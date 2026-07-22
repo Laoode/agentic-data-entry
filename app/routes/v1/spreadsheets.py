@@ -89,3 +89,8 @@ async def delete_spreadsheet(
         await _service(request).delete(user_id, spreadsheet_id)
     except SpreadsheetNotFoundError:
         raise HTTPException(status_code=404, detail="Spreadsheet not found")
+    # Cascade: a deleted spreadsheet's long-term memories go with it. Fail-soft
+    # (purge never raises); memory is None when the feature is off.
+    memory = request.app.state.container.memory
+    if memory is not None:
+        await memory.purge_spreadsheet(user_id, spreadsheet_id)

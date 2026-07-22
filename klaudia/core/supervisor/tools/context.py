@@ -108,6 +108,67 @@ def build_session_context(session_files: list[dict[str, Any]] | None) -> str:
     return "\n".join(lines)
 
 
+_PREVIEW_CELLS = 6
+_PREVIEW_CHARS = 120
+
+
+def _preview_row(row: list[Any]) -> str:
+    """Compact one-line preview of a grid row: first few cells, char-capped."""
+    cells = [str(c) for c in row[:_PREVIEW_CELLS]]
+    return " | ".join(cells)[:_PREVIEW_CHARS]
+
+
+def build_continuity_context(activity: list[dict[str, Any]] | None) -> str:
+    """Format recent-sheet activity into a compact cross-session continuity block.
+
+    Deterministic "where you left off" context so a fresh session is not blank.
+    Only the most-recent sheet carries a last-row preview to keep the block
+    small. Empty activity returns an explicit "no record" line so the model
+    states that plainly instead of inventing past work (finance-critical).
+
+    Args:
+        activity: Rows from SpreadsheetService.recent_activity, most-recent
+            first, or None/empty.
+
+    Returns:
+        A prompt-ready block; never an empty string.
+    """
+    if not activity:
+        return "No recent sheet activity on record."
+    lines: list[str] = []
+    for i, item in enumerate(activity):
+        title = item.get("title", "?")
+        updated = (item.get("updated_at") or "")[:10]  # date only, no raw time
+        count = item.get("rows", 0)
+        line = f'- "{title}": last edited {updated}, {count} row(s)'
+        if i == 0 and item.get("last_row"):
+            preview = _preview_row(item["last_row"])
+            if preview:
+                line += f". Last entry: {preview}"
+        lines.append(line)
+    return "MOST RECENT SHEET ACTIVITY (most recent first):\n" + "\n".join(lines)
+
+
+def build_memory_context(memories: list[str] | None) -> str:
+    """Format retrieved long-term memories into a prompt block.
+
+    Empty input returns "" so the orchestrator's slot fallback states plainly
+    that nothing is remembered (anti-confabulation), rather than inventing.
+    Memories are stored in English; Klaudia still replies in the user's
+    language.
+
+    Args:
+        memories: Memory texts from MemoryService.recall, most-relevant first.
+
+    Returns:
+        A prompt-ready block, or "" when there is nothing to surface.
+    """
+    facts = [m.strip() for m in (memories or []) if m and m.strip()]
+    if not facts:
+        return ""
+    return "\n".join(f"- {fact}" for fact in facts)
+
+
 def build_extraction_context(extraction_data: dict[str, Any] | None) -> str:
     """Format extraction data into a context message."""
     if not extraction_data:

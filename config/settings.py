@@ -114,6 +114,22 @@ class Settings(BaseSettings):
     # SQL-tool server is ported too — see db_client_pg.py module docstring.
     database_url: str = Field(default="", alias="DATABASE_URL")
 
+    # Memory (mem0 OSS long-term memory). Self-hosted: pgvector on the same
+    # Postgres, DeepSeek for fact extraction (reuses DEEPSEEK_*), and our
+    # isolated embedding service (services/embed) as the embedder. Off by
+    # default; promote off -> read -> write like NUMERIC_VERIFY_MODE.
+    memory_mode: str = Field(default="off", alias="MEMORY_MODE")  # off|read|write
+    memory_top_k: int = Field(default=6, alias="MEMORY_TOP_K")
+    memory_collection: str = Field(default="klaudia_memory", alias="MEMORY_COLLECTION")
+    memory_llm_model: str = Field(default="deepseek-v4-flash", alias="MEMORY_LLM_MODEL")
+    memory_embed_base_url: str = Field(
+        default="http://localhost:8100/v1", alias="MEMORY_EMBED_BASE_URL"
+    )
+    memory_embed_model: str = Field(
+        default="paraphrase-multilingual-MiniLM-L12-v2", alias="MEMORY_EMBED_MODEL"
+    )
+    memory_embed_dims: int = Field(default=384, alias="MEMORY_EMBED_DIMS")
+
     # Redis (hot cache + Taskiq broker + pubsub)
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
     dedup_cache_ttl_seconds: int = Field(default=86400, alias="DEDUP_CACHE_TTL_SECONDS")

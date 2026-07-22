@@ -15,6 +15,7 @@ from app.services.extraction.infra.object_store import MinIOClient
 from app.services.extraction.ingest import IngestService
 from app.services.extraction.agents.base import ExtractionAgent
 from app.services.core.approvals import ApprovalService
+from app.services.core.memory import MemoryService
 from app.services.core.spreadsheets import SpreadsheetService
 from app.services.guardrails import GuardrailsAgent, GuardrailsConfig
 from klaudia.core.supervisor.agent import SupervisorAgent
@@ -142,6 +143,7 @@ class KlaudiaContainer:
         self.supervisor: Optional[SupervisorAgent] = None
         self.ledger_store: Optional[LedgerStore] = None
         self.spreadsheets: Optional[SpreadsheetService] = None
+        self.memory: Optional[MemoryService] = None
         self.approvals: Optional[ApprovalService] = None
         self.extraction_agent: Optional[ExtractionAgent] = None
         self.langfuse: Optional[LangfuseService] = None
@@ -196,6 +198,12 @@ class KlaudiaContainer:
             container.ledger_store = LedgerStore(settings.database_url)
             await container.ledger_store.connect()
             container.spreadsheets = SpreadsheetService(container.ledger_store)
+
+        # Long-term memory (mem0 OSS). Off by default; built only when enabled
+        # so mem0/pgvector are not required for a normal boot. Fail-soft: a
+        # construction error disables memory rather than blocking startup.
+        if settings.memory_mode != "off":
+            container.memory = MemoryService.from_settings(settings)
 
         # MCP registries (transport selected via MCP_TRANSPORT setting)
         container.mcp_sqlite, container.mcp_gsheets = _build_mcp_registries(settings)

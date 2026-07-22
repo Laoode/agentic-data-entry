@@ -15,6 +15,7 @@ from app.services.core.prompts import KLAUDIA_SYSTEM_PROMPT
 from app.services.core.verifier import verify_reply
 from app.services.extraction.infra.normalizer import is_pdf, is_supported_image
 from klaudia.core.supervisor.tools.context import (
+    build_continuity_context,
     build_extraction_context,
     build_session_context,
     get_active_spreadsheet,
@@ -106,6 +107,9 @@ class KlaudiaOrchestrator:
         self._c = container
         self._extraction_agent = container.extraction_agent
         self._langfuse = container.langfuse
+        # Strong refs to in-flight background memory writes so they are not
+        # garbage-collected before completing.
+        self._bg_tasks: set[Any] = set()
 
     async def process(
         self,
@@ -238,10 +242,18 @@ class KlaudiaOrchestrator:
         # which confuses the LLM (two identical consecutive user messages).
         import asyncio
 
-        history, session_files_raw, available_sheets = await asyncio.gather(
+        (
+            history,
+            session_files_raw,
+            available_sheets,
+            recent_activity,
+            memory_ctx,
+        ) = await asyncio.gather(
             self._c.db_client.get_conversation_history(session_id, limit=10),
             self._c.db_client.get_session_files(session_id),
             self._c.supervisor.get_available_sheets(),
+            self._recent_activity_context(),
+            self._recall_memory(user_id, user_text),
         )
 
         meta = ChatMetadata(user_name=user_name)
@@ -249,6 +261,8 @@ class KlaudiaOrchestrator:
         system_prompt = KLAUDIA_SYSTEM_PROMPT.format(
             session_files=session_files_ctx,
             available_sheets=available_sheets or "No sheets available.",
+            recent_activity=recent_activity or "No recent sheet activity on record.",
+            memory_context=memory_ctx or "Nothing remembered about this user yet.",
             session_id=session_id,
             date=meta.date,
             time=meta.time,
@@ -332,6 +346,9 @@ class KlaudiaOrchestrator:
         # 10. Save assistant message
         await self._c.db_client.save_message(session_id, user_id, "assistant", content)
         await self._c.db_client.update_session_timestamp(session_id)
+
+        # 11. Persist long-term memory in the background (reply already built).
+        self._remember(user_id, get_active_spreadsheet(), user_text, content)
 
         elapsed = int((time.time() - start) * 1000)
         return KlaudiaResponse(
@@ -491,10 +508,18 @@ class KlaudiaOrchestrator:
 
             import asyncio
 
-            history, session_files_raw, available_sheets = await asyncio.gather(
+            (
+                history,
+                session_files_raw,
+                available_sheets,
+                recent_activity,
+                memory_ctx,
+            ) = await asyncio.gather(
                 self._c.db_client.get_conversation_history(session_id, limit=10),
                 self._c.db_client.get_session_files(session_id),
                 self._c.supervisor.get_available_sheets(),
+                self._recent_activity_context(),
+                self._recall_memory(user_id, user_text),
             )
 
             meta = ChatMetadata(user_name=user_name)
@@ -502,6 +527,9 @@ class KlaudiaOrchestrator:
             system_prompt = KLAUDIA_SYSTEM_PROMPT.format(
                 session_files=session_files_ctx,
                 available_sheets=available_sheets or "No sheets available.",
+                recent_activity=recent_activity
+                or "No recent sheet activity on record.",
+                memory_context=memory_ctx or "Nothing remembered about this user yet.",
                 session_id=session_id,
                 date=meta.date,
                 time=meta.time,
@@ -609,6 +637,9 @@ class KlaudiaOrchestrator:
                 session_id, user_id, "assistant", content
             )
             await self._c.db_client.update_session_timestamp(session_id)
+
+            # Persist long-term memory in the background (reply already streamed).
+            self._remember(user_id, get_active_spreadsheet(), user_text, content)
 
             elapsed = int((time.time() - start) * 1000)
             if turn_obs is not None:
@@ -745,6 +776,69 @@ class KlaudiaOrchestrator:
             recheck.ungrounded,
         )
         return content
+
+    async def _recall_memory(self, user_id: int, query: str) -> str:
+        """Long-term memory context for the system prompt (fail-soft, cheap).
+
+        mem0 search = embed + pgvector scan; safe to run in the context gather.
+        Returns "" when memory is disabled or the embed service is unreachable.
+        """
+        mem = self._c.memory
+        if mem is None:
+            return ""
+        return await mem.recall(user_id, query)
+
+    def _remember(
+        self, user_id: int, spreadsheet_id: str | None, user_text: str, reply: str
+    ) -> None:
+        """Persist the turn to long-term memory in the background (write mode).
+
+        The reply is already sent, so mem0's LLM extraction never adds latency
+        to the response. Only active when MEMORY_MODE=write.
+        """
+        mem = self._c.memory
+        if mem is None or self._c.settings.memory_mode != "write":
+            return
+        import asyncio
+
+        task = asyncio.create_task(
+            mem.remember(user_id, spreadsheet_id, user_text, reply)
+        )
+        self._bg_tasks.add(task)
+        task.add_done_callback(self._bg_tasks.discard)
+
+    async def drain_background(self) -> None:
+        """Await in-flight background memory writes.
+
+        The eval harness calls this before a fresh-session recall so a prior
+        turn's write has landed (mem0 writes are async); it is also a clean hook
+        for graceful shutdown so memory writes are not lost. No-op when memory
+        is off (no tasks).
+        """
+        import asyncio
+
+        pending = list(self._bg_tasks)
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
+    async def _recent_activity_context(self) -> str:
+        """Deterministic cross-session continuity for the active spreadsheet.
+
+        Reads the most-recently-edited sheets so a fresh session is not blank
+        ("lanjut yang kemarin"). Ledger backend only: the gsheets backend has
+        no per-sheet edit timestamps. Fails soft: any error yields an empty
+        context rather than breaking the request.
+        """
+        service = self._c.spreadsheets
+        scope = get_active_spreadsheet()
+        if service is None or not scope:
+            return ""
+        try:
+            activity = await service.recent_activity(scope, limit=3)
+        except Exception as exc:
+            logger.warning("Recent-activity read failed (fail-soft): %s", exc)
+            return ""
+        return build_continuity_context(activity)
 
     async def _resolve_scope(
         self, user_id: int, spreadsheet_id: str | None
