@@ -4,7 +4,10 @@
 
 services:
   postgres:
-    image: postgres:16-alpine
+    # pgvector image (not plain postgres) so mem0's long-term memory can store
+    # embeddings via the `vector` extension on this same instance. Drop-in for
+    # postgres:16-alpine; same PG 16 data format, same volume.
+    image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: klaudia
       POSTGRES_PASSWORD: klaudia
