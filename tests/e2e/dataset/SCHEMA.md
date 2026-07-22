@@ -25,6 +25,11 @@ no Python changes needed. The loader validates every case against `schema.py`
   attachment: sample-data/receipt/002-receipt.png   # optional, path from repo root
   attachments: [ ... ]          # optional list (for >1 PDF / mixed / >5 image cases)
   note: "why this turn exists"  # optional
+  new_session: false            # true → fresh session (empty window); engine drains
+                                #        pending background memory writes first
+  as_user: 90010                # optional → run this turn as a different user id
+                                #        (default: the harness TEST_USER_ID); for
+                                #        cross-user memory-isolation cases
   expect: { ... }               # the assertion block
 ```
 

@@ -107,6 +107,14 @@ class Turn(BaseModel):
     # >5 images). Merged with `attachment` by `all_attachments()`.
     attachments: list[str] = Field(default_factory=list)
     note: str | None = None
+    # Start a fresh session for this turn (same user unless as_user is set). The
+    # new session has an empty conversation window, so anything the turn recalls
+    # must come from long-term memory / continuity state, not history. The engine
+    # flushes pending background memory writes before starting the new session.
+    new_session: bool = False
+    # Run this turn as a different user id (default: the harness TEST_USER_ID).
+    # Enables cross-user isolation cases: a user must not recall another's memory.
+    as_user: int | None = None
     expect: Expect = Field(default_factory=Expect)
 
     def all_attachments(self) -> list[str]:

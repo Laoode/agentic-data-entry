@@ -41,6 +41,11 @@ _REPORT = Report()
 
 def _params():
     for c in _CASES:
+        # Memory cases run in test_memory_e2e.py: they need long-term memory
+        # enabled (embed service + MEMORY_MODE) and their own reset/isolation,
+        # so they are kept out of the bench table here.
+        if c.category == "memory":
+            continue
         marks = [pytest.mark.e2e]
         if c.mutating:
             marks.append(pytest.mark.mutating)

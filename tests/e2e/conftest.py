@@ -25,6 +25,11 @@ load_dotenv()
 # production (the app never sets this). setdefault lets a developer override.
 os.environ.setdefault("E2E_FREEZE_NOW", "2026-06-30T19:22:00")
 
+# Isolate long-term memory to a throwaway collection so the memory eval's reset()
+# can never touch real memories. Only has an effect when MEMORY_MODE is enabled
+# for the run (memory cases skip otherwise). setdefault lets a developer override.
+os.environ.setdefault("MEMORY_COLLECTION", "klaudia_memory_e2e")
+
 
 def pytest_configure(config):
     config.addinivalue_line(

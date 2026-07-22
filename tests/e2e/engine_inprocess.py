@@ -63,6 +63,27 @@ async def _prepurge_cache_miss(container, case: Case) -> None:
                 logger.warning("KIE pre-purge failed for %s (%s)", case.id, file_name)
 
 
+async def _ensure_users(container, case: Case) -> None:
+    """Create synthetic `as_user` rows so the session->user FK inserts succeed.
+
+    Cross-user memory cases run turns as arbitrary user ids that were never
+    registered. The app DB enforces a session->user foreign key, so those users
+    must exist first. Idempotent and portable across the SQLite/PG backends.
+    """
+    if container is None:
+        return
+    user_ids = {t.as_user for t in case.turns if t.as_user is not None}
+    for uid in user_ids:
+        try:
+            await container.db_client.execute(
+                'INSERT INTO "user" (user_id, username, email, password_hash) '
+                "VALUES (?, ?, ?, ?) ON CONFLICT (user_id) DO NOTHING",
+                (uid, f"e2e-user-{uid}", f"e2e-{uid}@local", "not-a-real-hash"),
+            )
+        except Exception:
+            logger.warning("could not ensure e2e user %s (%s)", uid, case.id)
+
+
 async def run_case_inprocess(
     orchestrator, spy, extraction_spy, case: Case, sheet_guard=None, container=None
 ) -> list[TurnRecord]:
@@ -78,11 +99,24 @@ async def run_case_inprocess(
     """
     records: list[TurnRecord] = []
     session_id: int | None = None
+    current_user = TEST_USER_ID
 
     await _prepurge_cache_miss(container, case)
+    await _ensure_users(container, case)
 
     try:
         for idx, turn in enumerate(case.turns):
+            turn_user = turn.as_user if turn.as_user is not None else TEST_USER_ID
+            # A fresh session (or a user switch) starts memory-cold: flush any
+            # in-flight background memory writes so a cross-session recall sees
+            # the prior turn's write, then drop the session id so the orchestrator
+            # mints a new one.
+            if turn.new_session or turn_user != current_user:
+                drain = getattr(orchestrator, "drain_background", None)
+                if drain is not None:
+                    await drain()
+                session_id = None
+            current_user = turn_user
             messages = _build_message(turn)
             try:
                 with spy.capture() as calls, extraction_spy.capture() as extractions:
@@ -90,7 +124,7 @@ async def run_case_inprocess(
                         orchestrator.process(
                             messages=messages,
                             session_id=session_id,
-                            user_id=TEST_USER_ID,
+                            user_id=turn_user,
                             user_name=TEST_USER_NAME,
                         ),
                         timeout=TURN_TIMEOUT_S,
@@ -159,7 +193,7 @@ async def run_case_inprocess(
                     orchestrator.process(
                         messages=[KlaudiaMessage(role="user", content=prompt)],
                         session_id=session_id,
-                        user_id=TEST_USER_ID,
+                        user_id=current_user,
                         user_name=TEST_USER_NAME,
                     ),
                     timeout=CLEANUP_TIMEOUT_S,
