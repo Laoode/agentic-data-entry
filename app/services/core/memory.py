@@ -166,11 +166,17 @@ class MemoryService:
         spreadsheet_id: str | None,
         user_text: str,
         assistant_text: str,
+        *,
+        strict: bool = False,
     ) -> None:
         """Persist a turn as long-term memory (fact extraction runs in mem0).
 
         Called in the background: the reply is already sent, so latency and
         errors here never reach the user.
+
+        Args:
+            strict: When True, re-raise on failure so a Taskiq worker can retry.
+                The inline path leaves it False (swallow, never break a turn).
         """
         messages = [
             {"role": "user", "content": user_text},
@@ -181,6 +187,8 @@ class MemoryService:
             await self._m.add(messages, user_id=str(user_id), metadata=metadata)
         except Exception as exc:
             logger.warning("Memory write failed (fail-soft): %s", exc)
+            if strict:
+                raise
 
     async def purge_spreadsheet(self, user_id: int, spreadsheet_id: str) -> int:
         """Delete every memory tagged with a spreadsheet (cascade on delete)."""

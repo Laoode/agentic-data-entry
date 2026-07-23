@@ -119,6 +119,12 @@ class Settings(BaseSettings):
     # isolated embedding service (services/embed) as the embedder. Off by
     # default; promote off -> read -> write like NUMERIC_VERIFY_MODE.
     memory_mode: str = Field(default="off", alias="MEMORY_MODE")  # off|read|write
+    # How a memory write runs once MEMORY_MODE=write. "inline" runs mem0.add in
+    # an app background task (no worker needed; good for dev/CI/single-node).
+    # "taskiq" enqueues to a Taskiq worker (durable across restarts, offloaded,
+    # retryable) — needs a running worker or writes queue unprocessed. Mirrors
+    # EXTRACTION_MODE=sync|async.
+    memory_write_mode: str = Field(default="inline", alias="MEMORY_WRITE_MODE")
     memory_top_k: int = Field(default=6, alias="MEMORY_TOP_K")
     memory_collection: str = Field(default="klaudia_memory", alias="MEMORY_COLLECTION")
     memory_llm_model: str = Field(default="deepseek-v4-flash", alias="MEMORY_LLM_MODEL")

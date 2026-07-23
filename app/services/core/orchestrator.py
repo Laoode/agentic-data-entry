@@ -794,18 +794,41 @@ class KlaudiaOrchestrator:
         """Persist the turn to long-term memory in the background (write mode).
 
         The reply is already sent, so mem0's LLM extraction never adds latency
-        to the response. Only active when MEMORY_MODE=write.
+        to the response. Only active when MEMORY_MODE=write. The write runs
+        inline (mem0.add here) or via Taskiq (enqueue, a worker runs it),
+        selected by MEMORY_WRITE_MODE; either way it is backgrounded off the
+        reply and tracked so drain_background can await it.
         """
         mem = self._c.memory
         if mem is None or self._c.settings.memory_mode != "write":
             return
         import asyncio
 
-        task = asyncio.create_task(
-            mem.remember(user_id, spreadsheet_id, user_text, reply)
-        )
+        if self._c.settings.memory_write_mode == "taskiq":
+            coro = self._enqueue_memory(user_id, spreadsheet_id, user_text, reply)
+        else:
+            coro = mem.remember(user_id, spreadsheet_id, user_text, reply)
+        task = asyncio.create_task(coro)
         self._bg_tasks.add(task)
         task.add_done_callback(self._bg_tasks.discard)
+
+    async def _enqueue_memory(
+        self, user_id: int, spreadsheet_id: str | None, user_text: str, reply: str
+    ) -> None:
+        """Enqueue a memory write to Taskiq (a worker runs mem0.add). Fail-soft:
+        a dispatch error (e.g. Redis down) is logged, never raised into the turn.
+        """
+        try:
+            from app.services.core.memory_tasks import persist_memory_task
+
+            await persist_memory_task.kiq(
+                user_id=user_id,
+                spreadsheet_id=spreadsheet_id,
+                user_text=user_text,
+                assistant_text=reply,
+            )
+        except Exception as exc:
+            logger.warning("Memory enqueue failed (fail-soft): %s", exc)
 
     async def drain_background(self) -> None:
         """Await in-flight background memory writes.
