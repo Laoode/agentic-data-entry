@@ -73,3 +73,5 @@ docs/PRD.md
 docs/MEMORY.md
 docs/MODELS.md
 docs/HAT.md
+# Local-only backups of gitignored internal docs (survive branch switches; never pushed)
+docs/.local-backup/
