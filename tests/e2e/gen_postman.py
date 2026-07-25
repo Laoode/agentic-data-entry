@@ -101,21 +101,56 @@ def _turn_request(case: Case, turn: Turn, idx: int, reset_session: bool) -> dict
     }
 
 
+def http_blocker(case: Case) -> str | None:
+    """Why this case cannot run over HTTP, or None if it can.
+
+    Emitting a request that cannot pass is worse than omitting it: the collection
+    would ship baked expected amounts next to calls that read somebody else's
+    empty spreadsheet, and a red run would say nothing about the system.
+    """
+    if any(t.as_user is not None for t in case.turns):
+        return (
+            "runs as a scratch tenant; over HTTP the identity comes from the "
+            "bearer token, so the request would read the token owner's data"
+        )
+    if any(t.spreadsheet is not None for t in case.turns):
+        return (
+            "binds a named spreadsheet whose id is generated at seed time and "
+            "cannot be baked into a static collection"
+        )
+    return None
+
+
 def build_collection(cases: list[Case]) -> dict:
     folders: dict[str, dict] = {}
+    skipped: dict[str, str] = {}
     for c in cases:
+        blocker = http_blocker(c)
+        if blocker:
+            skipped[c.id] = blocker
+            continue
         folder = folders.setdefault(c.category, {"name": c.category, "item": []})
         for idx, turn in enumerate(c.turns):
             folder["item"].append(_turn_request(c, turn, idx, reset_session=(idx == 0)))
 
+    omitted = ""
+    if skipped:
+        reasons = sorted({reason for reason in skipped.values()})
+        omitted = (
+            f"\n\n{len(skipped)} case(s) are omitted because the HTTP layer "
+            "cannot reproduce their setup: " + "; ".join(reasons) + ". "
+            "Those run in-process via pytest (see tests/e2e/README.md)."
+        )
+
     return {
         "info": {
-            "name": "Klaudia Whitebox E2E",
+            "name": "Klaudia Sandbox — HTTP layer",
             "description": (
                 "Auto-generated from tests/e2e/dataset. One POST /v1/chat per turn, "
                 "grouped by category. Set {{base_url}} (e.g. http://localhost:8000) "
                 "and {{access_token}} (from POST /v1/auth/login or /register). "
                 "{{session_id}} is captured automatically for multi-turn cases."
+                + omitted
             ),
             "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
         },
