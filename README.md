@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=Chakra+Petch&weight=600&size=50&duration=1&pause=1000&color=000000&background=CCFF00&center=true&vCenter=true&repeat=false&width=1200&lines=Klaudia+%E2%80%94+The+Agentic+Accountant" alt="Title" />
+  <img src="https://readme-typing-svg.demolab.com?font=Chakra+Petch&weight=600&size=55&duration=1&pause=1000&color=000000&background=CCFF00&center=true&vCenter=true&repeat=false&width=1200&lines=Klaudia%3A+The+Agentic+Accountant" alt="Klaudia: The Agentic Accountant - Self-Hosted AI Bookkeeping Agent" />
 </h1>
 
 <div align="center">
@@ -16,22 +16,23 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/FastAPI-Backend-green" />
-  <img src="https://img.shields.io/badge/LangGraph-Agentic%20Workflow-blue" />
-  <img src="https://img.shields.io/badge/LangChain-Orchestration-blueviolet" />
+  <img src="https://img.shields.io/badge/FastAPI-Backend-07988a" />
+  <img src="https://img.shields.io/badge/LangGraph-Agentic%20Workflow-white" />
+  <img src="https://img.shields.io/badge/LangChain-Orchestration-7fc8ff" />
   <img src="https://img.shields.io/badge/PostgreSQL-Ledger%20%2B%20pgvector-336791" />
+  <img src="https://img.shields.io/badge/NocoDB-Grid%20View-3c4be7" />
   <img src="https://img.shields.io/badge/MCP-Tool%20Boundary-black" />
   <img src="https://img.shields.io/badge/mem0-Long%20Term%20Memory-ff6f00" />
   <img src="https://img.shields.io/badge/Deepseekv4-pro-4e6bfe" />
-  <img src="https://img.shields.io/badge/Qwen3.5-4B%20Fine%20Tuned-orange" />
+  <img src="https://img.shields.io/badge/Qwen3.5-4B%20Fine%20Tuned-623ae7" />
   <img src="https://img.shields.io/badge/vLLM-Model%20Serving-1f4b99" />
   <img src="https://img.shields.io/badge/Redis-Queue-red" />
   <img src="https://img.shields.io/badge/Taskiq-Workers-yellow" />
   <img src="https://img.shields.io/badge/MinIO-Object%20Storage-darkred" />
-  <img src="https://img.shields.io/badge/Langfuse-Observability-purple" />
+  <img src="https://img.shields.io/badge/Langfuse-Observability-e11411" />
   <img src="https://img.shields.io/badge/CircleCI-Pipeline-343434" />
   <img src="https://img.shields.io/badge/React%20Native-Mobile%20App-cyan" />
-  <img src="https://img.shields.io/badge/Docker-Self%20Hosted-blue" />
+  <img src="https://img.shields.io/badge/Docker-Self%20Hosted-1c63ed" />
 </p>
 
 ---
@@ -91,7 +92,7 @@ managed memory platform, no third-party vector store.
 
 ---
 
-## 🐸 Architecture
+## 🪆 Architecture
 
 <div align="center">
   <img src="https://github.com/Laoode/agentic-data-entry/blob/development/docs/LLMOps.png" alt="LLM Ops Pipeline">
@@ -203,7 +204,7 @@ any single model being available.
 
 ---
 
-## 🧠 Memory
+## 🔋 Memory
 
 Two tiers, because they fail differently.
 
@@ -243,7 +244,7 @@ autoscaling). This repository consumes an endpoint; it does not serve models.
 
 ---
 
-## 🚀 Running it
+## 📟 Running it
 
 ```bash
 docker compose up -d                  # Postgres, Redis, MinIO
@@ -256,7 +257,7 @@ docker compose --profile sandbox up -d   # isolated store for the evaluation sui
 ```
 
 ```bash
-uv run pytest tests/unit -q                                   # fast, hermetic
+uv run pytest tests/unit -q                                    # fast, hermetic
 MOCK_KIE=true SHEETS_BACKEND=ledger uv run pytest tests/e2e -q # full evaluation
 ```
 
@@ -318,6 +319,6 @@ truth of an organisation.**
 
 ## 🔰 Author
 
-**Yudhy Prayitno**
+**Yudhy McCodey**
 
 Building agentic systems for real-world financial automation.
