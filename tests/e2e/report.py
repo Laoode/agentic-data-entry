@@ -207,10 +207,21 @@ class Report:
         lines.append("")
         return "\n".join(lines)
 
-    def write_markdown(self, out_dir: Path, model: str, provider: str = "") -> Path:
-        """Write the markdown report to out_dir/table-<model-slug>.md and return it."""
+    def write_markdown(
+        self,
+        out_dir: Path,
+        model: str,
+        provider: str = "",
+        filename: str | None = None,
+    ) -> Path:
+        """Write the markdown report and return its path.
+
+        Defaults to out_dir/table-<model-slug>.md. `filename` overrides that so a
+        second bench over the same model (the synthetic hard bench) writes its own
+        table instead of overwriting the main one.
+        """
         slug = re.sub(r"[^a-z0-9.]+", "-", model.lower()).strip("-") or "model"
-        path = out_dir / f"table-{slug}.md"
+        path = out_dir / (filename or f"table-{slug}.md")
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(self.render_markdown(model, provider))
         return path

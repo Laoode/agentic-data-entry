@@ -1,0 +1,45 @@
+# One sheet, 1000 rows: an enterprise-sized book in a single tab. The read tool
+# returns the whole grid with no row cap and there is no aggregate tool to push
+# the sum down into the store, so the entire ledger lands in the agent's working
+# context before a single number is added.
+#
+# This case exists to MEASURE that ceiling, not to be comfortably passed. If it
+# fails, the finding is where it fails: a wrong total means the arithmetic drifts
+# at volume, a timeout or truncation means the context, not the arithmetic, is
+# the binding constraint. Either way it is the case that says whether Klaudia can
+# serve a real company's ledger as built today.
+#
+# Data: tests/e2e/synthetic.py::build_bulk_ledger at seed 1013 (clean integer
+# amounts - format parsing is the dirty_data category's variable, not this one),
+# under scratch user 90114. Frozen by
+# tests/unit/test_synthetic_finance.py::test_bulk_golden_seed_1013_is_frozen.
+#
+# Frozen truth: 1000 rows, total 249.842.000, Makan 61.417.000.
+
+- id: BULK01-thousand-row-total
+  category: bulk_scale
+  title: Exact total over 1000 rows in one sheet
+  tags: [bulk_scale, synthetic, numeric, scale, ceiling]
+  turns:
+    - user: "Berapa total seluruh pengeluaran di sheet Buku Besar 2026?"
+      as_user: 90114
+      note: "1000 rows, one column sum = 249842000."
+      expect:
+        route: data_entry_team
+        mcp_tools_any: [tool_get_sheet_data, tool_get_multiple_sheet_data]
+        contains_amount: ["249842000"]
+        content_none: ["workspace", "spreadsheet_id", "tool_"]
+
+- id: BULK02-thousand-row-category-rollup
+  category: bulk_scale
+  title: Exact category rollup over 1000 rows
+  tags: [bulk_scale, synthetic, numeric, scale, group_by, ceiling]
+  turns:
+    - user: "Dari sheet Buku Besar 2026, total pengeluaran kategori Makan berapa?"
+      as_user: 90114
+      note: "Group 1000 rows by category and sum one group = 61417000."
+      expect:
+        route: data_entry_team
+        mcp_tools_any: [tool_get_sheet_data, tool_get_multiple_sheet_data]
+        contains_amount: ["61417000"]
+        content_none: ["workspace", "spreadsheet_id", "tool_"]

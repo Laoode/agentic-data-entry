@@ -50,6 +50,11 @@ class Expect(BaseModel):
     content_all: list[str] = Field(default_factory=list)  # all must appear (ci)
     content_none: list[str] = Field(default_factory=list)  # none may appear (ci)
     contains_amount: list[str] = Field(default_factory=list)  # digit-normalized
+    # Amounts that must NOT appear (digit-normalized). The negative half of
+    # contains_amount: it grades a figure the agent had no legitimate way to
+    # reach — another tenant's total, or a cross-spreadsheet sum the request's
+    # scope cannot see — so stating it is a leak or a confabulation.
+    excludes_amount: list[str] = Field(default_factory=list)
     is_rejection: bool | None = None  # guardrail-style refusal
     is_clarification: bool | None = None  # HITL clarifying question
     # Minimum destructive operations the guard must park for approval.
@@ -115,6 +120,12 @@ class Turn(BaseModel):
     # Run this turn as a different user id (default: the harness TEST_USER_ID).
     # Enables cross-user isolation cases: a user must not recall another's memory.
     as_user: int | None = None
+    # Logical name of the spreadsheet this turn is bound to, for users who own
+    # more than one. The runner maps the name to the real spreadsheet id and
+    # binds it exactly as /v1/chat does; None uses the user's default. A request
+    # sees only the bound spreadsheet (tenancy scope), which is what the
+    # multi-spreadsheet isolation cases grade.
+    spreadsheet: str | None = None
     expect: Expect = Field(default_factory=Expect)
 
     def all_attachments(self) -> list[str]:

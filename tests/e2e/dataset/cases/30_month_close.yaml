@@ -1,0 +1,121 @@
+# The ten-step month close: the longest compound workflow in the bench, and the
+# one that looks most like a real accountant's afternoon. Orient, read the
+# opening total, post three entries, correct one of them, re-aggregate the whole
+# sheet and one category, reconcile against a summary that disagrees, repair the
+# summary, verify.
+#
+# Every turn is graded on its own, so the report localizes the break instead of
+# only saying the workflow failed. State carries across all ten turns in one
+# session: "yang barusan" in turn 6 refers to the row posted in turn 4, and the
+# totals in turns 7-8 are only right if turns 3-6 all landed.
+#
+# Data and end state: tests/e2e/synthetic_finance.py::build_month_close_ledger at
+# seed 1013, under scratch user 90116. The appended amounts and the correction
+# live in that module (CLOSE_APPENDS / CLOSE_CORRECTED_AMOUNT), so the end-state
+# truth is computed from the same constants the prompts ask for. Frozen by
+# tests/unit/test_synthetic_finance.py::test_month_close_golden_seed_1013_is_frozen.
+#
+# Frozen truth: opening 1.796.000; after three posts 2.506.000; after correcting
+# Grab from 120.000 to 175.000 the total is 2.561.000; Makan becomes 1.191.000;
+# Rangkuman Juli states a stale 2.224.000, understating by 337.000.
+
+- id: CLOSE01-ten-step-month-close
+  category: month_close
+  title: Full month close in ten turns, each step graded
+  tags: [month_close, synthetic, numeric, compound, multi_turn, mutating, finance_model]
+  mutating: true
+  turns:
+    - user: "Sheet apa saja yang ada di sini?"
+      as_user: 90116
+      note: >-
+        Step 1, orientation. Both tabs must be named. The sheet list is already
+        in the prompt context, so answering without routing to a worker is
+        correct and cheaper - only the content is graded.
+      expect:
+        route_any_of: [data_entry_team, none]
+        content_all: ["kas juli", "rangkuman juli"]
+        content_none: ["workspace", "spreadsheet_id", "tool_"]
+
+    - user: "Berapa total pengeluaran di sheet Kas Juli sekarang?"
+      as_user: 90116
+      note: "Step 2, opening balance = 1796000."
+      expect:
+        route: data_entry_team
+        mcp_tools_any: [tool_get_sheet_data, tool_get_multiple_sheet_data]
+        contains_amount: ["1796000"]
+        content_none: ["workspace", "spreadsheet_id", "tool_"]
+
+    - user: "Catat pengeluaran baru di Kas Juli: GoFood, kategori Makan, Rp250.000."
+      as_user: 90116
+      note: "Step 3, first post."
+      expect:
+        route: data_entry_team
+        mcp_tools_any: [tool_append_rows, tool_update_cells]
+
+    - user: "Catat juga di sheet yang sama: Grab, kategori Transport, Rp120.000."
+      as_user: 90116
+      note: "Step 4, second post. Cross-turn reference: 'sheet yang sama' = Kas Juli."
+      expect:
+        route: data_entry_team
+        mcp_tools_any: [tool_append_rows, tool_update_cells]
+
+    - user: "Satu lagi: Shopee, kategori Belanja, Rp340.000, sheet yang sama."
+      as_user: 90116
+      note: "Step 5, third post."
+      expect:
+        route: data_entry_team
+        mcp_tools_any: [tool_append_rows, tool_update_cells]
+
+    - user: "Baris Grab yang barusan saya catat itu salah. Jumlahnya harusnya Rp175.000, bukan Rp120.000. Tolong perbaiki barisnya, jangan tambah baris baru."
+      as_user: 90116
+      note: >-
+        Step 6, correction. Must edit the row posted in step 4, not post an
+        adjusting entry: an extra row makes the step 7 total 2681000 instead of
+        2561000.
+      expect:
+        route: data_entry_team
+        mcp_tools_any: [tool_update_cells, tool_batch_update_cells]
+
+    - user: "Sekarang berapa total keseluruhan pengeluaran di Kas Juli?"
+      as_user: 90116
+      note: >-
+        Step 7, re-aggregate after four writes. 1796000 + 250000 + 175000 +
+        340000 = 2561000. 2506000 is the total when the correction never landed.
+      expect:
+        route: data_entry_team
+        mcp_tools_any: [tool_get_sheet_data, tool_get_multiple_sheet_data]
+        contains_amount: ["2561000"]
+        excludes_amount: ["2506000"]
+        content_none: ["workspace", "spreadsheet_id", "tool_"]
+
+    - user: "Kalau kategori Makan saja, totalnya berapa sekarang?"
+      as_user: 90116
+      note: >-
+        Step 8, group-by after the writes. 941000 + 250000 = 1191000. No tool
+        assertion: the previous turn already read the whole sheet, so grouping
+        that same data without a fresh read is legitimate. Only the number is
+        graded, and the numeric verifier still owns whether it is grounded.
+      expect:
+        route_any_of: [data_entry_team, none]
+        contains_amount: ["1191000"]
+        content_none: ["workspace", "spreadsheet_id", "tool_"]
+
+    - user: "Sheet Rangkuman Juli itu cocok tidak dengan Kas Juli? Kalau beda, berapa selisihnya?"
+      as_user: 90116
+      note: >-
+        Step 9, reconciliation across two sheets. Rangkuman still says 2224000
+        while the detail is now 2561000, a gap of 337000.
+      expect:
+        route: data_entry_team
+        mcp_tools_any: [tool_get_sheet_data, tool_get_multiple_sheet_data]
+        contains_amount: ["337000"]
+        content_none: ["workspace", "spreadsheet_id", "tool_"]
+
+    - user: "Tolong perbaiki angka di Rangkuman Juli supaya sesuai dengan Kas Juli, lalu sebutkan angka finalnya."
+      as_user: 90116
+      note: "Step 10, write the corrected summary and state it: 2561000."
+      expect:
+        route: data_entry_team
+        mcp_tools_any: [tool_update_cells, tool_batch_update_cells]
+        contains_amount: ["2561000"]
+        content_none: ["workspace", "spreadsheet_id", "tool_"]

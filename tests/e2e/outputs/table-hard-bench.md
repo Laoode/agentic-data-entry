@@ -1,0 +1,84 @@
+# KLAUDIA WHITEBOX E2E — RESULTS
+
+**Model:** `deepseek-v4-pro` (provider `deepseek`)  
+**Date:** 2026-07-25 07:39  
+**Overall:** 38/51 (75%) · p50 20652ms · max 77153ms
+
+## Summary by Category
+
+| Category | Turns | Pass | Rate | p50 (ms) | max (ms) |
+|---|---|---|---|---|---|
+| aggregation | 3 | 3 | 100% | 19151 | 20578 |
+| budget_variance | 3 | 3 | 100% | 20977 | 22657 |
+| bulk_scale | 2 | 0 | 0% | 18904 | 19859 |
+| compound | 5 | 4 | 80% | 17383 | 77153 |
+| dirty_data | 2 | 2 | 100% | 22465 | 23068 |
+| distractor_column | 1 | 1 | 100% | 22699 | 22699 |
+| find_missing | 1 | 1 | 100% | 19586 | 19586 |
+| hostile_schema | 1 | 1 | 100% | 22786 | 22786 |
+| injection_in_data | 1 | 1 | 100% | 19671 | 19671 |
+| journal_balance | 2 | 1 | 50% | 21031 | 21410 |
+| month_close | 10 | 6 | 60% | 17345 | 41535 |
+| multi_spreadsheet | 3 | 3 | 100% | 17445 | 18442 |
+| profit_loss | 4 | 4 | 100% | 24401 | 26213 |
+| receivables | 4 | 3 | 75% | 24348 | 29502 |
+| reconciliation | 1 | 1 | 100% | 22317 | 22317 |
+| scale | 4 | 0 | 0% | 34512 | 43690 |
+| tax | 4 | 4 | 100% | 19234 | 24518 |
+| **OVERALL** | **51** | **38** | **75%** | **20652** | **77153** |
+
+## Per-Turn Breakdown
+
+| ID | T | P | Routed To | ms | Detail |
+|---|---|---|---|---|---|
+| AGG01-single-sheet-total | 0 | ✓ | data_entry_team | 18438 |  |
+| AGG02-cross-sheet-total | 0 | ✓ | data_entry_team | 20578 |  |
+| AGG03-category-rollup | 0 | ✓ | data_entry_team | 19151 |  |
+| AR01-total-overdue | 0 | ✓ | data_entry_team | 22070 |  |
+| AR02-oldest-bucket | 0 | ✓ | data_entry_team | 23019 |  |
+| AR03-aging-schedule | 0 | ✗ | data_entry_team | 29502 | contains_amount: ['50500000'] not found in '302026302026130260011420262350000014130260023202625500000271302600342026700000057316026004122026200000079619026005720261350000011590260063020261500000301302600792026350000021130260081120262200000050316026009202026800000071619026010152026250000001079026011220261400000021302601218202621500000121302601392026265000005231602601424202622500000676190260152220264500000100902601619202613500000191303020261301025000007316055500000361903250000039043000000323350000016130400100601101633075000000590000005750000039043000000' |
+| AR04-top-overdue-customer | 0 | ✓ | data_entry_team | 25677 |  |
+| BULK01-thousand-row-total | 0 | ✗ | data_entry_team | 17949 | contains_amount: ['249842000'] not found in '202626292400010002026' |
+| BULK02-thousand-row-category-rollup | 0 | ✗ | data_entry_team | 19859 | contains_amount: ['61417000'] not found in '2026738510002522026293059' |
+| BV01-worst-overrun | 0 | ✓ | data_entry_team | 22657 |  |
+| BV02-departments-over-budget | 0 | ✓ | data_entry_team | 16907 |  |
+| BV03-net-variance | 0 | ✓ | data_entry_team | 20977 |  |
+| CLOSE01-ten-step-month-close | 0 | ✓ | FINISH | 6645 |  |
+| CLOSE01-ten-step-month-close | 1 | ✓ | data_entry_team | 16796 |  |
+| CLOSE01-ten-step-month-close | 2 | ✓ | data_entry_team | 18903 |  |
+| CLOSE01-ten-step-month-close | 3 | ✗ | data_entry_team | 27568 | mcp_tools_any: expected one of ['tool_append_rows', 'tool_update_cells'], called ['tool_list_sheets'] |
+| CLOSE01-ten-step-month-close | 4 | ✓ | data_entry_team | 41535 |  |
+| CLOSE01-ten-step-month-close | 5 | ✓ | data_entry_team | 19720 |  |
+| CLOSE01-ten-step-month-close | 6 | ✗ | data_entry_team | 17894 | mcp_tools_any: expected one of ['tool_get_sheet_data', 'tool_get_multiple_sheet_data'], called ['tool_list_sheets'] |
+| CLOSE01-ten-step-month-close | 7 | ✓ | data_entry_team | 16273 |  |
+| CLOSE01-ten-step-month-close | 8 | ✗ | data_entry_team | 16712 | contains_amount: ['337000'] not found in '13256100025610000' |
+| CLOSE01-ten-step-month-close | 9 | ✗ | data_entry_team | 13875 | mcp_tools_any: expected one of ['tool_update_cells', 'tool_batch_update_cells'], called ['tool_list_sheets'] |
+| COMPOUND01-write-write-then-total | 0 | ✓ | data_entry_team | 17145 |  |
+| COMPOUND01-write-write-then-total | 1 | ✓ | data_entry_team | 77153 |  |
+| COMPOUND01-write-write-then-total | 2 | ✓ | data_entry_team | 16420 |  |
+| COMPOUND02-write-then-category-total | 0 | ✓ | data_entry_team | 17383 |  |
+| COMPOUND02-write-then-category-total | 1 | ✗ | data_entry_team | 22331 | contains_amount: ['1270000'] not found in '1310000160620262950000206202646200025062026205000120620266700017062026410003006202620000013100006' |
+| DIRTY01-single-sheet-mixed-formats | 0 | ✓ | data_entry_team | 21862 |  |
+| DIRTY02-cross-sheet-mixed-formats | 0 | ✓ | data_entry_team | 23068 |  |
+| DISTRACT01-reference-number-not-summed | 0 | ✓ | data_entry_team | 22699 |  |
+| FIND01-identify-blank-amount | 0 | ✓ | data_entry_team | 19586 |  |
+| HOSTILE01-line-total-not-unit-price | 0 | ✓ | data_entry_team | 22786 |  |
+| INJECT01-instruction-in-cell-ignored | 0 | ✓ | data_entry_team | 19671 |  |
+| JB01-find-the-unbalanced-entry | 0 | ✓ | data_entry_team | 21410 |  |
+| JB02-trial-balance-totals | 0 | ✗ | data_entry_team | 20652 | contains_amount: ['41050000'] not found in '42500000425000005000000175000010000008000000500000065000003250000275000037500005500000425000005000000175000010000008000000500000065000003250000130000037500005500000425000004250000010' |
+| MS01-answer-from-the-bound-branch | 0 | ✓ | data_entry_team | 18442 |  |
+| MS02-binding-actually-switches | 0 | ✓ | data_entry_team | 17263 |  |
+| MS03-no-cross-spreadsheet-confabulation | 0 | ✓ | data_entry_team | 17445 |  |
+| PL01-gross-profit | 0 | ✓ | data_entry_team | 24926 |  |
+| PL02-net-profit | 0 | ✓ | data_entry_team | 26213 |  |
+| PL03-gross-margin-percent | 0 | ✓ | data_entry_team | 23876 |  |
+| PL04-cost-structure-ranking | 0 | ✓ | data_entry_team | 20691 |  |
+| RECON01-summary-mismatch | 0 | ✓ | data_entry_team | 22317 |  |
+| SCALE01-large-cross-sheet-total | 0 | ✗ | data_entry_team | 43052 | contains_amount: ['41496000'] not found in '80804287600080208630008022013000160428760002679751150000' |
+| SCALE02-argmax-category-at-scale | 0 | ✗ | data_entry_team | 25739 | contains_amount: ['14140000'] not found in '6853000765500014508000536500041430009508000447100049980009469000392300044540008377000145080006853000765500011753650004143000' |
+| SCALE03-filtered-sum-at-scale | 0 | ✗ | data_entry_team | 43690 | contains_amount: ['35323000'] not found in '20000050220260601295000620260602205000102026060345300011202606032580001320260604407000152026060538300017202606063090001820260606358000192026060735300020202606073840002220260608300000232026060838400025202606093720002620260609237000282026061044400029202606103730003020260611352000322026061238500033202606123040003420260613238000382026061432800039202606154270004020260615477000412026061647600043202606173870004420260617466000452026061835600047202606192950004820260619486000492026062032900050202606203960005120260621428000522026062132100054202606223130005520260622207000562026062323100058202606243880006020260625358000612026062536000064202606263080006520260626217000662026062723800067202606274890006820260628498000732026062940600074202606293410007820260630357000792026063021700080202606303420008120260630241000503202607013090004202607014720005202607024530006202607024450007202607033020008202607032780009202607044780001020260704216000112026070537900012202607053670001420260706229000152026070638500016202607073500001720260707267000182026070832500020202607093780002220260710448000232026071044800024202607114960002620260712416000292026071332600031202607142060003420260715386000352026071521000037202607164910003820260716322000412026071728400042202607172910004520260718450000462026071841900047202607194450004920260720417000562026072126100058202607223380006020260722280000622026072333100064202607232590006520260724493000672026072438000068202607242910006920260724225000702026072428700071202607243410007220260724432000742026072442500076202607242690007720260724215000782026072442600080202607244730008120260724432000502000005020000010050' |
+| SCALE04-single-sheet-category-at-scale | 0 | ✗ | data_entry_team | 25971 | contains_amount: ['7638000'] not found in '7645000324202607144720008202607062780009202607154780001020260701216000112026072237900012202607273670001320260723870001720260711267000182026071532500023202607054480002520260726118000282026072876000302026071656000312026072320600032202607241370003620260708176000382026072732200040202607011430004220260728291000432026071816200046202607114190004820260713100005320260708190000542026072151000552026072058000582026070333800059202607101590006020260724280000632026072460006920260710225000742026070842500080202607174730007645000765' |
+| TAX01-vat-payable | 0 | ✓ | data_entry_team | 20141 |  |
+| TAX02-net-payable-after-withholding | 0 | ✓ | data_entry_team | 24518 |  |
+| TAX03-compute-vat-from-base-only | 0 | ✓ | data_entry_team | 18328 |  |
+| TAX04-wrong-sheet-not-substituted | 0 | ✓ | data_entry_team | 18029 |  |

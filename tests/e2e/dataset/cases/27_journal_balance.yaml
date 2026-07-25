@@ -1,0 +1,43 @@
+# Double-entry journal where exactly one entry does not balance. This is the
+# first thing an accountant does at period end, and it has a closed-form answer:
+# name the entry and state the difference. "It does not balance" is not enough.
+# Data: tests/e2e/synthetic_finance.py::build_journal_ledger at seed 1013, under
+# scratch user 90113. Frozen by
+# tests/unit/test_synthetic_finance.py::test_journal_golden_seed_1013_is_frozen.
+#
+# Frozen truth: debit 42.500.000, kredit 41.050.000, selisih 1.450.000, and the
+# offending entry is JU-008.
+
+- id: JB01-find-the-unbalanced-entry
+  category: journal_balance
+  title: Locate the entry that breaks the balance and state the difference
+  tags: [journal_balance, synthetic, numeric, anomaly, finance_model]
+  turns:
+    - user: "Cek sheet Jurnal Umum: apakah total debit dan kredit sudah balance? Kalau tidak, jurnal nomor berapa yang salah dan berapa selisihnya?"
+      as_user: 90113
+      note: >-
+        JU-008 is short 1450000 on the credit side. Requires per-entry
+        comparison, not just two column totals - the totals alone reveal the
+        difference but not which entry caused it.
+      expect:
+        route: data_entry_team
+        mcp_tools_any: [tool_get_sheet_data, tool_get_multiple_sheet_data]
+        content_any: ["ju-008"]
+        contains_amount: ["1450000"]
+        content_none: ["workspace", "spreadsheet_id", "tool_"]
+
+- id: JB02-trial-balance-totals
+  category: journal_balance
+  title: Debit and credit column totals over a two-line-per-entry journal
+  tags: [journal_balance, synthetic, numeric, finance_model]
+  turns:
+    - user: "Berapa total debit dan total kredit di sheet Jurnal Umum?"
+      as_user: 90113
+      note: >-
+        42500000 and 41050000. Each entry occupies two rows with a zero in the
+        opposite column, so summing must skip the zeros without double counting.
+      expect:
+        route: data_entry_team
+        mcp_tools_any: [tool_get_sheet_data, tool_get_multiple_sheet_data]
+        contains_amount: ["42500000", "41050000"]
+        content_none: ["workspace", "spreadsheet_id", "tool_"]

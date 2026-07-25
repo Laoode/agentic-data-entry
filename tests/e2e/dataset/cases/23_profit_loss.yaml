@@ -1,0 +1,70 @@
+# Profit and loss across three statement sheets (Pendapatan / HPP / Beban
+# Operasional). The work is not summing one column: it is knowing which sheet
+# feeds which line, and that gross profit and net profit are different numbers.
+# Data comes from tests/e2e/synthetic_finance.py::build_profit_loss_ledger at
+# seed 1013, seeded under scratch user 90109.
+# tests/unit/test_synthetic_finance.py::test_pnl_golden_seed_1013_is_frozen
+# guards every amount below.
+#
+# Frozen truth: revenue 303.000.000, COGS 177.000.000, opex 51.000.000,
+# gross profit 126.000.000, net profit 75.000.000, gross margin 41,6%.
+
+- id: PL01-gross-profit
+  category: profit_loss
+  title: Gross profit = revenue minus cost of goods sold, across two sheets
+  tags: [profit_loss, synthetic, numeric, cross_sheet, finance_model]
+  turns:
+    - user: "Berapa laba kotor bulan ini? Pendapatan ada di sheet Pendapatan, harga pokok penjualan di sheet HPP."
+      as_user: 90109
+      note: "303000000 - 177000000 = 126000000. Must not deduct operating expense."
+      expect:
+        route: data_entry_team
+        mcp_tools_any: [tool_get_sheet_data, tool_get_multiple_sheet_data]
+        contains_amount: ["126000000"]
+        content_none: ["workspace", "spreadsheet_id", "tool_"]
+
+- id: PL02-net-profit
+  category: profit_loss
+  title: Net profit needs all three sheets, not just revenue minus COGS
+  tags: [profit_loss, synthetic, numeric, cross_sheet, finance_model]
+  turns:
+    - user: "Hitung laba bersih bulan ini dari sheet Pendapatan, HPP, dan Beban Operasional."
+      as_user: 90109
+      note: "303000000 - 177000000 - 51000000 = 75000000. Stopping at gross profit is the trap."
+      expect:
+        route: data_entry_team
+        mcp_tools_any: [tool_get_sheet_data, tool_get_multiple_sheet_data]
+        contains_amount: ["75000000"]
+        content_none: ["workspace", "spreadsheet_id", "tool_"]
+
+- id: PL03-gross-margin-percent
+  category: profit_loss
+  title: Gross margin as a percentage of revenue
+  tags: [profit_loss, synthetic, numeric, ratio, finance_model]
+  turns:
+    - user: "Berapa persen margin laba kotor terhadap pendapatan bulan ini?"
+      as_user: 90109
+      note: "126000000 / 303000000 = 41,58% (41,6% to one decimal). Accepts either rounding."
+      expect:
+        route: data_entry_team
+        mcp_tools_any: [tool_get_sheet_data, tool_get_multiple_sheet_data]
+        content_any: ["41,6", "41.6", "41,58", "41.58", "41,5", "41.5"]
+        content_none: ["workspace", "spreadsheet_id", "tool_"]
+
+- id: PL04-cost-structure-ranking
+  category: profit_loss
+  title: Which cost line is larger, and by how much
+  tags: [profit_loss, synthetic, numeric, cross_sheet, comparison]
+  turns:
+    - user: "Mana yang lebih besar, total HPP atau total Beban Operasional? Berapa selisihnya?"
+      as_user: 90109
+      note: >-
+        HPP 177000000 vs opex 51000000; difference 126000000. Both sheets, then
+        subtract. That difference coincidentally equals PL01's gross profit at
+        this seed; the cases are graded separately, so it changes nothing.
+      expect:
+        route: data_entry_team
+        mcp_tools_any: [tool_get_sheet_data, tool_get_multiple_sheet_data]
+        content_any: ["hpp", "harga pokok"]
+        contains_amount: ["126000000"]
+        content_none: ["workspace", "spreadsheet_id", "tool_"]

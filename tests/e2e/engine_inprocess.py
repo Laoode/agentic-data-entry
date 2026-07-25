@@ -84,8 +84,32 @@ async def _ensure_users(container, case: Case) -> None:
             logger.warning("could not ensure e2e user %s (%s)", uid, case.id)
 
 
+def _resolve_spreadsheet(
+    turn: Turn, spreadsheet_ids: dict[str, str] | None, case: Case
+) -> str | None:
+    """Real spreadsheet id for a turn's logical `spreadsheet` name.
+
+    Raises rather than falling back to the default: a typo would otherwise run
+    the turn against the wrong workspace and score a leak case as a pass.
+    """
+    if turn.spreadsheet is None:
+        return None
+    if not spreadsheet_ids or turn.spreadsheet not in spreadsheet_ids:
+        raise KeyError(
+            f"case {case.id}: spreadsheet {turn.spreadsheet!r} is not seeded "
+            f"(known: {sorted(spreadsheet_ids or {})})"
+        )
+    return spreadsheet_ids[turn.spreadsheet]
+
+
 async def run_case_inprocess(
-    orchestrator, spy, extraction_spy, case: Case, sheet_guard=None, container=None
+    orchestrator,
+    spy,
+    extraction_spy,
+    case: Case,
+    sheet_guard=None,
+    container=None,
+    spreadsheet_ids: dict[str, str] | None = None,
 ) -> list[TurnRecord]:
     """Execute every turn of `case`, returning a TurnRecord per turn.
 
@@ -94,6 +118,8 @@ async def run_case_inprocess(
     sheet_guard: optional SheetGuard; for mutating cases its deterministic
     restore() runs in the finally block so write drift never leaks into later
     read/routing cases.
+    spreadsheet_ids: logical name -> real spreadsheet id, for cases whose turns
+    set `spreadsheet`. An unmapped name is a dataset error and raises.
     Behavioral mismatches do NOT raise — they are recorded in the TurnRecord.
     Only an exception during process() is captured as a transport error.
     """
@@ -118,6 +144,7 @@ async def run_case_inprocess(
                 session_id = None
             current_user = turn_user
             messages = _build_message(turn)
+            scope = _resolve_spreadsheet(turn, spreadsheet_ids, case)
             try:
                 with spy.capture() as calls, extraction_spy.capture() as extractions:
                     resp = await asyncio.wait_for(
@@ -126,6 +153,7 @@ async def run_case_inprocess(
                             session_id=session_id,
                             user_id=turn_user,
                             user_name=TEST_USER_NAME,
+                            spreadsheet_id=scope,
                         ),
                         timeout=TURN_TIMEOUT_S,
                     )

@@ -188,6 +188,14 @@ def _content_ok(
             ok = False
             reasons.append(f"contains_amount: {missing} not found in {d!r}")
 
+    if expect.excludes_amount:
+        d = digits(text)
+        present = [a for a in expect.excludes_amount if digits(a) in d]
+        detail["excludes_amount"] = not present
+        if present:
+            ok = False
+            reasons.append(f"excludes_amount: forbidden {present} present in {d!r}")
+
     if expect.is_rejection is not None:
         got = looks_rejected(text)
         detail["is_rejection"] = got == expect.is_rejection

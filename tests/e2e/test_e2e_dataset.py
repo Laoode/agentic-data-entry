@@ -29,6 +29,7 @@ import pytest
 from tests.e2e.engine_inprocess import run_case_inprocess
 from tests.e2e.loader import load_cases
 from tests.e2e.report import Report
+from tests.e2e.synthetic_cases import SYNTHETIC_CATEGORIES
 from tests.e2e.conftest import requires_live
 
 _CASES = load_cases()
@@ -41,10 +42,13 @@ _REPORT = Report()
 
 def _params():
     for c in _CASES:
-        # Memory cases run in test_memory_e2e.py: they need long-term memory
-        # enabled (embed service + MEMORY_MODE) and their own reset/isolation,
-        # so they are kept out of the bench table here.
-        if c.category == "memory":
+        # Some categories have their own runner and fixture needs, so they are
+        # kept out of this bench table:
+        #   memory   -> test_memory_e2e.py (long-term memory + reset/isolation)
+        #   synthetic hard-bench categories -> test_synthetic_bench_e2e.py (seed
+        #     synthetic ledgers under scratch users, isolated from the TABLE.md
+        #     baseline)
+        if c.category == "memory" or c.category in SYNTHETIC_CATEGORIES:
             continue
         marks = [pytest.mark.e2e]
         if c.mutating:

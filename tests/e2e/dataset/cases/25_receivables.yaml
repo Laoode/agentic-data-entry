@@ -1,0 +1,73 @@
+# Receivables aging: bucket open invoices by how far past due they are, relative
+# to a fixed reference date (2026-06-30, the suite's frozen "now"). Every row
+# needs date arithmetic before any summing, which is what makes this harder than
+# a column total: an agent that eyeballs the amounts cannot get the buckets right.
+# Data: tests/e2e/synthetic_finance.py::build_receivables_ledger at seed 1013,
+# under scratch user 90111. Frozen by
+# tests/unit/test_synthetic_finance.py::test_receivables_golden_seed_1013_is_frozen.
+#
+# Frozen truth: belum jatuh tempo 52.500.000, 1-30 hari 50.500.000,
+# 31-60 hari 55.500.000, 61-90 hari 32.500.000, di atas 90 hari 43.000.000,
+# total jatuh tempo 181.500.000. Largest overdue balance by customer:
+# CV Fajar Baru, 59.000.000.
+
+- id: AR01-total-overdue
+  category: receivables
+  title: Total receivables already past due as of 30 June 2026
+  tags: [receivables, synthetic, numeric, dates, finance_model]
+  turns:
+    - user: "Per 30 Juni 2026, total piutang yang sudah lewat jatuh tempo di sheet Piutang Usaha berapa?"
+      as_user: 90111
+      note: "Everything with due date < 2026-06-30 = 181500000. Not-yet-due 52500000 must be excluded."
+      expect:
+        route: data_entry_team
+        mcp_tools_any: [tool_get_sheet_data, tool_get_multiple_sheet_data]
+        contains_amount: ["181500000"]
+        content_none: ["workspace", "spreadsheet_id", "tool_"]
+
+- id: AR02-oldest-bucket
+  category: receivables
+  title: The over-90-days bucket, the one an accountant writes down first
+  tags: [receivables, synthetic, numeric, dates, bucketing, finance_model]
+  turns:
+    - user: "Dari sheet Piutang Usaha, berapa total piutang yang sudah lewat jatuh tempo lebih dari 90 hari per 30 Juni 2026?"
+      as_user: 90111
+      note: "Only invoices more than 90 days past due = 43000000."
+      expect:
+        route: data_entry_team
+        mcp_tools_any: [tool_get_sheet_data, tool_get_multiple_sheet_data]
+        contains_amount: ["43000000"]
+        content_none: ["workspace", "spreadsheet_id", "tool_"]
+
+- id: AR03-aging-schedule
+  category: receivables
+  title: Full aging schedule, every bucket at once
+  tags: [receivables, synthetic, numeric, dates, bucketing, finance_model]
+  turns:
+    - user: "Buatkan ringkasan umur piutang per 30 Juni 2026 dari sheet Piutang Usaha: 1-30 hari, 31-60 hari, 61-90 hari, dan di atas 90 hari."
+      as_user: 90111
+      note: "All four overdue buckets in one answer: 50500000 / 55500000 / 32500000 / 43000000."
+      expect:
+        route: data_entry_team
+        mcp_tools_any: [tool_get_sheet_data, tool_get_multiple_sheet_data]
+        contains_amount: ["50500000", "55500000", "32500000", "43000000"]
+        content_none: ["workspace", "spreadsheet_id", "tool_"]
+
+- id: AR04-top-overdue-customer
+  category: receivables
+  title: Which customer owes the most past due, totalled across their invoices
+  tags: [receivables, synthetic, numeric, dates, group_by, ranking, finance_model]
+  turns:
+    - user: "Per 30 Juni 2026, kalau semua tagihan lewat jatuh tempo dijumlahkan per pelanggan, pelanggan mana yang totalnya paling besar dan berapa totalnya?"
+      as_user: 90111
+      note: >-
+        Group overdue rows by customer, then rank: CV Fajar Baru, 59000000. The
+        question says "dijumlahkan per pelanggan" on purpose - the largest single
+        invoice is a different number (26500000), so an unqualified "paling besar"
+        would not be gradeable.
+      expect:
+        route: data_entry_team
+        mcp_tools_any: [tool_get_sheet_data, tool_get_multiple_sheet_data]
+        content_any: ["fajar baru"]
+        contains_amount: ["59000000"]
+        content_none: ["workspace", "spreadsheet_id", "tool_"]

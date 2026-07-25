@@ -1,0 +1,62 @@
+# Budget vs actual by department, split across two sheets whose rows are in
+# DIFFERENT order. That is the whole point: the join must be on the department
+# name. An agent that pairs row 2 of Anggaran with row 2 of Realisasi gets every
+# variance wrong, which no amount of careful arithmetic recovers.
+# Data: tests/e2e/synthetic_finance.py::build_budget_variance_ledger at seed 1013,
+# under scratch user 90112. Frozen by
+# tests/unit/test_synthetic_finance.py::test_budget_golden_seed_1013_is_frozen.
+#
+# Frozen truth: net variance (realisasi - anggaran, all departments)
+# 27.000.000; four departments over budget (Keuangan, SDM, Logistik, Layanan
+# Pelanggan); worst overrun Layanan Pelanggan at 22.000.000.
+
+- id: BV01-worst-overrun
+  category: budget_variance
+  title: Which department overspent most, joined by name across two sheets
+  tags: [budget_variance, synthetic, numeric, cross_sheet, join, finance_model]
+  turns:
+    - user: "Bandingkan sheet Anggaran 2026 dengan sheet Realisasi 2026. Departemen mana yang paling besar melebihi anggaran, dan berapa kelebihannya?"
+      as_user: 90112
+      note: >-
+        Layanan Pelanggan, over by 22000000. The two sheets list departments in
+        different orders, so a positional pairing names the wrong department.
+      expect:
+        route: data_entry_team
+        mcp_tools_any: [tool_get_sheet_data, tool_get_multiple_sheet_data]
+        content_any: ["layanan pelanggan"]
+        contains_amount: ["22000000"]
+        content_none: ["workspace", "spreadsheet_id", "tool_"]
+
+- id: BV02-departments-over-budget
+  category: budget_variance
+  title: Every department over budget, and only those
+  tags: [budget_variance, synthetic, cross_sheet, join, set_membership]
+  turns:
+    - user: "Departemen mana saja yang realisasinya melebihi anggaran? Sebutkan daftarnya saja."
+      as_user: 90112
+      note: >-
+        Exactly four: Keuangan, SDM, Logistik, Layanan Pelanggan. The other four
+        (Produksi, Pemasaran, Teknologi, Umum) came in under budget. Graded on the
+        four that must appear; a positional join produces a different set.
+      expect:
+        route: data_entry_team
+        mcp_tools_any: [tool_get_sheet_data, tool_get_multiple_sheet_data]
+        content_all: ["keuangan", "sdm", "logistik", "layanan pelanggan"]
+        content_none: ["workspace", "spreadsheet_id", "tool_"]
+
+- id: BV03-net-variance
+  category: budget_variance
+  title: Net variance = total actual minus total budget
+  tags: [budget_variance, synthetic, numeric, cross_sheet, finance_model]
+  turns:
+    - user: "Berapa selisih total realisasi dikurangi total anggaran untuk semua departemen?"
+      as_user: 90112
+      note: >-
+        27000000 over budget in net. Phrased as total-minus-total on purpose:
+        summing only the overruns is a different figure, so the question fixes
+        which one is being asked.
+      expect:
+        route: data_entry_team
+        mcp_tools_any: [tool_get_sheet_data, tool_get_multiple_sheet_data]
+        contains_amount: ["27000000"]
+        content_none: ["workspace", "spreadsheet_id", "tool_"]

@@ -41,11 +41,15 @@ class _Orch:
 
     def __init__(self):
         self.seen: list[tuple] = []
+        self.scopes: list[str | None] = []
         self.drains = 0
         self._n = 0
 
-    async def process(self, *, messages, session_id, user_id, user_name):
+    async def process(
+        self, *, messages, session_id, user_id, user_name, spreadsheet_id=None
+    ):
         self.seen.append((session_id, user_id))
+        self.scopes.append(spreadsheet_id)
         if session_id is None:
             self._n += 1
             session_id = 1000 + self._n
@@ -110,3 +114,49 @@ async def test_missing_drain_method_is_tolerated():
     orch = _NoDrain()
     await run_case_inprocess(orch, _Spy(), _Spy(), case, None, None)
     assert orch.seen[1] == (None, 1)
+
+
+async def test_turns_bind_the_spreadsheet_they_name():
+    """A turn's logical spreadsheet name reaches process() as the real id."""
+    case = Case(
+        id="S1",
+        category="multi_spreadsheet",
+        title="per-turn spreadsheet binding",
+        turns=[
+            Turn(user="a", spreadsheet="Toko Jakarta"),
+            Turn(user="b", spreadsheet="Toko Surabaya"),
+            Turn(user="c"),  # unset -> the user's default
+        ],
+    )
+    orch = _Orch()
+    await run_case_inprocess(
+        orch,
+        _Spy(),
+        _Spy(),
+        case,
+        None,
+        None,
+        spreadsheet_ids={"Toko Jakarta": "jkt-id", "Toko Surabaya": "sby-id"},
+    )
+    assert orch.scopes == ["jkt-id", "sby-id", None]
+
+
+async def test_unseeded_spreadsheet_name_raises_instead_of_defaulting():
+    """A typo must fail loudly: silently using the default would score a leak
+    case as a pass against the wrong workspace."""
+    case = Case(
+        id="S2",
+        category="multi_spreadsheet",
+        title="unknown spreadsheet name",
+        turns=[Turn(user="a", spreadsheet="Toko Bandung")],
+    )
+    orch = _Orch()
+    try:
+        await run_case_inprocess(
+            orch, _Spy(), _Spy(), case, None, None, spreadsheet_ids={"Toko Jakarta": "x"}
+        )
+    except KeyError as exc:
+        assert "Toko Bandung" in str(exc)
+    else:
+        raise AssertionError("expected KeyError for an unseeded spreadsheet name")
+    assert orch.seen == []

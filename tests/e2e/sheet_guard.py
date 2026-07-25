@@ -20,10 +20,16 @@ parse back to the same numbers the sheet already stores.
 
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 from typing import Any
+
+from tests.e2e.ledger_seeder import (
+    LedgerSeeder,
+    iter_json_objects as _iter_json_objects,
+    tool as _tool,
+    titles as _titles,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,20 +37,6 @@ logger = logging.getLogger(__name__)
 GUARDED_SHEETS = ("Jun", "Rangkuman Total")
 
 _TABLE_MD = Path(__file__).resolve().parents[2] / "docs" / "TABLE.md"
-# Bounded wipe range — comfortably larger than any fixture sheet, cheap to clear.
-_CLEAR_RANGE = "A1:Z1000"
-
-
-def _tool(registry: Any, name: str):
-    return next((t for t in registry.tools if t.name == name), None)
-
-
-def _col_letter(idx0: int) -> str:
-    s, n = "", idx0 + 1
-    while n > 0:
-        n, rem = divmod(n - 1, 26)
-        s = chr(65 + rem) + s
-    return s
 
 
 def load_table_md(
@@ -81,42 +73,6 @@ def load_table_md(
             data[current].append(line.split("\t"))
 
     return names, data
-
-
-def _iter_json_objects(raw: str):
-    """Yield JSON objects from one object, an array, or whitespace-concatenated
-    objects (tool_list_sheets uses the last form)."""
-    s = (raw or "").strip()
-    if not s:
-        return
-    try:
-        parsed = json.loads(s)
-        if isinstance(parsed, list):
-            yield from (o for o in parsed if isinstance(o, dict))
-            return
-        if isinstance(parsed, dict):
-            yield parsed
-            return
-    except json.JSONDecodeError:
-        pass
-    decoder = json.JSONDecoder()
-    pos = 0
-    while pos < len(s):
-        chunk = s[pos:].lstrip()
-        if not chunk:
-            break
-        skipped = len(s[pos:]) - len(chunk)
-        try:
-            obj, end = decoder.raw_decode(chunk)
-        except json.JSONDecodeError:
-            break
-        if isinstance(obj, dict):
-            yield obj
-        pos += skipped + end
-
-
-def _titles(raw: str) -> list[str]:
-    return [t for o in _iter_json_objects(raw) if (t := o.get("title"))]
 
 
 def _norm_cell(value: Any) -> str:
@@ -159,6 +115,7 @@ class SheetGuard:
     ) -> None:
         self._reg = gsheets_registry
         self._spreadsheet_id = spreadsheet_id
+        self._seeder = LedgerSeeder(gsheets_registry, spreadsheet_id)
         self._names: list[str] = []
         self._data: dict[str, list[list[str]]] = {}
 
@@ -264,24 +221,7 @@ class SheetGuard:
 
     async def _write_sheet(self, name: str, create: bool) -> None:
         """Create (or clear) one tab, then write its TABLE.md rows."""
-        create_tool = _tool(self._reg, "tool_create_sheet")
-        clear = _tool(self._reg, "tool_clear_range")
-        update = _tool(self._reg, "tool_update_cells")
-        if create_tool is None or clear is None or update is None:
-            logger.warning("SheetGuard: sheet tools missing; write skipped")
-            return
-        rows = self._data.get(name)
-        try:
-            if create:
-                await create_tool.ainvoke(self._args(title=name))
-            else:
-                await clear.ainvoke(self._args(sheet=name, range=_CLEAR_RANGE))
-            if rows:
-                width = max(len(r) for r in rows)
-                rng = f"A1:{_col_letter(width - 1)}{len(rows)}"
-                await update.ainvoke(self._args(sheet=name, range=rng, data=rows))
-        except Exception as exc:
-            logger.warning("SheetGuard: write of %s failed: %s", name, exc)
+        await self._seeder.write_grid(name, self._data.get(name) or [], create=create)
 
     async def _drop_extra_sheets(self) -> None:
         baseline = self._baseline_titles

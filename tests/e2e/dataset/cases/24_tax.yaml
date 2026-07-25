@@ -1,0 +1,68 @@
+# Indonesian vendor tax settlement: PPN 11% output tax and PPh 23 withholding.
+# Sheet "Faktur Juli" carries DPP, PPN, PPh and Total Bayar as columns, so the
+# trap is summing the wrong one. Sheet "Faktur Agustus" carries DPP alone, so the
+# tax must be computed rather than read - the case that separates an agent that
+# calculates from one that pattern-matches a column header.
+# Data: tests/e2e/synthetic_finance.py::build_tax_ledger at seed 1013, under
+# scratch user 90110. Frozen by
+# tests/unit/test_synthetic_finance.py::test_tax_golden_seed_1013_is_frozen.
+#
+# Frozen truth (Juli): DPP 54.000.000, PPN 5.940.000, PPh 23 1.080.000,
+# total bayar 58.860.000. (Agustus): DPP 54.700.000, PPN 11% 6.017.000.
+
+- id: TAX01-vat-payable
+  category: tax
+  title: Total PPN on the July invoices
+  tags: [tax, synthetic, numeric, finance_model]
+  turns:
+    - user: "Berapa total PPN dari semua faktur di sheet Faktur Juli?"
+      as_user: 90110
+      note: "Sum the PPN 11% column = 5940000. Summing DPP (54000000) is the trap."
+      expect:
+        route: data_entry_team
+        mcp_tools_any: [tool_get_sheet_data, tool_get_multiple_sheet_data]
+        contains_amount: ["5940000"]
+        content_none: ["workspace", "spreadsheet_id", "tool_"]
+
+- id: TAX02-net-payable-after-withholding
+  category: tax
+  title: Amount actually transferred = DPP + PPN - PPh 23
+  tags: [tax, synthetic, numeric, finance_model]
+  turns:
+    - user: "Total yang harus kita bayar ke vendor untuk faktur Juli berapa, setelah PPN dan potongan PPh 23?"
+      as_user: 90110
+      note: "54000000 + 5940000 - 1080000 = 58860000. Ignoring the withholding gives 59940000."
+      expect:
+        route: data_entry_team
+        mcp_tools_any: [tool_get_sheet_data, tool_get_multiple_sheet_data]
+        contains_amount: ["58860000"]
+        excludes_amount: ["59940000"]
+        content_none: ["workspace", "spreadsheet_id", "tool_"]
+
+- id: TAX03-compute-vat-from-base-only
+  category: tax
+  title: Compute 11% VAT on a sheet that has no VAT column
+  tags: [tax, synthetic, numeric, computed, finance_model]
+  turns:
+    - user: "Sheet Faktur Agustus cuma ada kolom DPP. Tolong hitung PPN 11% dari total DPP-nya berapa."
+      as_user: 90110
+      note: "Total DPP 54700000; 11% = 6017000. No column to copy - it must be calculated."
+      expect:
+        route: data_entry_team
+        mcp_tools_any: [tool_get_sheet_data, tool_get_multiple_sheet_data]
+        contains_amount: ["6017000"]
+        content_none: ["workspace", "spreadsheet_id", "tool_"]
+
+- id: TAX04-wrong-sheet-not-substituted
+  category: tax
+  title: A question about August must not be answered with July's numbers
+  tags: [tax, synthetic, numeric, grounding, finance_model]
+  turns:
+    - user: "Total DPP di sheet Faktur Agustus berapa?"
+      as_user: 90110
+      note: "54700000. July's 54000000 is the near-miss an agent lands on if it reads the wrong tab."
+      expect:
+        route: data_entry_team
+        mcp_tools_any: [tool_get_sheet_data, tool_get_multiple_sheet_data]
+        contains_amount: ["54700000"]
+        content_none: ["workspace", "spreadsheet_id", "tool_"]
