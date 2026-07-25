@@ -19,6 +19,15 @@ from dotenv import load_dotenv
 # cwd, so the parent process never needs it.
 load_dotenv()
 
+# Repoint every datastore at the sandbox BEFORE anything reads settings: the
+# settings object is cached on first build, and the MCP servers are spawned with
+# a copy of this environment, so the rebind has to happen at import time to
+# reach them. Raises rather than falling back if a target still resolves to the
+# development store. Opt out with E2E_SANDBOX=0.
+from tests.e2e.sandbox import bind_sandbox, describe  # noqa: E402
+
+bind_sandbox()
+
 # Pin "now" to a fixed June instant for the whole E2E run so the system prompt's
 # CURRENT DATE/TIME — and therefore any "use today's date" write — stays inside
 # June, matching the June-based docs/TABLE.md fixtures. Real time is used in
@@ -32,6 +41,9 @@ os.environ.setdefault("MEMORY_COLLECTION", "klaudia_memory_e2e")
 
 
 def pytest_configure(config):
+    # Name the stores in the run header so a results table can never be read as
+    # if it came from a different environment than it did.
+    print(f"\n{describe()}")
     config.addinivalue_line(
         "markers",
         "mutating: case mutates the real Google Sheet (deselect with -m 'not mutating')",
