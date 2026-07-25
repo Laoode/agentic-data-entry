@@ -153,7 +153,13 @@ async def test_unseeded_spreadsheet_name_raises_instead_of_defaulting():
     orch = _Orch()
     try:
         await run_case_inprocess(
-            orch, _Spy(), _Spy(), case, None, None, spreadsheet_ids={"Toko Jakarta": "x"}
+            orch,
+            _Spy(),
+            _Spy(),
+            case,
+            None,
+            None,
+            spreadsheet_ids={"Toko Jakarta": "x"},
         )
     except KeyError as exc:
         assert "Toko Bandung" in str(exc)

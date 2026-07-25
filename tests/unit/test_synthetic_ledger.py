@@ -184,7 +184,9 @@ def test_distractor_golden_seed_1013_is_frozen():
 
 
 def test_missing_is_deterministic():
-    assert build_missing_value_ledger(seed=1013) == build_missing_value_ledger(seed=1013)
+    assert build_missing_value_ledger(seed=1013) == build_missing_value_ledger(
+        seed=1013
+    )
 
 
 def test_missing_has_exactly_one_blank_on_a_unique_store():
@@ -293,7 +295,9 @@ def test_hostile_schema_is_frozen():
 
 
 def test_reconciliation_is_deterministic():
-    assert build_reconciliation_ledger(seed=1013) == build_reconciliation_ledger(seed=1013)
+    assert build_reconciliation_ledger(seed=1013) == build_reconciliation_ledger(
+        seed=1013
+    )
 
 
 def test_reconciliation_detail_total_and_stated_disagree():

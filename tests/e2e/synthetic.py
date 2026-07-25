@@ -232,7 +232,9 @@ def build_branch_ledgers(
     for offset, branch in enumerate(branches):
         # A different seed per branch keeps the two totals far apart, so a leak
         # from the wrong spreadsheet is unmistakable rather than a near miss.
-        ledger = _build(seed + offset * 977, (BRANCH_SHEET,), rows_per_sheet, render_plain)
+        ledger = _build(
+            seed + offset * 977, (BRANCH_SHEET,), rows_per_sheet, render_plain
+        )
         per_branch[branch] = ledger
         branch_total[branch] = ledger.all_sheets_total
     return BranchLedgers(
@@ -506,9 +508,7 @@ def build_missing_value_ledger(
     missing_date = str(data[missing_idx][0])
     data[missing_idx][1] = MISSING_STORE
     data[missing_idx][3] = ""  # blank amount
-    present_total = sum(
-        int(row[3]) for i, row in enumerate(data) if i != missing_idx
-    )
+    present_total = sum(int(row[3]) for i, row in enumerate(data) if i != missing_idx)
 
     rows: list[list[str | int]] = [list(MISSING_HEADER)] + data
     return MissingValueLedger(

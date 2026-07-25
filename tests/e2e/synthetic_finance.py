@@ -515,9 +515,7 @@ def build_month_close_ledger(seed: int, rows: int = 10) -> MonthCloseLedger:
         day = rng.randint(1, 28)
         category = rng.choice(CLOSE_CATEGORIES)
         amount = rng.randint(20, 400) * 1_000
-        grid.append(
-            [f"2026-07-{day:02d}", rng.choice(CLOSE_STORES), category, amount]
-        )
+        grid.append([f"2026-07-{day:02d}", rng.choice(CLOSE_STORES), category, amount])
         base_total += amount
         base_category_total[category] = base_category_total.get(category, 0) + amount
 

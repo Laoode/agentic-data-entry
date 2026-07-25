@@ -137,5 +137,7 @@ class LedgerSeeder:
                     try:
                         await delete.ainvoke(self._args(sheet=title))
                     except Exception as exc:
-                        logger.warning("LedgerSeeder: drop of %r failed: %s", title, exc)
+                        logger.warning(
+                            "LedgerSeeder: drop of %r failed: %s", title, exc
+                        )
         await self.seed_grids(grids)

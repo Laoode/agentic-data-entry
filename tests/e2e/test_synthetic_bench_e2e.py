@@ -104,9 +104,9 @@ async def synthetic_ledgers(container):
     for branch_name, ledger in branches.per_branch.items():
         scope = await _branch_spreadsheet_id(container, BRANCH_USER, branch_name)
         branch_ids[branch_name] = scope
-        await LedgerSeeder(
-            container.mcp_gsheets, spreadsheet_id=scope
-        ).seed_grids(ledger.grids)
+        await LedgerSeeder(container.mcp_gsheets, spreadsheet_id=scope).seed_grids(
+            ledger.grids
+        )
 
     yield {"per_category": seeded, "branch_ids": branch_ids, "branches": branches}
 
@@ -115,8 +115,7 @@ async def synthetic_ledgers(container):
         return
     teardown = [(scope, ledger.grids) for scope, ledger in seeded.values()]
     teardown += [
-        (branch_ids[name], ledger.grids)
-        for name, ledger in branches.per_branch.items()
+        (branch_ids[name], ledger.grids) for name, ledger in branches.per_branch.items()
     ]
     for scope, grids in teardown:
         for name in grids:

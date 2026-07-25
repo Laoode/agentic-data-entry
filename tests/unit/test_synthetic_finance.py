@@ -56,7 +56,10 @@ def _no_digit_collision(values: list[int]) -> bool:
     """
     text = [str(v) for v in values]
     return not any(
-        a != b and a in b for i, a in enumerate(text) for j, b in enumerate(text) if i != j
+        a != b and a in b
+        for i, a in enumerate(text)
+        for j, b in enumerate(text)
+        if i != j
     )
 
 
@@ -301,7 +304,9 @@ def test_journal_has_exactly_one_unbalanced_entry():
     jrn = build_journal_ledger(SEED)
     per_entry: dict[str, int] = {}
     for row in jrn.grids[JOURNAL_SHEET][1:]:
-        per_entry[str(row[0])] = per_entry.get(str(row[0]), 0) + int(row[3]) - int(row[4])
+        per_entry[str(row[0])] = (
+            per_entry.get(str(row[0]), 0) + int(row[3]) - int(row[4])
+        )
     off = {entry: delta for entry, delta in per_entry.items() if delta != 0}
     assert list(off) == [jrn.unbalanced_entry]
     assert off[jrn.unbalanced_entry] == jrn.imbalance
@@ -335,7 +340,9 @@ def test_month_close_end_state_follows_the_appends_and_the_correction():
         amount for store, _, amount in CLOSE_APPENDS if store == CLOSE_CORRECTED_STORE
     )
     assert close.corrected_total == close.base_total + appended
-    assert close.final_total == close.corrected_total - original + CLOSE_CORRECTED_AMOUNT
+    assert (
+        close.final_total == close.corrected_total - original + CLOSE_CORRECTED_AMOUNT
+    )
 
 
 def test_month_close_summary_disagrees_with_the_detail():
@@ -406,7 +413,9 @@ def test_branches_share_a_sheet_name_but_not_a_total():
 def test_branches_combined_total_is_unreachable_from_one_scope():
     branches = build_branch_ledgers(SEED)
     assert branches.combined_total == sum(branches.branch_total.values())
-    assert _no_digit_collision([*branches.branch_total.values(), branches.combined_total])
+    assert _no_digit_collision(
+        [*branches.branch_total.values(), branches.combined_total]
+    )
 
 
 def test_branches_golden_seed_1013_is_frozen():

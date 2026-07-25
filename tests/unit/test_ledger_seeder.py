@@ -86,7 +86,9 @@ async def test_write_grid_clears_then_writes_when_not_creating():
     sheets = FakeSheets({"Jun": [["old"]]})
     seeder = LedgerSeeder(sheets)
 
-    await seeder.write_grid("Jun", [["Tanggal", "Toko"], ["2026-06-01", "X"]], create=False)
+    await seeder.write_grid(
+        "Jun", [["Tanggal", "Toko"], ["2026-06-01", "X"]], create=False
+    )
 
     assert sheets.state["Jun"] == [["Tanggal", "Toko"], ["2026-06-01", "X"]]
     called = [name for name, _ in sheets.calls]
