@@ -5,7 +5,7 @@ description = "MCP server for Google Sheets integration - Data Entry Agent for K
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "mcp[cli]>=1.5.0",
+    "fastmcp==4.0.0b3",
     "google-auth>=2.28.1",
     "google-auth-oauthlib>=1.2.0",
     "google-api-python-client>=2.117.0",

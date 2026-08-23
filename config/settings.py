@@ -183,13 +183,23 @@ class Settings(BaseSettings):
         default=120, alias="EXTRACTION_PAGE_TIMEOUT_SECONDS"
     )
 
-    # MCP transport: "stdio" spawns servers as subprocesses (no idle SSE drop);
-    # "sse" connects to already-running mcp-archive/mcp-gsheets on 8001/8002.
+    # MCP transport: "stdio" owns local subprocesses; "http" connects to
+    # stateless remote services; "sse" is a legacy rollback mode.
     mcp_transport: str = Field(default="stdio", alias="MCP_TRANSPORT")
+    mcp_archive_url: str = Field(
+        default="http://localhost:8001/mcp", alias="MCP_ARCHIVE_URL"
+    )
+    mcp_ledger_url: str = Field(
+        default="http://localhost:8003/mcp", alias="MCP_LEDGER_URL"
+    )
+    mcp_gsheets_url: str = Field(
+        default="http://localhost:8002/mcp", alias="MCP_GSHEETS_URL"
+    )
+    mcp_auth_token: str = Field(default="", alias="MCP_AUTH_TOKEN")
 
     # Sheets tool backend: "gsheets" (Google Sheets API) or "ledger"
     # (Postgres-backed mcp-ledger, identical tool surface; needs DATABASE_URL).
-    sheets_backend: str = Field(default="gsheets", alias="SHEETS_BACKEND")
+    sheets_backend: str = Field(default="ledger", alias="SHEETS_BACKEND")
 
     # Langfuse Observability
     langfuse_public_key: str = Field(default="", alias="LANGFUSE_PUBLIC_KEY")

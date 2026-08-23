@@ -20,16 +20,16 @@ import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
+from fastmcp import Client
+from fastmcp.client.transports import StdioTransport
 
 load_dotenv()
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
-def _params(server_dir: str, extra_env: dict[str, str]) -> StdioServerParameters:
-    return StdioServerParameters(
+def _transport(server_dir: str, extra_env: dict[str, str]) -> StdioTransport:
+    return StdioTransport(
         command=sys.executable,
         args=["main.py", "--transport", "stdio"],
         cwd=str(_PROJECT_ROOT / server_dir),
@@ -37,10 +37,10 @@ def _params(server_dir: str, extra_env: dict[str, str]) -> StdioServerParameters
     )
 
 
-async def _call(session: ClientSession, tool: str, args: dict):
-    result = await session.call_tool(tool, args)
+async def _call(client: Client, tool: str, args: dict):
+    result = await client.call_tool(tool, args, raise_on_error=False)
     texts = [c.text for c in result.content if getattr(c, "text", None)]
-    if result.isError:
+    if result.is_error:
         raise RuntimeError(f"{tool} failed: {' '.join(texts)[:300]}")
     if not texts:
         return []
@@ -51,42 +51,38 @@ async def _call(session: ClientSession, tool: str, args: dict):
 
 async def migrate(workspace: str) -> None:
     """Read all tabs from gsheets, write them into the ledger workspace."""
-    async with stdio_client(_params("mcp-gsheets", {})) as (g_read, g_write):
-        async with ClientSession(g_read, g_write) as gsheets:
-            await gsheets.initialize()
-            tabs = await _call(gsheets, "tool_list_sheets", {})
-            if isinstance(tabs, dict):
-                tabs = [tabs]
-            print(f"Source spreadsheet has {len(tabs)} tabs")
+    async with Client(_transport("mcp-gsheets", {}), mode="auto") as gsheets:
+        tabs = await _call(gsheets, "tool_list_sheets", {})
+        if isinstance(tabs, dict):
+            tabs = [tabs]
+        print(f"Source spreadsheet has {len(tabs)} tabs")
 
-            grids: list[tuple[str, list[list]]] = []
-            for tab in tabs:
-                title = tab["title"]
-                data = await _call(gsheets, "tool_get_sheet_data", {"sheet": title})
-                values = data.get("values", [])
-                grids.append((title, values))
-                print(f"  read {title!r}: {len(values)} rows")
+        grids: list[tuple[str, list[list]]] = []
+        for tab in tabs:
+            title = tab["title"]
+            data = await _call(gsheets, "tool_get_sheet_data", {"sheet": title})
+            values = data.get("values", [])
+            grids.append((title, values))
+            print(f"  read {title!r}: {len(values)} rows")
 
     ledger_env = {"LEDGER_WORKSPACE": workspace}
-    async with stdio_client(_params("mcp-ledger", ledger_env)) as (l_read, l_write):
-        async with ClientSession(l_read, l_write) as ledger:
-            await ledger.initialize()
-            existing = await _call(ledger, "tool_list_sheets", {})
-            if isinstance(existing, dict):
-                existing = [existing]
-            existing_titles = {t["title"] for t in existing}
+    async with Client(_transport("mcp-ledger", ledger_env), mode="auto") as ledger:
+        existing = await _call(ledger, "tool_list_sheets", {})
+        if isinstance(existing, dict):
+            existing = [existing]
+        existing_titles = {tab["title"] for tab in existing}
 
-            for title, values in grids:
-                if title in existing_titles:
-                    await _call(ledger, "tool_delete_sheet", {"sheet": title})
-                await _call(ledger, "tool_create_sheet", {"title": title})
-                if values:
-                    await _call(
-                        ledger,
-                        "tool_update_cells",
-                        {"sheet": title, "range": "A1", "data": values},
-                    )
-                print(f"  wrote {title!r}: {len(values)} rows")
+        for title, values in grids:
+            if title in existing_titles:
+                await _call(ledger, "tool_delete_sheet", {"sheet": title})
+            await _call(ledger, "tool_create_sheet", {"title": title})
+            if values:
+                await _call(
+                    ledger,
+                    "tool_update_cells",
+                    {"sheet": title, "range": "A1", "data": values},
+                )
+            print(f"  wrote {title!r}: {len(values)} rows")
 
     print(f"Done: {len(grids)} tabs migrated into workspace {workspace!r}")
 

@@ -13,7 +13,11 @@ from contextlib import asynccontextmanager
 from typing import Any, Optional
 
 from dotenv import load_dotenv
-from mcp.server.fastmcp import Context, FastMCP
+from fastmcp import FastMCP
+from fastmcp.dependencies import CurrentContext
+from fastmcp.server.auth.providers.jwt import JWTVerifier
+from fastmcp.server.context import Context
+from mcp.types import ToolAnnotations
 
 from ledger import grid as g
 from ledger.store import (
@@ -27,6 +31,29 @@ from ledger.store import (
 load_dotenv()
 
 LEDGER_TITLE = os.environ.get("LEDGER_TITLE", "Klaudia Ledger")
+
+READ_ONLY = ToolAnnotations(
+    read_only_hint=True,
+    destructive_hint=False,
+    idempotent_hint=True,
+    open_world_hint=False,
+)
+NON_DESTRUCTIVE_WRITE = ToolAnnotations(
+    read_only_hint=False,
+    destructive_hint=False,
+    open_world_hint=False,
+)
+IDEMPOTENT_WRITE = ToolAnnotations(
+    read_only_hint=False,
+    destructive_hint=True,
+    idempotent_hint=True,
+    open_world_hint=False,
+)
+DESTRUCTIVE_WRITE = ToolAnnotations(
+    read_only_hint=False,
+    destructive_hint=True,
+    open_world_hint=False,
+)
 
 
 @asynccontextmanager
@@ -45,8 +72,27 @@ async def ledger_lifespan(server: FastMCP) -> AsyncIterator[LedgerStore]:
         await store.close()
 
 
-HOST = os.environ.get("FASTMCP_HOST", "0.0.0.0")
-PORT = int(os.environ.get("FASTMCP_PORT", "8003"))
+def _build_auth() -> JWTVerifier | None:
+    """Build HTTP bearer-token verification from deployment settings.
+
+    Returns:
+        An HS256 verifier when MCP_JWT_SECRET is set, otherwise None.
+
+    Raises:
+        RuntimeError: If the configured shared secret is too short.
+    """
+    secret = os.environ.get("MCP_JWT_SECRET", "")
+    if not secret:
+        return None
+    if len(secret) < 32:
+        raise RuntimeError("MCP_JWT_SECRET must contain at least 32 characters")
+    return JWTVerifier(
+        public_key=secret,
+        issuer=os.environ.get("MCP_JWT_ISSUER") or None,
+        audience=os.environ.get("MCP_JWT_AUDIENCE") or None,
+        algorithm="HS256",
+    )
+
 
 mcp = FastMCP(
     name="mcp-ledger",
@@ -58,13 +104,13 @@ mcp = FastMCP(
         "tools use it automatically when spreadsheet_id is omitted."
     ),
     lifespan=ledger_lifespan,
-    host=HOST,
-    port=PORT,
+    auth=_build_auth(),
+    strict_input_validation=True,
 )
 
 
 def _store(ctx: Context) -> LedgerStore:
-    return ctx.request_context.lifespan_context
+    return ctx.lifespan_context
 
 
 def _workspace(spreadsheet_id: Optional[str]) -> str:
@@ -102,13 +148,13 @@ def _range_label(sheet: str, notation: Optional[str]) -> str:
 # ── Read operations ──────────────────────────────────────────────────────────
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 async def tool_get_sheet_data(
     sheet: str,
     spreadsheet_id: Optional[str] = None,
     range: Optional[str] = None,
     include_grid_data: bool = False,
-    ctx: Context = None,
+    ctx: Context = CurrentContext(),
 ) -> dict[str, Any]:
     """
     Get data from a sheet tab in the ledger.
@@ -133,12 +179,12 @@ async def tool_get_sheet_data(
     }
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 async def tool_get_sheet_formulas(
     sheet: str,
     spreadsheet_id: Optional[str] = None,
     range: Optional[str] = None,
-    ctx: Context = None,
+    ctx: Context = CurrentContext(),
 ) -> list[list[Any]]:
     """
     Get formulas from a sheet tab. The ledger stores plain values, so this
@@ -158,10 +204,10 @@ async def tool_get_sheet_formulas(
     return g.slice_range(await store.get_grid(workspace, title), range)
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 async def tool_list_sheets(
     spreadsheet_id: Optional[str] = None,
-    ctx: Context = None,
+    ctx: Context = CurrentContext(),
 ) -> list[dict[str, Any]]:
     """
     List all sheet tabs in the ledger workspace.
@@ -175,10 +221,10 @@ async def tool_list_sheets(
     return await _store(ctx).list_sheets(_workspace(spreadsheet_id))
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 async def tool_get_spreadsheet_info(
     spreadsheet_id: Optional[str] = None,
-    ctx: Context = None,
+    ctx: Context = CurrentContext(),
 ) -> dict[str, Any]:
     """
     Get workspace title and all sheet tabs with their dimensions.
@@ -207,10 +253,10 @@ async def tool_get_spreadsheet_info(
     return {"spreadsheetId": workspace, "title": LEDGER_TITLE, "sheets": sheets}
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 async def tool_get_multiple_sheet_data(
     queries: list[dict[str, str]],
-    ctx: Context = None,
+    ctx: Context = CurrentContext(),
 ) -> list[dict[str, Any]]:
     """
     Get data from multiple sheet tabs in one call.
@@ -245,13 +291,13 @@ async def tool_get_multiple_sheet_data(
 # ── Write operations ─────────────────────────────────────────────────────────
 
 
-@mcp.tool()
+@mcp.tool(annotations=IDEMPOTENT_WRITE)
 async def tool_update_cells(
     sheet: str,
     range: str,
     data: list[list[Any]],
     spreadsheet_id: Optional[str] = None,
-    ctx: Context = None,
+    ctx: Context = CurrentContext(),
 ) -> dict[str, Any]:
     """
     Update cells in a sheet tab.
@@ -280,12 +326,12 @@ async def tool_update_cells(
     }
 
 
-@mcp.tool()
+@mcp.tool(annotations=IDEMPOTENT_WRITE)
 async def tool_batch_update_cells(
     sheet: str,
     ranges: dict[str, list[list[Any]]],
     spreadsheet_id: Optional[str] = None,
-    ctx: Context = None,
+    ctx: Context = CurrentContext(),
 ) -> dict[str, Any]:
     """
     Batch update multiple ranges in a sheet tab.
@@ -313,13 +359,13 @@ async def tool_batch_update_cells(
     return {"spreadsheetId": workspace, "totalUpdatedCells": total}
 
 
-@mcp.tool()
+@mcp.tool(annotations=NON_DESTRUCTIVE_WRITE)
 async def tool_append_rows(
     sheet: str,
     data: list[list[Any]],
     spreadsheet_id: Optional[str] = None,
     range: str = "A:Z",
-    ctx: Context = None,
+    ctx: Context = CurrentContext(),
 ) -> dict[str, Any]:
     """
     Append rows after the last row containing data.
@@ -355,13 +401,13 @@ async def tool_append_rows(
     }
 
 
-@mcp.tool()
+@mcp.tool(annotations=NON_DESTRUCTIVE_WRITE)
 async def tool_add_rows(
     sheet: str,
     count: int,
     spreadsheet_id: Optional[str] = None,
     start_row: Optional[int] = None,
-    ctx: Context = None,
+    ctx: Context = CurrentContext(),
 ) -> dict[str, Any]:
     """
     Insert empty rows into a sheet tab.
@@ -385,13 +431,13 @@ async def tool_add_rows(
     return {"spreadsheetId": workspace, "insertedRows": count, "startIndex": start}
 
 
-@mcp.tool()
+@mcp.tool(annotations=NON_DESTRUCTIVE_WRITE)
 async def tool_add_columns(
     sheet: str,
     count: int,
     spreadsheet_id: Optional[str] = None,
     start_column: Optional[int] = None,
-    ctx: Context = None,
+    ctx: Context = CurrentContext(),
 ) -> dict[str, Any]:
     """
     Insert empty columns into a sheet tab.
@@ -415,12 +461,12 @@ async def tool_add_columns(
     return {"spreadsheetId": workspace, "insertedColumns": count, "startIndex": start}
 
 
-@mcp.tool()
+@mcp.tool(annotations=IDEMPOTENT_WRITE)
 async def tool_clear_range(
     sheet: str,
     range: str,
     spreadsheet_id: Optional[str] = None,
-    ctx: Context = None,
+    ctx: Context = CurrentContext(),
 ) -> dict[str, Any]:
     """
     Clear values from a range (dimensions are preserved).
@@ -443,11 +489,11 @@ async def tool_clear_range(
 # ── Sheet management ─────────────────────────────────────────────────────────
 
 
-@mcp.tool()
+@mcp.tool(annotations=NON_DESTRUCTIVE_WRITE)
 async def tool_create_sheet(
     title: str,
     spreadsheet_id: Optional[str] = None,
-    ctx: Context = None,
+    ctx: Context = CurrentContext(),
 ) -> dict[str, Any]:
     """
     Create a new empty sheet tab.
@@ -467,12 +513,12 @@ async def tool_create_sheet(
     return {**created, "spreadsheetId": workspace}
 
 
-@mcp.tool()
+@mcp.tool(annotations=NON_DESTRUCTIVE_WRITE)
 async def tool_rename_sheet(
     sheet: str,
     new_name: str,
     spreadsheet_id: Optional[str] = None,
-    ctx: Context = None,
+    ctx: Context = CurrentContext(),
 ) -> dict[str, Any]:
     """
     Rename a sheet tab.
@@ -495,13 +541,13 @@ async def tool_rename_sheet(
     return {"spreadsheetId": workspace, "renamed": {"from": title, "to": new_name}}
 
 
-@mcp.tool()
+@mcp.tool(annotations=NON_DESTRUCTIVE_WRITE)
 async def tool_copy_sheet(
     src_sheet: str,
     dst_sheet: str,
     src_spreadsheet: Optional[str] = None,
     dst_spreadsheet: Optional[str] = None,
-    ctx: Context = None,
+    ctx: Context = CurrentContext(),
 ) -> dict[str, Any]:
     """
     Copy a sheet tab, including its data.
@@ -527,11 +573,11 @@ async def tool_copy_sheet(
     return {"copy": {**created, "spreadsheetId": dst_ws}}
 
 
-@mcp.tool()
+@mcp.tool(annotations=DESTRUCTIVE_WRITE)
 async def tool_delete_sheet(
     sheet: str,
     spreadsheet_id: Optional[str] = None,
-    ctx: Context = None,
+    ctx: Context = CurrentContext(),
 ) -> dict[str, Any]:
     """
     Delete a sheet tab and its data.
@@ -553,11 +599,11 @@ async def tool_delete_sheet(
     return {"spreadsheetId": workspace, "deleted": title}
 
 
-@mcp.tool()
+@mcp.tool(annotations=DESTRUCTIVE_WRITE)
 async def tool_batch_update(
     requests: list[dict[str, Any]],
     spreadsheet_id: Optional[str] = None,
-    ctx: Context = None,
+    ctx: Context = CurrentContext(),
 ) -> dict[str, Any]:
     """
     Execute batch structural operations. Supported request types:

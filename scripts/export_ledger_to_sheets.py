@@ -18,16 +18,16 @@ import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
+from fastmcp import Client
+from fastmcp.client.transports import StdioTransport
 
 load_dotenv()
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
-def _params(server_dir: str, extra_env: dict[str, str]) -> StdioServerParameters:
-    return StdioServerParameters(
+def _transport(server_dir: str, extra_env: dict[str, str]) -> StdioTransport:
+    return StdioTransport(
         command=sys.executable,
         args=["main.py", "--transport", "stdio"],
         cwd=str(_PROJECT_ROOT / server_dir),
@@ -35,10 +35,10 @@ def _params(server_dir: str, extra_env: dict[str, str]) -> StdioServerParameters
     )
 
 
-async def _call(session: ClientSession, tool: str, args: dict):
-    result = await session.call_tool(tool, args)
+async def _call(client: Client, tool: str, args: dict):
+    result = await client.call_tool(tool, args, raise_on_error=False)
     texts = [c.text for c in result.content if getattr(c, "text", None)]
-    if result.isError:
+    if result.is_error:
         raise RuntimeError(f"{tool} failed: {' '.join(texts)[:300]}")
     if not texts:
         return []
@@ -53,45 +53,37 @@ def _as_list(result) -> list:
 
 async def export(workspace: str) -> None:
     """Read all ledger tabs, then replace the Google Sheet tab contents."""
-    async with stdio_client(_params("mcp-ledger", {"LEDGER_WORKSPACE": workspace})) as (
-        l_read,
-        l_write,
-    ):
-        async with ClientSession(l_read, l_write) as ledger:
-            await ledger.initialize()
-            tabs = _as_list(await _call(ledger, "tool_list_sheets", {}))
-            print(f"Ledger workspace {workspace!r} has {len(tabs)} tabs")
-            grids: list[tuple[str, list[list]]] = []
-            for tab in tabs:
-                data = await _call(
-                    ledger, "tool_get_sheet_data", {"sheet": tab["title"]}
-                )
-                grids.append((tab["title"], data.get("values", [])))
+    ledger_transport = _transport("mcp-ledger", {"LEDGER_WORKSPACE": workspace})
+    async with Client(ledger_transport, mode="auto") as ledger:
+        tabs = _as_list(await _call(ledger, "tool_list_sheets", {}))
+        print(f"Ledger workspace {workspace!r} has {len(tabs)} tabs")
+        grids: list[tuple[str, list[list]]] = []
+        for tab in tabs:
+            data = await _call(ledger, "tool_get_sheet_data", {"sheet": tab["title"]})
+            grids.append((tab["title"], data.get("values", [])))
 
-    async with stdio_client(_params("mcp-gsheets", {})) as (g_read, g_write):
-        async with ClientSession(g_read, g_write) as gsheets:
-            await gsheets.initialize()
-            existing = {
-                t["title"]
-                for t in _as_list(await _call(gsheets, "tool_list_sheets", {}))
-            }
-            for title, values in grids:
-                if title not in existing:
-                    await _call(gsheets, "tool_create_sheet", {"title": title})
-                else:
-                    # Replace content: clear generously, then write.
-                    await _call(
-                        gsheets,
-                        "tool_clear_range",
-                        {"sheet": title, "range": "A1:Z1000"},
-                    )
-                if values:
-                    await _call(
-                        gsheets,
-                        "tool_update_cells",
-                        {"sheet": title, "range": "A1", "data": values},
-                    )
-                print(f"  mirrored {title!r}: {len(values)} rows")
+    async with Client(_transport("mcp-gsheets", {}), mode="auto") as gsheets:
+        existing = {
+            tab["title"]
+            for tab in _as_list(await _call(gsheets, "tool_list_sheets", {}))
+        }
+        for title, values in grids:
+            if title not in existing:
+                await _call(gsheets, "tool_create_sheet", {"title": title})
+            else:
+                # Replace content: clear generously, then write.
+                await _call(
+                    gsheets,
+                    "tool_clear_range",
+                    {"sheet": title, "range": "A1:Z1000"},
+                )
+            if values:
+                await _call(
+                    gsheets,
+                    "tool_update_cells",
+                    {"sheet": title, "range": "A1", "data": values},
+                )
+            print(f"  mirrored {title!r}: {len(values)} rows")
 
     print(f"Done: {len(grids)} tabs mirrored to Google Sheets")
 

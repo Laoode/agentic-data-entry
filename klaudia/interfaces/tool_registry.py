@@ -1,11 +1,15 @@
 import asyncio
 import logging
+from contextlib import suppress
 from typing import Any
 
+from fastmcp import Client
+from fastmcp.client.transports import (
+    SSETransport,
+    StdioTransport,
+    StreamableHttpTransport,
+)
 from langchain_core.tools import BaseTool, StructuredTool
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.sse import sse_client
-from mcp.client.stdio import stdio_client
 
 logger = logging.getLogger(__name__)
 
@@ -51,14 +55,12 @@ def _normalize_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 class MCPToolRegistry:
-    """Connects to an MCP server (SSE or stdio) and exposes tools as LangChain tools.
+    """Connect to an MCP server and expose its tools as LangChain tools.
 
-    Default constructor accepts a SSE URL (legacy positional form so existing
-    call sites and tests keep working). For stdio transport, use
-    ``MCPToolRegistry.from_stdio(...)`` which spawns the MCP server as a
-    subprocess and pipes JSON-RPC over stdin/stdout. Stdio avoids the SSE
-    idle-timeout class of failures (Errno 32 broken pipe) we saw in
-    production traces because there is no long-lived HTTP stream to drop.
+    A URL uses Streamable HTTP unless it ends in ``/sse``, which keeps the old
+    transport available during the FastMCP 4 rollout. Use ``from_stdio`` for a
+    child process owned by Klaudia. The public ``tools`` property stays stable
+    so the agent layer does not depend on an MCP client implementation.
     """
 
     def __init__(
@@ -70,10 +72,11 @@ class MCPToolRegistry:
         stdio_args: list[str] | None = None,
         stdio_cwd: str | None = None,
         stdio_env: dict[str, str] | None = None,
+        auth_token: str | None = None,
     ) -> None:
         if not url and not stdio_command:
             raise ValueError(
-                "MCPToolRegistry needs either url (SSE) or stdio_command (stdio)"
+                "MCPToolRegistry needs either url (HTTP) or stdio_command (stdio)"
             )
         self._name = name
         self._url = url
@@ -81,11 +84,13 @@ class MCPToolRegistry:
         self._stdio_args = stdio_args or []
         self._stdio_cwd = stdio_cwd
         self._stdio_env = stdio_env
-        self._session: ClientSession | None = None
+        self._auth_token = auth_token
+        self._client: Client | None = None
         self._tools: list[BaseTool] = []
         self._task: asyncio.Task | None = None
         self._ready = asyncio.Event()
         self._shutdown = asyncio.Event()
+        self._connection_error: Exception | None = None
 
     @classmethod
     def from_stdio(
@@ -107,18 +112,34 @@ class MCPToolRegistry:
 
     async def connect(self) -> None:
         """Connect to MCP server and discover tools via a background task."""
+        if self._task and not self._task.done():
+            return
+        self._ready.clear()
+        self._shutdown.clear()
+        self._tools.clear()
+        self._connection_error = None
         self._task = asyncio.create_task(self._run())
         await self._ready.wait()
+        if self._connection_error is not None:
+            raise RuntimeError(
+                f"MCP {self._name}: connection failed"
+            ) from self._connection_error
 
     async def _run(self) -> None:
-        """Background task that owns the connection lifecycle (SSE or stdio)."""
+        """Own one FastMCP client connection until registry shutdown."""
         try:
             if self._url:
-                transport_label = f"sse {self._url}"
-                async with sse_client(self._url) as (read_stream, write_stream):
-                    await self._serve(read_stream, write_stream, transport_label)
+                if self._url.rstrip("/").endswith("/sse"):
+                    transport = SSETransport(self._url, auth=self._auth_token)
+                    transport_label = f"legacy sse {self._url}"
+                else:
+                    transport = StreamableHttpTransport(
+                        self._url,
+                        auth=self._auth_token,
+                    )
+                    transport_label = f"http {self._url}"
             else:
-                params = StdioServerParameters(
+                transport = StdioTransport(
                     command=self._stdio_command,
                     args=self._stdio_args,
                     cwd=self._stdio_cwd,
@@ -127,44 +148,51 @@ class MCPToolRegistry:
                 transport_label = (
                     f"stdio {self._stdio_command} {' '.join(self._stdio_args)}"
                 )
-                async with stdio_client(params) as (read_stream, write_stream):
-                    await self._serve(read_stream, write_stream, transport_label)
 
-            logger.info(f"MCP {self._name}: disconnected ({transport_label})")
-        except Exception as e:
-            logger.error(f"MCP {self._name}: connection failed: {e}")
-            self._ready.set()  # Unblock waiter even on failure
+            client = Client(transport, mode="auto")
+            async with client:
+                self._client = client
+                tool_infos = await client.list_tools()
+                self._tools = [self._wrap_tool(tool_info) for tool_info in tool_infos]
+                logger.info(
+                    "MCP %s: connected via %s, protocol=%s, tools=%d",
+                    self._name,
+                    transport_label,
+                    client.protocol_version,
+                    len(self._tools),
+                )
+                self._ready.set()
+                await self._shutdown.wait()
 
-    async def _serve(self, read_stream: Any, write_stream: Any, label: str) -> None:
-        """Initialise an MCP session on the given streams and keep it alive."""
-        async with ClientSession(read_stream, write_stream) as session:
-            await session.initialize()
-            self._session = session
-
-            tools_response = await session.list_tools()
-            for tool_info in tools_response.tools:
-                self._tools.append(self._wrap_tool(tool_info))
-            logger.info(
-                f"MCP {self._name}: connected via {label}, "
-                f"{len(self._tools)} tools discovered"
-            )
-
+            logger.info("MCP %s: disconnected (%s)", self._name, transport_label)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            self._connection_error = exc
+            logger.exception("MCP %s: connection failed", self._name)
+        finally:
+            self._client = None
             self._ready.set()
-            await self._shutdown.wait()
 
     def _wrap_tool(self, tool_info: Any) -> BaseTool:
         """Wrap an MCP tool as a LangChain StructuredTool with a real args schema."""
-        session = self._session
         tool_name = tool_info.name
-        input_schema = getattr(tool_info, "inputSchema", None) or {}
+        input_schema = tool_info.input_schema or {}
         # Pass the MCP JSON schema directly — langchain ArgsSchema accepts dict.
         # This preserves nested `items` that Pydantic drops for bare `list`.
         args_schema = _normalize_schema(input_schema)
 
         async def _call(**kwargs: Any) -> str:
+            client = self._client
+            if client is None:
+                raise RuntimeError(f"MCP {self._name} is not connected")
             # Strip None values so MCP tools see only explicit args.
             clean = {k: v for k, v in kwargs.items() if v is not None}
-            result = await session.call_tool(tool_name, clean)
+            result = await client.call_tool(
+                tool_name,
+                clean,
+                raise_on_error=False,
+            )
             if result.content:
                 # Concatenate all text content blocks (some tools emit one per row).
                 return "\n".join(c.text for c in result.content if hasattr(c, "text"))
@@ -182,10 +210,13 @@ class MCPToolRegistry:
         return self._tools
 
     async def disconnect(self) -> None:
+        """Close the MCP client and its child process or HTTP connection."""
         self._shutdown.set()
         if self._task:
             try:
                 await asyncio.wait_for(self._task, timeout=5.0)
-            except (asyncio.TimeoutError, Exception):
+            except asyncio.TimeoutError:
                 self._task.cancel()
-        logger.info(f"MCP {self._name}: shutdown complete")
+                with suppress(asyncio.CancelledError):
+                    await self._task
+        logger.info("MCP %s: shutdown complete", self._name)

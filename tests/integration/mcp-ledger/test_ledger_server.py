@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 from contextlib import asynccontextmanager
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
+from fastmcp import Client
+from fastmcp.client.transports import StdioTransport
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _SERVER_DIR = _PROJECT_ROOT / "mcp-ledger"
@@ -53,14 +53,12 @@ async def _pg_available() -> bool:
         return False
 
 
-async def _call(
-    session: ClientSession, tool: str, args: dict, expect_list: bool = False
-):
+async def _call(client: Client, tool: str, args: dict, expect_list: bool = False):
     """Parse tool output like the app does: FastMCP emits list results as
     one text block per element (see B13 in the app's tool parsing). A
     one-element list is indistinguishable from a scalar dict on the wire,
     so list-returning tools pass expect_list=True."""
-    result = await session.call_tool(tool, args)
+    result = await client.call_tool(tool, args, raise_on_error=False)
     texts = [c.text for c in result.content if getattr(c, "text", None)]
     if not texts:
         return []
@@ -76,29 +74,26 @@ async def _call(
 async def ledger_server():
     """Fresh server subprocess + isolated workspace per test.
 
-    Not a pytest fixture on purpose: stdio_client's anyio cancel scopes must
-    enter and exit in the same task, and fixture teardown runs in a
-    different one.
+    Not a pytest fixture on purpose: the subprocess must enter and exit in the
+    same task as each test.
     """
     if not await _pg_available():
         pytest.skip(f"Postgres not reachable at {_PG_URL}")
     workspace = f"test-{uuid.uuid4().hex[:8]}"
-    params = StdioServerParameters(
+    transport = StdioTransport(
         command=sys.executable,
         args=["main.py", "--transport", "stdio"],
         cwd=str(_SERVER_DIR),
         env={**os.environ, "DATABASE_URL": _PG_URL, "LEDGER_WORKSPACE": workspace},
     )
-    async with stdio_client(params) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            yield session
+    async with Client(transport, mode="auto") as client:
+        yield client
 
 
 async def test_tool_surface_matches_gsheets():
     async with ledger_server() as ledger_session:
         tools = await ledger_session.list_tools()
-        assert {t.name for t in tools.tools} == GSHEETS_PARITY_TOOLS
+        assert {tool.name for tool in tools} == GSHEETS_PARITY_TOOLS
 
 
 async def test_sheet_lifecycle():
@@ -215,8 +210,12 @@ async def test_multiple_sheet_data_and_info():
 async def test_error_shapes_for_missing_sheet():
     async with ledger_server() as ledger_session:
         s = ledger_session
-        result = await s.call_tool("tool_get_sheet_data", {"sheet": "nope"})
-        assert result.isError or "not found" in str(result.content).lower()
+        result = await s.call_tool(
+            "tool_get_sheet_data",
+            {"sheet": "nope"},
+            raise_on_error=False,
+        )
+        assert result.is_error or "not found" in str(result.content).lower()
 
 
 async def test_batch_update_structural_ops():

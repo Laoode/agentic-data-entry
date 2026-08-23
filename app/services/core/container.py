@@ -61,7 +61,8 @@ def _build_mcp_registries(
 
     stdio: spawn the server as a subprocess of FastAPI. No port, no SSE keep-alive
            required — the connection is a pipe owned by this process.
-    sse:   legacy mode; servers must already be running on 8001/8002 (per startup.sh).
+    http:  connect to stateless remote services with automatic protocol negotiation.
+    sse:   legacy rollback mode; derive /sse endpoints from configured HTTP URLs.
     """
     transport = (settings.mcp_transport or "stdio").lower()
 
@@ -73,7 +74,10 @@ def _build_mcp_registries(
         # We override SQLITE_DB with an absolute path because mcp-archive's cwd
         # is its own directory, and a relative "app_dev.db" would resolve to
         # the wrong place there.
-        sqlite_env = {**os.environ, "SQLITE_DB": sqlite_db_abs}
+        server_env = dict(os.environ)
+        if settings.database_url:
+            server_env["DATABASE_URL"] = settings.database_url
+        sqlite_env = {**server_env, "SQLITE_DB": sqlite_db_abs}
 
         sqlite_reg = MCPToolRegistry.from_stdio(
             "mcp-archive",
@@ -95,7 +99,7 @@ def _build_mcp_registries(
                 command=python_bin,
                 args=["main.py", "--transport", "stdio"],
                 cwd=str(_PROJECT_ROOT / "mcp-ledger"),
-                env=dict(os.environ),
+                env=server_env,
             )
         else:
             sheets_reg = MCPToolRegistry.from_stdio(
@@ -103,27 +107,58 @@ def _build_mcp_registries(
                 command=python_bin,
                 args=["main.py", "--transport", "stdio"],
                 cwd=str(_PROJECT_ROOT / "mcp-gsheets"),
-                env=dict(os.environ),
+                env=server_env,
             )
         return sqlite_reg, sheets_reg
 
-    if transport == "sse":
+    if transport in {"http", "sse"}:
+        archive_url = settings.mcp_archive_url
         sheets_url = (
-            "http://localhost:8003/sse"
+            settings.mcp_ledger_url
             if settings.sheets_backend == "ledger"
-            else "http://localhost:8002/sse"
+            else settings.mcp_gsheets_url
         )
+        if transport == "sse":
+            archive_url = _legacy_sse_url(archive_url)
+            sheets_url = _legacy_sse_url(sheets_url)
         sheets_name = (
             "mcp-ledger" if settings.sheets_backend == "ledger" else "mcp-gsheets"
         )
         return (
-            MCPToolRegistry("mcp-archive", "http://localhost:8001/sse"),
-            MCPToolRegistry(sheets_name, sheets_url),
+            MCPToolRegistry(
+                "mcp-archive",
+                archive_url,
+                auth_token=settings.mcp_auth_token or None,
+            ),
+            MCPToolRegistry(
+                sheets_name,
+                sheets_url,
+                auth_token=settings.mcp_auth_token or None,
+            ),
         )
 
     raise ValueError(
-        f"Unknown MCP_TRANSPORT={settings.mcp_transport!r}; expected 'stdio' or 'sse'"
+        f"Unknown MCP_TRANSPORT={settings.mcp_transport!r}; "
+        "expected 'stdio', 'http', or 'sse'"
     )
+
+
+def _legacy_sse_url(url: str) -> str:
+    """Convert a configured MCP HTTP endpoint to its legacy SSE endpoint.
+
+    Args:
+        url: Configured remote MCP URL.
+
+    Returns:
+        The URL unchanged when it already ends in /sse, otherwise with the
+        trailing /mcp path replaced by /sse.
+    """
+    normalized = url.rstrip("/")
+    if normalized.endswith("/sse"):
+        return normalized
+    if normalized.endswith("/mcp"):
+        return f"{normalized[:-4]}/sse"
+    return f"{normalized}/sse"
 
 
 class KlaudiaContainer:

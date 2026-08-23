@@ -8,13 +8,18 @@ explicitly so the result never depends on the developer's .env.
 
 import pytest
 
-from app.services.core.container import _build_mcp_registries
+from app.services.core.container import _build_mcp_registries, _legacy_sse_url
 from config.settings import Settings
 
 _LEDGER = dict(
     SHEETS_BACKEND="ledger",
     DATABASE_URL="postgresql://x:x@localhost:5432/x",
 )
+
+
+def test_ledger_is_the_default_backend():
+    settings = Settings(_env_file=None)
+    assert settings.sheets_backend == "ledger"
 
 
 def test_archive_registry_is_mcp_archive():
@@ -39,6 +44,32 @@ def test_ledger_backend_requires_database_url():
 
 
 def test_ledger_backend_sse_ports():
+    """Legacy mode derives /sse from the configured remote URL."""
     settings = Settings(**_LEDGER, MCP_TRANSPORT="sse")
-    _sqlite_reg, sheets_reg = _build_mcp_registries(settings)
+    sqlite_reg, sheets_reg = _build_mcp_registries(settings)
     assert sheets_reg._name == "mcp-ledger"
+    assert sqlite_reg._url == "http://localhost:8001/sse"
+    assert sheets_reg._url == "http://localhost:8003/sse"
+
+
+def test_http_backend_uses_configured_urls_and_token():
+    """Remote MCP settings flow into both active FastMCP clients."""
+    settings = Settings(
+        **_LEDGER,
+        MCP_TRANSPORT="http",
+        MCP_ARCHIVE_URL="https://mcp.example/archive/mcp",
+        MCP_LEDGER_URL="https://mcp.example/ledger/mcp",
+        MCP_AUTH_TOKEN="signed-token",
+    )
+
+    archive_reg, ledger_reg = _build_mcp_registries(settings)
+
+    assert archive_reg._url == "https://mcp.example/archive/mcp"
+    assert ledger_reg._url == "https://mcp.example/ledger/mcp"
+    assert archive_reg._auth_token == "signed-token"
+    assert ledger_reg._auth_token == "signed-token"
+
+
+def test_legacy_sse_url_keeps_explicit_sse_path():
+    """An operator-supplied legacy URL is not rewritten twice."""
+    assert _legacy_sse_url("https://mcp.example/sse/") == "https://mcp.example/sse"
