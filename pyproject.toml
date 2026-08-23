@@ -1,7 +1,7 @@
 [project]
-name = "agentic-data-entry"
+name = "klaudia-protocol"
 version = "0.1.0"
-description = "Multi Agent Data Entry with MCP"
+description = "Agentic Accountant"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
