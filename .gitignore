@@ -35,17 +35,17 @@ venv.bak/
 .vscode/
 .idea/
 
-# Claude Code (dev-specific)
+# Coding agents (dev-specific)
 .claude/
 CLAUDE.md
 .claudeignore
 .agents/
 AGENTS.md
+.codex/
 
 # Test artifacts
 .coverage
 .pytest_cache/
-# tests/api contains live-API curl snippets with real keys; never track it.
 tests/api/
 endpoint_test/
 
@@ -59,9 +59,6 @@ gcp_service_account.json
 logs/
 pids/
 
-# Lock file (managed by uv, can regenerate)
-# uv.lock
-
 # Docs
 docs/paper/
 REPO.MD
@@ -73,5 +70,4 @@ docs/PRD.md
 docs/MEMORY.md
 docs/MODELS.md
 docs/HAT.md
-# Local-only backups of gitignored internal docs (survive branch switches; never pushed)
 docs/.local-backup/

@@ -69,11 +69,6 @@ def _build_mcp_registries(
     if transport == "stdio":
         python_bin = sys.executable
         sqlite_db_abs = str((_PROJECT_ROOT / settings.sqlite_db).resolve())
-        # Subprocess inherits the FastAPI env so that LLM/OCR/etc. credentials
-        # configured for the parent are also visible to the MCP server.
-        # We override SQLITE_DB with an absolute path because mcp-archive's cwd
-        # is its own directory, and a relative "app_dev.db" would resolve to
-        # the wrong place there.
         server_env = dict(os.environ)
         if settings.database_url:
             server_env["DATABASE_URL"] = settings.database_url
@@ -86,9 +81,6 @@ def _build_mcp_registries(
             cwd=str(_PROJECT_ROOT / "mcp-archive"),
             env=sqlite_env,
         )
-        # The sheets registry keeps its wiring name regardless of backend:
-        # mcp-ledger exposes the identical tool surface, so downstream
-        # consumers (agents, routes, caches) never know which one runs.
         if settings.sheets_backend == "ledger":
             if not settings.database_url:
                 raise ValueError(
@@ -187,23 +179,12 @@ class KlaudiaContainer:
     async def create(cls, settings: Settings) -> "KlaudiaContainer":
         container = cls()
         container.settings = settings
-
-        # Resolve GCP creds path before any SDK touches it (MCP subprocesses
-        # spawned later inherit os.environ).
         _ensure_gcp_credentials(settings)
-
-        # Observability (must be first so other services can reference it)
         container.langfuse = LangfuseService(settings)
-
-        # LLM clients
         container.llm_client = LLMClient(settings, langfuse=container.langfuse)
         container.kie_client = KIEClient(settings, langfuse=container.langfuse)
-
-        # Database
         container.db_client = build_db_client(settings)
         await container.db_client.connect()
-
-        # Dedup cache (Redis) — fail-soft so dev can run without Redis
         container.dedup_cache = DedupCache(settings)
         try:
             await container.dedup_cache.connect()
@@ -213,18 +194,11 @@ class KlaudiaContainer:
                 e,
             )
             container.dedup_cache = None
-
-        # Object store (MinIO) — required; uploads have nowhere to go without it
         container.object_store = MinIOClient(settings)
         try:
             await container.object_store.ensure_bucket()
         except Exception as e:
             logger.error("MinIO unavailable (%s). Image/PDF uploads will fail.", e)
-            # Keep instance; calls will surface specific errors at upload time
-
-        # Per-user spreadsheets (ledger backend only). The app talks to the
-        # ledger schema directly for management ops — CRUD and chat scope
-        # resolution never burn an MCP round-trip; only agent tool calls do.
         if settings.sheets_backend == "ledger":
             if not settings.database_url:
                 raise ValueError(
@@ -234,31 +208,20 @@ class KlaudiaContainer:
             await container.ledger_store.connect()
             container.spreadsheets = SpreadsheetService(container.ledger_store)
 
-        # Long-term memory (mem0 OSS). Off by default; built only when enabled
-        # so mem0/pgvector are not required for a normal boot. Fail-soft: a
-        # construction error disables memory rather than blocking startup.
         if settings.memory_mode != "off":
             container.memory = MemoryService.from_settings(settings)
 
-        # MCP registries (transport selected via MCP_TRANSPORT setting)
         container.mcp_sqlite, container.mcp_gsheets = _build_mcp_registries(settings)
         logger.info(f"MCP transport: {settings.mcp_transport}")
         await container.mcp_sqlite.connect()
         await container.mcp_gsheets.connect()
 
-        # Destructive-operation approvals (deterministic HITL). Needs the
-        # sheets registry so an approved call replays through the same tool
-        # the agent would have used.
         container.approvals = ApprovalService(
             container.db_client, container.mcp_gsheets
         )
         await container.approvals.ensure_schema()
 
-        # Ingest service — drives dedup pipeline. ExtractionAgent is now a thin
-        # observability facade over this.
         if container.dedup_cache is None:
-            # Provide a minimal in-memory shim so IngestService works without
-            # Redis. Cache misses always; persistence still goes to SQLite.
             container.dedup_cache = _NullDedupCache()  # type: ignore[assignment]
 
         container.ingest_service = IngestService(
@@ -270,13 +233,11 @@ class KlaudiaContainer:
             langfuse=container.langfuse,
         )
 
-        # Extraction agent (now a facade)
         container.extraction_agent = ExtractionAgent(
             ingest_service=container.ingest_service,
             langfuse=container.langfuse,
         )
 
-        # Guardrails
         guardrails_config = GuardrailsConfig(
             enabled=settings.guardrails_enabled,
             groq_api_key=settings.groq_api_key,
@@ -291,7 +252,6 @@ class KlaudiaContainer:
             container.llm_client, guardrails_config, langfuse=container.langfuse
         )
 
-        # Supervisor
         openai_base_url, openai_api_key = settings.active_openai_endpoint()
         container.supervisor = SupervisorAgent(
             llm_api_key=settings.llm_api_key,
