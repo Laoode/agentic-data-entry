@@ -68,7 +68,7 @@ async def _ensure_users(container, case: Case) -> None:
 
     Cross-user memory cases run turns as arbitrary user ids that were never
     registered. The app DB enforces a session->user foreign key, so those users
-    must exist first. Idempotent and portable across the SQLite/PG backends.
+    must exist first.
     """
     if container is None:
         return
@@ -77,7 +77,7 @@ async def _ensure_users(container, case: Case) -> None:
         try:
             await container.db_client.execute(
                 'INSERT INTO "user" (user_id, username, email, password_hash) '
-                "VALUES (?, ?, ?, ?) ON CONFLICT (user_id) DO NOTHING",
+                "VALUES ($1, $2, $3, $4) ON CONFLICT (user_id) DO NOTHING",
                 (uid, f"e2e-user-{uid}", f"e2e-{uid}@local", "not-a-real-hash"),
             )
         except Exception:

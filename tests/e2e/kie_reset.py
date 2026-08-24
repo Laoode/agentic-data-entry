@@ -5,7 +5,7 @@ The cache-miss test (KIE01, 003-receipt) only measures a miss the FIRST time the
 image is ingested; after that the page's extraction lives in three places:
 
     L1  Redis    extract:u<uid>:<page_blake3>
-    L2  SQLite   blob_extraction(user_id, page_blake3)
+    L2  Postgres blob_extraction(user_id, page_blake3)
     blob MinIO   blobs|pages/u<uid>/<shard>/<hash>.<ext>
 
 This helper deletes all three (plus the file_blob / file_blob_page /
@@ -34,7 +34,7 @@ async def purge_kie_file(container: Any, user_id: int, file_name: str) -> int:
     """
     db = container.db_client
     files = await db.fetchall(
-        "SELECT id FROM metadata_file WHERE user_id = ? AND file_name = ?",
+        "SELECT id FROM metadata_file WHERE user_id = $1 AND file_name = $2",
         (user_id, file_name),
     )
     if not files:
@@ -44,7 +44,8 @@ async def purge_kie_file(container: Any, user_id: int, file_name: str) -> int:
     blob_ids: set[int] = set()
     for fid in file_ids:
         for row in await db.fetchall(
-            "SELECT blob_id FROM metadata_file_blob WHERE metadata_file_id = ?", (fid,)
+            "SELECT blob_id FROM metadata_file_blob WHERE metadata_file_id = $1",
+            (fid,),
         ):
             blob_ids.add(row["blob_id"])
 
@@ -52,29 +53,28 @@ async def purge_kie_file(container: Any, user_id: int, file_name: str) -> int:
     minio_keys: set[str] = set()
     for bid in blob_ids:
         for row in await db.fetchall(
-            "SELECT page_blake3, page_minio_key FROM file_blob_page WHERE blob_id = ?",
+            "SELECT page_blake3, page_minio_key FROM file_blob_page WHERE blob_id = $1",
             (bid,),
         ):
             page_hashes.add(row["page_blake3"])
             if row["page_minio_key"]:
                 minio_keys.add(row["page_minio_key"])
         blob = await db.fetchone(
-            "SELECT minio_key FROM file_blob WHERE blob_id = ?", (bid,)
+            "SELECT minio_key FROM file_blob WHERE blob_id = $1", (bid,)
         )
         if blob and blob["minio_key"]:
             minio_keys.add(blob["minio_key"])
 
-    # L2 (SQLite) + L1 (Redis) extraction cache.
     cache = getattr(container, "dedup_cache", None)
     for h in page_hashes:
         await db.execute(
-            "DELETE FROM blob_extraction WHERE user_id = ? AND page_blake3 = ?",
+            "DELETE FROM blob_extraction WHERE user_id = $1 AND page_blake3 = $2",
             (user_id, h),
         )
         if cache is not None and hasattr(cache, "delete_extraction"):
             try:
                 await cache.delete_extraction(user_id, h)
-            except Exception as exc:  # Redis down → SQLite delete already done
+            except Exception as exc:
                 logger.warning("redis delete_extraction failed for %s: %s", h[:12], exc)
 
     # MinIO objects.
@@ -88,14 +88,14 @@ async def purge_kie_file(container: Any, user_id: int, file_name: str) -> int:
 
     # Blob + file rows (so the next upload is a genuinely fresh insert).
     for bid in blob_ids:
-        await db.execute("DELETE FROM file_blob_page WHERE blob_id = ?", (bid,))
-        await db.execute("DELETE FROM file_blob WHERE blob_id = ?", (bid,))
+        await db.execute("DELETE FROM file_blob_page WHERE blob_id = $1", (bid,))
+        await db.execute("DELETE FROM file_blob WHERE blob_id = $1", (bid,))
     for fid in file_ids:
         await db.execute(
-            "DELETE FROM metadata_file_blob WHERE metadata_file_id = ?", (fid,)
+            "DELETE FROM metadata_file_blob WHERE metadata_file_id = $1", (fid,)
         )
-        await db.execute("DELETE FROM pages WHERE metadata_file_id = ?", (fid,))
-        await db.execute("DELETE FROM metadata_file WHERE id = ?", (fid,))
+        await db.execute("DELETE FROM pages WHERE metadata_file_id = $1", (fid,))
+        await db.execute("DELETE FROM metadata_file WHERE id = $1", (fid,))
 
     logger.info(
         "purged KIE artifacts for %s (user %d): %d page hash(es), %d blob(s)",

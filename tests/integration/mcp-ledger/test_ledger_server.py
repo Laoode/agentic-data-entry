@@ -15,12 +15,11 @@ import pytest
 from contextlib import asynccontextmanager
 from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
+from tests.integration.postgres import POSTGRES_TEST_URL
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _SERVER_DIR = _PROJECT_ROOT / "mcp-ledger"
-_PG_URL = os.environ.get(
-    "PG_TEST_URL", "postgresql://klaudia:klaudia@localhost:5432/klaudia"
-)
+_PG_URL = POSTGRES_TEST_URL
 
 GSHEETS_PARITY_TOOLS = {
     "tool_get_sheet_data",
@@ -78,7 +77,7 @@ async def ledger_server():
     same task as each test.
     """
     if not await _pg_available():
-        pytest.skip(f"Postgres not reachable at {_PG_URL}")
+        pytest.skip("The isolated PostgreSQL test database is unavailable")
     workspace = f"test-{uuid.uuid4().hex[:8]}"
     transport = StdioTransport(
         command=sys.executable,

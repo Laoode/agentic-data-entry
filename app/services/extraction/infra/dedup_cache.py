@@ -1,11 +1,11 @@
 """Redis hot cache for blob metadata + per-page extraction JSON.
 
-Two layers above SQLite:
+Two cache layers protect the extraction model:
     L1 (this) Redis hash, ~ms latency, capped TTL
-    L2        SQLite blob_extraction table, persistent
+    L2        PostgreSQL blob_extraction table, persistent
 
 On miss in L1, IngestService reads L2; on hit there it warms L1. Pure cache —
-authority is SQLite. Per-user keyspace prevents cross-tenant reuse.
+authority is PostgreSQL. Per-user keyspace prevents cross-tenant reuse.
 
 Keys (per-user):
     blob:u<uid>:<blake3>           hash of blob metadata (json)

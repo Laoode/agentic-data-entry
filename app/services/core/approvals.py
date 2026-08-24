@@ -6,8 +6,6 @@ pending record; approving replays the STORED call verbatim through the
 raw MCP tool, so the decision to execute never passes back through the
 model. Rejecting simply drops it.
 
-Portable SQL ("?" placeholders) so both the SQLite dev fallback and
-Postgres work, per the data-layer rule in docs/MEMORY.md (P3).
 """
 
 from __future__ import annotations
@@ -92,7 +90,8 @@ class ApprovalService:
         await self._db.execute(
             "INSERT INTO pending_approval (approval_id, user_id, session_id, "
             "spreadsheet_id, tool_name, args, summary, rows_affected, "
-            "columns_affected, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "columns_affected, status) "
+            "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
             (
                 approval_id,
                 user_id,
@@ -119,7 +118,7 @@ class ApprovalService:
         rows = await self._db.fetchall(
             "SELECT approval_id, tool_name, args, summary, rows_affected, "
             "columns_affected FROM pending_approval "
-            "WHERE user_id = ? AND status = ? ORDER BY created_at",
+            "WHERE user_id = $1 AND status = $2 ORDER BY created_at",
             (user_id, STATUS_PENDING),
         )
         return [self._to_approval(r).as_payload() for r in rows]
@@ -168,15 +167,15 @@ class ApprovalService:
         row = await self._db.fetchone(
             "SELECT approval_id, tool_name, args, summary, rows_affected, "
             "columns_affected FROM pending_approval "
-            "WHERE approval_id = ? AND user_id = ? AND status = ?",
+            "WHERE approval_id = $1 AND user_id = $2 AND status = $3",
             (approval_id, user_id, STATUS_PENDING),
         )
         if row is None:
             raise ApprovalNotFoundError(f"Approval '{approval_id}' not found")
         changed = await self._db.execute(
-            "UPDATE pending_approval SET status = ?, "
+            "UPDATE pending_approval SET status = $1, "
             "resolved_at = CURRENT_TIMESTAMP "
-            "WHERE approval_id = ? AND status = ?",
+            "WHERE approval_id = $2 AND status = $3",
             (new_status, approval_id, STATUS_PENDING),
         )
         if not changed:

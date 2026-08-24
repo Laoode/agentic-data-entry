@@ -1,11 +1,10 @@
 """Auth + route-protection integration tests.
 
-Runs the real v1 routers against a temp SQLite DB through an ASGI test
+Runs the real v1 routers against PostgreSQL through an ASGI test
 client. No LLM, MCP, Redis, or MinIO required: chat/sheets routes reject
 unauthenticated calls before touching the orchestrator.
 """
 
-import tempfile
 from types import SimpleNamespace
 from typing import AsyncIterator
 
@@ -14,19 +13,12 @@ import pytest
 from fastapi import FastAPI
 
 from app.routes import v1_router
-from app.services.extraction.infra.db_client import AppDBClient
-from config.settings import Settings
 
 
 @pytest.fixture
-async def client() -> AsyncIterator[httpx.AsyncClient]:
-    tmp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-    tmp_db.close()
-    db = AppDBClient(Settings(SQLITE_DB=tmp_db.name))
-    await db.connect()
-
+async def client(postgres_db) -> AsyncIterator[httpx.AsyncClient]:
     app = FastAPI()
-    app.state.container = SimpleNamespace(db_client=db)
+    app.state.container = SimpleNamespace(db_client=postgres_db)
     app.include_router(v1_router)
 
     transport = httpx.ASGITransport(app=app)
@@ -34,7 +26,6 @@ async def client() -> AsyncIterator[httpx.AsyncClient]:
         transport=transport, base_url="http://test"
     ) as http_client:
         yield http_client
-    await db.close()
 
 
 async def _register(client: httpx.AsyncClient, name: str) -> dict:

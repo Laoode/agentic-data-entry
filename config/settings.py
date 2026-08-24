@@ -1,10 +1,9 @@
 from functools import lru_cache
 
-from dotenv import load_dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
-load_dotenv()
+DEFAULT_DATABASE_URL = "postgresql://klaudia:klaudia@localhost:5432/klaudia"
 
 
 class Settings(BaseSettings):
@@ -72,8 +71,11 @@ class Settings(BaseSettings):
     groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
 
     # Database
-    sqlite_db: str = Field(default="app_dev.db", alias="SQLITE_DB")
-    database_url: str = Field(default="", alias="DATABASE_URL")
+    database_url: str = Field(
+        default=DEFAULT_DATABASE_URL,
+        alias="DATABASE_URL",
+        min_length=1,
+    )
 
     # Memory
     memory_mode: str = Field(default="off", alias="MEMORY_MODE")  # off|read|write
@@ -118,9 +120,6 @@ class Settings(BaseSettings):
     max_pdf_bytes: int = Field(default=50 * 1024 * 1024, alias="MAX_PDF_BYTES")
     max_pdf_pages: int = Field(default=50, alias="MAX_PDF_PAGES")
     max_images_per_upload: int = Field(default=5, alias="MAX_IMAGES_PER_UPLOAD")
-    extraction_queue_depth_warn: int = Field(
-        default=50, alias="EXTRACTION_QUEUE_DEPTH_WARN"
-    )
     extraction_queue_depth_reject: int = Field(
         default=200, alias="EXTRACTION_QUEUE_DEPTH_REJECT"
     )
@@ -156,9 +155,6 @@ class Settings(BaseSettings):
     )
     langfuse_enabled: bool = Field(default=True, alias="LANGFUSE_ENABLED")
 
-    # Logging
-    log_path: str = Field(default="logs", alias="LOG_PATH")
-
     model_config = {"env_file": ".env", "extra": "ignore"}
 
     def active_openai_endpoint(self) -> tuple[str, str]:
@@ -170,22 +166,25 @@ class Settings(BaseSettings):
             return self.deepseek_base_url, self.deepseek_api_key
         return self.vllm_llm_endpoint, self.vllm_llm_api_key
 
-    def validate_production_secrets(self) -> None:
-        """Fail fast on insecure production configuration.
+    def validate_production_config(self) -> None:
+        """Reject development defaults in production.
 
-        Called once at app startup (main.py lifespan), not in the model
-        validator, so tests can freely construct Settings(stage="production").
+        Called once during application startup.
 
         Raises:
-            ValueError: If STAGE=production still uses the dev JWT secret.
+            ValueError: If production uses a development credential or DSN.
         """
-        if (
-            self.stage == "production"
-            and self.jwt_secret == "dev-secret-change-me-before-any-deploy"
-        ):
+        if self.stage != "production":
+            return
+        if self.jwt_secret == "dev-secret-change-me-before-any-deploy":
             raise ValueError(
                 "JWT_SECRET must be set to a strong random value when "
                 "STAGE=production (dev default refused)."
+            )
+        if self.database_url == DEFAULT_DATABASE_URL:
+            raise ValueError(
+                "DATABASE_URL must be set to the production PostgreSQL DSN when "
+                "STAGE=production (development default refused)."
             )
 
 

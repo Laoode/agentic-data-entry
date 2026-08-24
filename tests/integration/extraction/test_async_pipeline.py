@@ -13,30 +13,25 @@ import os
 import signal
 import subprocess
 import sys
-import tempfile
 import uuid
 from pathlib import Path
 
 import pytest
 
 from app.models.attachment import FileAttachment
+from tests.integration.postgres import POSTGRES_TEST_URL
 
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _SAMPLE_IMAGE = _PROJECT_ROOT / "sample-data" / "receipt" / "001-receipt.jpeg"
 
 
-def _isolated_env(suffix: str) -> tuple[dict, str]:
-    """Build env vars for a per-test Redis DB + temp SQLite + isolated bucket.
-
-    Returns (env_overrides, tmp_db_path).
-    """
-    tmp_db = tempfile.NamedTemporaryFile(suffix=f"-{suffix}.db", delete=False)
-    tmp_db.close()
-    env = {
+def _isolated_env(suffix: str) -> dict[str, str]:
+    """Build isolated infrastructure settings for the worker test."""
+    return {
         "MOCK_KIE": "true",
         "EXTRACTION_MODE": "async",
-        "SQLITE_DB": tmp_db.name,
+        "DATABASE_URL": POSTGRES_TEST_URL,
         "MINIO_BUCKET": f"klaudia-test-{suffix}",
         # Isolate Redis namespaces per-run: cache=10, broker=11, results=12
         "REDIS_URL": "redis://localhost:6379/10",
@@ -48,13 +43,12 @@ def _isolated_env(suffix: str) -> tuple[dict, str]:
         "GOOGLE_GENAI_USE_VERTEXAI": "False",
         "GOOGLE_APPLICATION_CREDENTIALS": "",
     }
-    return env, tmp_db.name
 
 
 @pytest.mark.asyncio
-async def test_async_image_extraction_via_worker(tmp_path):
+async def test_async_image_extraction_via_worker(postgres_db, monkeypatch):
     suffix = uuid.uuid4().hex[:8]
-    env_overrides, tmp_db_path = _isolated_env(suffix)
+    env_overrides = _isolated_env(suffix)
     env = {**os.environ, **env_overrides}
 
     # Skip cleanly if Redis or MinIO aren't reachable — this is an opt-in
@@ -112,8 +106,8 @@ async def test_async_image_extraction_via_worker(tmp_path):
         # Apply env overrides to the test process too — get_settings() reads
         # os.environ, and without these the parent would point at the live
         # cache and dedup against it.
-        for k, v in env_overrides.items():
-            os.environ[k] = v
+        for key, value in env_overrides.items():
+            monkeypatch.setenv(key, value)
 
         from importlib import reload
 
@@ -122,7 +116,6 @@ async def test_async_image_extraction_via_worker(tmp_path):
         settings_mod.get_settings.cache_clear()
         settings = settings_mod.get_settings()
 
-        from app.services.extraction.infra.db_client import AppDBClient
         from app.services.extraction.infra.dedup_cache import DedupCache
         from app.services.extraction.infra.object_store import MinIOClient
         from app.services.extraction.infra.kie_client import KIEClient
@@ -139,14 +132,10 @@ async def test_async_image_extraction_via_worker(tmp_path):
 
         reload(tasks_mod)
 
-        db = AppDBClient(settings)
-        await db.connect()
-        await db.execute(
-            "INSERT OR IGNORE INTO user (user_id, username, email, password_hash) "
-            "VALUES (1, 'test', 'test@local', 'x')",
-            (),
+        db = postgres_db
+        sid = await db.fetchval(
+            "INSERT INTO session (user_id) VALUES (1) RETURNING session_id"
         )
-        sid = await db.execute("INSERT INTO session (user_id) VALUES (1)", ())
         cache = DedupCache(settings)
         await cache.connect()
         store = MinIOClient(settings)
@@ -185,7 +174,7 @@ async def test_async_image_extraction_via_worker(tmp_path):
 
         # Verify worker persisted the extraction to LLM-visible pages table
         page_row = await db.fetchone(
-            "SELECT agent_extracted, status FROM pages WHERE metadata_file_id = ?",
+            "SELECT agent_extracted, status FROM pages WHERE metadata_file_id = $1",
             (ef.file_id,),
         )
         assert page_row is not None
@@ -195,7 +184,6 @@ async def test_async_image_extraction_via_worker(tmp_path):
         await tasks_mod.broker.shutdown()
         await ocr.shutdown()
         await cache.close()
-        await db.close()
 
     finally:
         if worker.poll() is None:
@@ -205,7 +193,3 @@ async def test_async_image_extraction_via_worker(tmp_path):
             except subprocess.TimeoutExpired:
                 worker.kill()
                 worker.wait(timeout=5)
-        try:
-            os.unlink(tmp_db_path)
-        except OSError:
-            pass

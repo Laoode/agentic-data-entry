@@ -6,7 +6,6 @@ enforcement, cascade delete, and legacy-workspace adoption on connect.
 Skipped when Postgres is unreachable.
 """
 
-import os
 import secrets
 import uuid
 
@@ -19,10 +18,9 @@ from ledger.store import (
     SpreadsheetExistsError,
     SpreadsheetNotFoundError,
 )
+from tests.integration.postgres import POSTGRES_TEST_URL
 
-_PG_URL = os.environ.get(
-    "PG_TEST_URL", "postgresql://klaudia:klaudia@localhost:5432/klaudia"
-)
+_PG_URL = POSTGRES_TEST_URL
 
 
 async def _pg_available() -> bool:
@@ -37,7 +35,7 @@ async def _pg_available() -> bool:
 @pytest.fixture
 async def store():
     if not await _pg_available():
-        pytest.skip(f"Postgres not reachable at {_PG_URL}")
+        pytest.skip("The isolated PostgreSQL test database is unavailable")
     ledger_store = LedgerStore(_PG_URL)
     await ledger_store.connect()
     yield ledger_store

@@ -5,7 +5,6 @@ raise SpreadsheetNotFoundError — foreign spreadsheets are indistinguishable
 from absent ones (same non-enumerating stance as session 404s).
 """
 
-import os
 import secrets
 
 import asyncpg
@@ -17,10 +16,9 @@ from ledger.store import (
     SpreadsheetExistsError,
     SpreadsheetNotFoundError,
 )
+from tests.integration.postgres import POSTGRES_TEST_URL
 
-_PG_URL = os.environ.get(
-    "PG_TEST_URL", "postgresql://klaudia:klaudia@localhost:5432/klaudia"
-)
+_PG_URL = POSTGRES_TEST_URL
 
 
 async def _pg_available() -> bool:
@@ -35,7 +33,7 @@ async def _pg_available() -> bool:
 @pytest.fixture
 async def service():
     if not await _pg_available():
-        pytest.skip(f"Postgres not reachable at {_PG_URL}")
+        pytest.skip("The isolated PostgreSQL test database is unavailable")
     store = LedgerStore(_PG_URL)
     await store.connect()
     yield SpreadsheetService(store, default_name="Utama")

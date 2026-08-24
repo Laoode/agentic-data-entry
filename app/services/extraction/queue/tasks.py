@@ -3,7 +3,7 @@
 A task takes a blob_page reference (resolved via the private file_blob_page
 table) and runs OCR + cache persistence. The orchestrator publishes one
 task per page; results land in:
-    - blob_extraction (SQLite L2 cache)
+    - blob_extraction (persistent database cache)
     - dedup cache (Redis L1)
     - pages.agent_extracted (LLM-visible)
     - pubsub channel `extraction:file:<file_id>:progress` for SSE streaming
@@ -56,7 +56,7 @@ async def extract_page_task(
         """
         SELECT page_blake3, page_minio_key
         FROM file_blob_page
-        WHERE blob_id = ? AND page = ?
+        WHERE blob_id = $1 AND page = $2
         """,
         (blob_id, page),
     )
@@ -78,17 +78,16 @@ async def extract_page_task(
         )
         return {"status": "cached", "cache_layer": "redis"}
 
-    # L2
-    sqlite_row = await db.get_cached_extraction(user_id, page_blake3)
-    if sqlite_row is not None:
+    database_row = await db.get_cached_extraction(user_id, page_blake3)
+    if database_row is not None:
         try:
-            extraction = json.loads(sqlite_row["extraction_json"])
+            extraction = json.loads(database_row["extraction_json"])
             await _safe_set(cache.set_extraction, user_id, page_blake3, extraction)
-            await _persist_page_row(db, file_id, page, extraction, source="sqlite")
+            await _persist_page_row(db, file_id, page, extraction, source="database")
             await _publish_progress(
-                cache, file_id, page, status="cached", cache_layer="sqlite"
+                cache, file_id, page, status="cached", cache_layer="database"
             )
-            return {"status": "cached", "cache_layer": "sqlite"}
+            return {"status": "cached", "cache_layer": "database"}
         except json.JSONDecodeError:
             logger.warning("blob_extraction row corrupted; re-extracting")
 
@@ -131,7 +130,7 @@ async def _persist_page_row(
     We store one row per (file_id, page); reruns (e.g. retries) replace it.
     """
     existing = await db.fetchone(
-        "SELECT id FROM pages WHERE metadata_file_id = ? AND page = ?",
+        "SELECT id FROM pages WHERE metadata_file_id = $1 AND page = $2",
         (file_id, page),
     )
     msg = "cached" if source else "extracted"
@@ -139,7 +138,7 @@ async def _persist_page_row(
         await db.execute(
             """
             INSERT INTO pages (metadata_file_id, page, agent_extracted, status, status_message)
-            VALUES (?, ?, ?, 'extracted', ?)
+            VALUES ($1, $2, $3, 'extracted', $4)
             """,
             (file_id, page, json.dumps(extraction, ensure_ascii=False), msg),
         )
@@ -147,8 +146,8 @@ async def _persist_page_row(
         await db.execute(
             """
             UPDATE pages
-            SET agent_extracted = ?, status = 'extracted', status_message = ?
-            WHERE id = ?
+            SET agent_extracted = $1, status = 'extracted', status_message = $2
+            WHERE id = $3
             """,
             (json.dumps(extraction, ensure_ascii=False), msg, existing["id"]),
         )
@@ -156,20 +155,20 @@ async def _persist_page_row(
 
 async def _persist_failure(db, file_id: int, page: int, message: str) -> None:
     existing = await db.fetchone(
-        "SELECT id FROM pages WHERE metadata_file_id = ? AND page = ?",
+        "SELECT id FROM pages WHERE metadata_file_id = $1 AND page = $2",
         (file_id, page),
     )
     if existing is None:
         await db.execute(
             """
             INSERT INTO pages (metadata_file_id, page, status, status_message)
-            VALUES (?, ?, 'failed', ?)
+            VALUES ($1, $2, 'failed', $3)
             """,
             (file_id, page, message),
         )
     else:
         await db.execute(
-            "UPDATE pages SET status = 'failed', status_message = ? WHERE id = ?",
+            "UPDATE pages SET status = 'failed', status_message = $1 WHERE id = $2",
             (message, existing["id"]),
         )
 

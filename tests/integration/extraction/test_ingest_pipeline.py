@@ -9,11 +9,12 @@ Exercises:
         a previously-uploaded standalone image (true content-addressed dedup)
 
 Requires Redis @ REDIS_URL and MinIO @ MINIO_ENDPOINT to be reachable.
-Skipped if either is down.
+Requires the isolated PostgreSQL test database. Skipped if a service is down.
 """
 
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 from typing import AsyncIterator
 
@@ -26,6 +27,7 @@ from app.services.extraction.infra.object_store import MinIOClient
 from app.services.extraction.infra.kie_client import KIEClient
 from app.services.extraction.ingest import IngestService
 from config.settings import Settings
+from tests.integration.postgres import POSTGRES_TEST_URL
 
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -35,29 +37,23 @@ _SAMPLE_PDF = _PROJECT_ROOT / "sample-data" / "pdf" / "001-receipt.pdf"
 
 
 def _settings_for_test() -> Settings:
-    """Settings with a unique bucket name per test run + temp DB so each
-    invocation starts from a clean slate."""
-    import tempfile
-    import uuid
-
+    """Return isolated infrastructure settings for one test run."""
     suffix = uuid.uuid4().hex[:8]
-    tmp_db = tempfile.NamedTemporaryFile(suffix=f"-{suffix}.db", delete=False)
-    tmp_db.close()
     return Settings(
+        _env_file=None,
         MOCK_KIE=True,
-        SQLITE_DB=tmp_db.name,
+        DATABASE_URL=POSTGRES_TEST_URL,
         MINIO_BUCKET=f"klaudia-test-{suffix}",
         REDIS_URL="redis://localhost:6379/15",  # isolated test DB
     )
 
 
 @pytest.fixture
-async def ingest_stack() -> AsyncIterator[
-    tuple[IngestService, AppDBClient, DedupCache, MinIOClient]
-]:
+async def ingest_stack(
+    postgres_db,
+) -> AsyncIterator[tuple[IngestService, AppDBClient, DedupCache, MinIOClient, int]]:
     settings = _settings_for_test()
-    db = AppDBClient(settings)
-    await db.connect()
+    db = postgres_db
     cache = DedupCache(settings)
     try:
         await cache.connect()
@@ -70,22 +66,22 @@ async def ingest_stack() -> AsyncIterator[
         pytest.skip("MinIO not reachable on configured endpoint")
     # Wipe Redis test DB to make assertions on cache_hits deterministic
     await cache.client.flushdb()
-    # Seed a user row so FK constraints (if enabled) hold
     await db.execute(
-        "INSERT OR IGNORE INTO user (user_id, username, email, password_hash) "
-        "VALUES (1, 'test', 'test@local', 'x')",
-        (),
+        """INSERT INTO "user" (user_id, username, email, password_hash)
+           VALUES (1, 'test', 'test@local', 'x')
+           ON CONFLICT (user_id) DO NOTHING"""
     )
-    sid = await db.execute("INSERT INTO session (user_id) VALUES (1)", ())
+    sid = await db.fetchval(
+        "INSERT INTO session (user_id) VALUES (1) RETURNING session_id"
+    )
     ocr = KIEClient(settings)
 
     ingest = IngestService(settings=settings, db=db, cache=cache, store=store, ocr=ocr)
 
-    yield ingest, db, cache, store, sid  # type: ignore[misc]
+    yield ingest, db, cache, store, int(sid)
 
     await ocr.shutdown()
     await cache.close()
-    await db.close()
 
 
 def _att(path: Path, content_type: str) -> FileAttachment:
@@ -119,7 +115,7 @@ async def test_image_upload_first_then_cached(ingest_stack):
 
 
 @pytest.mark.asyncio
-async def test_redis_miss_falls_back_to_sqlite(ingest_stack):
+async def test_redis_miss_falls_back_to_database(ingest_stack):
     ingest, db, cache, store, sid = ingest_stack
 
     att = _att(_SAMPLE_IMG_002, "image/png")
@@ -130,8 +126,7 @@ async def test_redis_miss_falls_back_to_sqlite(ingest_stack):
     await cache.client.flushdb()
 
     out2 = await ingest.ingest(att, session_id=sid, user_id=1)
-    # SQLite has the extraction; Redis is empty → cache_layer == 'sqlite'
-    assert out2.pages[0].cache_layer == "sqlite"
+    assert out2.pages[0].cache_layer == "database"
     assert out2.cache_hits == 1
 
 
@@ -161,11 +156,13 @@ async def test_per_user_keyspace_isolation(ingest_stack):
     ingest, db, cache, store, sid = ingest_stack
     # Seed user 2
     await db.execute(
-        "INSERT OR IGNORE INTO user (user_id, username, email, password_hash) "
-        "VALUES (2, 'test2', 'test2@local', 'x')",
-        (),
+        """INSERT INTO "user" (user_id, username, email, password_hash)
+           VALUES (2, 'test2', 'test2@local', 'x')
+           ON CONFLICT (user_id) DO NOTHING"""
     )
-    sid2 = await db.execute("INSERT INTO session (user_id) VALUES (2)", ())
+    sid2 = await db.fetchval(
+        "INSERT INTO session (user_id) VALUES (2) RETURNING session_id"
+    )
 
     att = _att(_SAMPLE_IMG_001, "image/jpeg")
     out_user1 = await ingest.ingest(att, session_id=sid, user_id=1)
@@ -186,14 +183,14 @@ async def test_metadata_file_blob_link_persisted(ingest_stack):
     out = await ingest.ingest(att, session_id=sid, user_id=1)
 
     row = await db.fetchone(
-        "SELECT blob_id FROM metadata_file_blob WHERE metadata_file_id = ?",
+        "SELECT blob_id FROM metadata_file_blob WHERE metadata_file_id = $1",
         (out.file_id,),
     )
     assert row is not None
     assert row["blob_id"] >= 1
 
     blob = await db.fetchone(
-        "SELECT user_id, page_count FROM file_blob WHERE blob_id = ?",
+        "SELECT user_id, page_count FROM file_blob WHERE blob_id = $1",
         (row["blob_id"],),
     )
     assert blob is not None
@@ -221,7 +218,7 @@ async def test_corrupt_image_rejected_by_magic_check(ingest_stack):
 
     # No metadata_file row should have been created for the bad upload.
     rows = await db.fetchall(
-        "SELECT id FROM metadata_file WHERE session_id = ? AND file_name = ?",
+        "SELECT id FROM metadata_file WHERE session_id = $1 AND file_name = $2",
         (sid, "broken.jpg"),
     )
     assert rows == []

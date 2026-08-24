@@ -12,10 +12,6 @@ Flow per attachment:
 Hash + MinIO key never leave this module. ExtractionResult only carries
 metadata_file_id, page numbers, and validated extraction JSON.
 
-Phase 3 will swap the inline OCR call for `extract_page_task.kiq(...)` and
-replace the synchronous result with a stream of per-page progress events.
-The dedup + persist code paths stay identical — workers call into the same
-methods.
 """
 
 from __future__ import annotations
@@ -60,7 +56,7 @@ class IngestPage:
     page_id: int | None
     extraction: dict[str, Any]
     status: str  # 'extracted' | 'failed' | 'cached'
-    cache_layer: str | None  # 'redis' | 'sqlite' | None
+    cache_layer: str | None  # 'redis' | 'database' | None
 
 
 @dataclass
@@ -159,8 +155,6 @@ class IngestService:
             data=attachment.data,
         )
 
-    # ── Pre-flight guards (cheap, deterministic, no GPU) ─────────────────
-
     def _guard_attachment(self, attachment: FileAttachment) -> None:
         if not attachment.data:
             raise IngestRejectedError("empty file", reason="empty")
@@ -184,8 +178,6 @@ class IngestService:
             f"(supported images: {', '.join(SUPPORTED_IMAGE_EXTENSIONS)} or application/pdf)",
             reason="unsupported_type",
         )
-
-    # ── Image path ───────────────────────────────────────────────────────
 
     async def _ingest_image(
         self,
@@ -220,13 +212,16 @@ class IngestService:
             page_minio_key=blob_minio_key,
         )
 
-        file_id = await self._db.execute(
-            """
-            INSERT INTO metadata_file
-                (session_id, user_id, type, file_name, total_pages, status)
-            VALUES (?, ?, 'image', ?, 1, 'pending')
-            """,
-            (session_id, user_id, attachment.filename),
+        file_id = int(
+            await self._db.fetchval(
+                """
+                INSERT INTO metadata_file
+                    (session_id, user_id, type, file_name, total_pages, status)
+                VALUES ($1, $2, 'image', $3, 1, 'pending')
+                RETURNING id
+                """,
+                (session_id, user_id, attachment.filename),
+            )
         )
         await self._db.link_metadata_file_blob(file_id, blob_id)
 
@@ -249,8 +244,6 @@ class IngestService:
         )
         await self._finalize_metadata_file(outcome)
         return outcome
-
-    # ── PDF path ─────────────────────────────────────────────────────────
 
     async def _ingest_pdf(
         self,
@@ -286,18 +279,19 @@ class IngestService:
             prefix="blobs",
         )
 
-        file_id = await self._db.execute(
-            """
-            INSERT INTO metadata_file
-                (session_id, user_id, type, file_name, total_pages, status)
-            VALUES (?, ?, 'pdf', ?, ?, 'pending')
-            """,
-            (session_id, user_id, attachment.filename, pdf_pages),
+        file_id = int(
+            await self._db.fetchval(
+                """
+                INSERT INTO metadata_file
+                    (session_id, user_id, type, file_name, total_pages, status)
+                VALUES ($1, $2, 'pdf', $3, $4, 'pending')
+                RETURNING id
+                """,
+                (session_id, user_id, attachment.filename, pdf_pages),
+            )
         )
         await self._db.link_metadata_file_blob(file_id, blob_id)
 
-        # Render & persist each page sequentially. Phase 3 fans this out via
-        # Taskiq; the dedup logic already makes order irrelevant.
         page_outcomes: list[IngestPage] = []
         cache_hits = 0
         cache_misses = 0
@@ -352,8 +346,6 @@ class IngestService:
         await self._finalize_metadata_file(outcome)
         return outcome
 
-    # ── Per-page extraction (dedup-aware) ────────────────────────────────
-
     async def _extract_page(
         self,
         *,
@@ -373,7 +365,7 @@ class IngestService:
                 cache_layer="redis",
             )
 
-        # L2 (SQLite)
+        # Persistent database cache
         row = await self._db.get_cached_extraction(user_id, page_hash)
         if row is not None:
             try:
@@ -391,7 +383,7 @@ class IngestService:
                     page_id=None,
                     extraction=extraction,
                     status="cached",
-                    cache_layer="sqlite",
+                    cache_layer="database",
                 )
 
         # Miss → real KIE
@@ -425,30 +417,35 @@ class IngestService:
             cache_layer=None,
         )
 
-    # ── DB persistence helpers ───────────────────────────────────────────
-
     async def _persist_page(self, file_id: int, outcome: IngestPage) -> None:
         if outcome.status == "failed":
-            page_id = await self._db.execute(
-                """
-                INSERT INTO pages (metadata_file_id, page, status, status_message)
-                VALUES (?, ?, 'failed', 'OCR failed')
-                """,
-                (file_id, outcome.page),
+            page_id = int(
+                await self._db.fetchval(
+                    """
+                    INSERT INTO pages
+                        (metadata_file_id, page, status, status_message)
+                    VALUES ($1, $2, 'failed', 'OCR failed')
+                    RETURNING id
+                    """,
+                    (file_id, outcome.page),
+                )
             )
         else:
-            page_id = await self._db.execute(
-                """
-                INSERT INTO pages
-                    (metadata_file_id, page, agent_extracted, status, status_message)
-                VALUES (?, ?, ?, 'extracted', ?)
-                """,
-                (
-                    file_id,
-                    outcome.page,
-                    json.dumps(outcome.extraction, ensure_ascii=False),
-                    "cached" if outcome.cache_layer else "extracted",
-                ),
+            page_id = int(
+                await self._db.fetchval(
+                    """
+                    INSERT INTO pages
+                        (metadata_file_id, page, agent_extracted, status, status_message)
+                    VALUES ($1, $2, $3, 'extracted', $4)
+                    RETURNING id
+                    """,
+                    (
+                        file_id,
+                        outcome.page,
+                        json.dumps(outcome.extraction, ensure_ascii=False),
+                        "cached" if outcome.cache_layer else "extracted",
+                    ),
+                )
             )
         outcome.page_id = page_id
 
@@ -463,7 +460,7 @@ class IngestService:
         else:
             msg = "All pages failed"
         await self._db.execute(
-            "UPDATE metadata_file SET status = ?, status_message = ? WHERE id = ?",
+            "UPDATE metadata_file SET status = $1, status_message = $2 WHERE id = $3",
             (outcome.status, msg, outcome.file_id),
         )
 
@@ -480,13 +477,16 @@ class IngestService:
         Used for pre-flight failures (corrupt PDF, undecodable image) that
         never reach the OCR call.
         """
-        file_id = await self._db.execute(
-            """
-            INSERT INTO metadata_file
-                (session_id, user_id, type, file_name, total_pages, status, status_message)
-            VALUES (?, ?, ?, ?, 0, 'failed', ?)
-            """,
-            (session_id, user_id, file_type, attachment.filename, error_msg),
+        file_id = int(
+            await self._db.fetchval(
+                """
+                INSERT INTO metadata_file
+                    (session_id, user_id, type, file_name, total_pages, status, status_message)
+                VALUES ($1, $2, $3, $4, 0, 'failed', $5)
+                RETURNING id
+                """,
+                (session_id, user_id, file_type, attachment.filename, error_msg),
+            )
         )
         return IngestOutcome(
             file_id=file_id,
@@ -497,8 +497,6 @@ class IngestService:
             cache_hits=0,
             cache_misses=0,
         )
-
-    # ── Blob registry ────────────────────────────────────────────────────
 
     async def _upsert_blob(
         self,
@@ -539,8 +537,6 @@ class IngestService:
         )
         return blob_id, True, key
 
-    # ── Cache helpers (fail-soft) ────────────────────────────────────────
-
     async def _safe_cache_get(
         self, user_id: int, page_hash: str
     ) -> dict[str, Any] | None:
@@ -557,8 +553,6 @@ class IngestService:
             await self._cache.set_extraction(user_id, page_hash, extraction)
         except Exception as e:
             logger.warning("Redis cache SET failed: %s (continuing)", e)
-
-    # ── Async/queue mode ─────────────────────────────────────────────────
 
     async def enqueue(
         self,
@@ -611,7 +605,7 @@ class IngestService:
                         cache_layer=cached["layer"],
                     ),
                 )
-                if cached["layer"] == "sqlite":
+                if cached["layer"] == "database":
                     await self._safe_cache_set(user_id, page_hash, cached["extraction"])
                 cached_hits += 1
                 page_results.append(
@@ -681,13 +675,16 @@ class IngestService:
             page_blake3=page_hash,
             page_minio_key=blob_key,
         )
-        file_id = await self._db.execute(
-            """
-            INSERT INTO metadata_file
-                (session_id, user_id, type, file_name, total_pages, status)
-            VALUES (?, ?, 'image', ?, 1, 'pending')
-            """,
-            (session_id, user_id, attachment.filename),
+        file_id = int(
+            await self._db.fetchval(
+                """
+                INSERT INTO metadata_file
+                    (session_id, user_id, type, file_name, total_pages, status)
+                VALUES ($1, $2, 'image', $3, 1, 'pending')
+                RETURNING id
+                """,
+                (session_id, user_id, attachment.filename),
+            )
         )
         await self._db.link_metadata_file_blob(file_id, blob_id)
         return blob_id, file_id, [(1, page_hash)]
@@ -723,13 +720,16 @@ class IngestService:
             extension="pdf",
             prefix="blobs",
         )
-        file_id = await self._db.execute(
-            """
-            INSERT INTO metadata_file
-                (session_id, user_id, type, file_name, total_pages, status)
-            VALUES (?, ?, 'pdf', ?, ?, 'pending')
-            """,
-            (session_id, user_id, attachment.filename, pdf_pages),
+        file_id = int(
+            await self._db.fetchval(
+                """
+                INSERT INTO metadata_file
+                    (session_id, user_id, type, file_name, total_pages, status)
+                VALUES ($1, $2, 'pdf', $3, $4, 'pending')
+                RETURNING id
+                """,
+                (session_id, user_id, attachment.filename, pdf_pages),
+            )
         )
         await self._db.link_metadata_file_blob(file_id, blob_id)
 
@@ -757,7 +757,7 @@ class IngestService:
     async def _page_already_cached(
         self, user_id: int, page_hash: str
     ) -> dict[str, Any] | None:
-        """Return {'layer': 'redis'|'sqlite', 'extraction': dict} if hit."""
+        """Return a Redis or database extraction cache hit."""
         cached = await self._safe_cache_get(user_id, page_hash)
         if cached is not None:
             return {"layer": "redis", "extraction": cached}
@@ -765,7 +765,7 @@ class IngestService:
         if row is not None:
             try:
                 return {
-                    "layer": "sqlite",
+                    "layer": "database",
                     "extraction": json.loads(row["extraction_json"]),
                 }
             except json.JSONDecodeError:
@@ -780,11 +780,14 @@ class IngestService:
         file_type: str,
         error_msg: str,
     ) -> int:
-        return await self._db.execute(
-            """
-            INSERT INTO metadata_file
-                (session_id, user_id, type, file_name, total_pages, status, status_message)
-            VALUES (?, ?, ?, ?, 0, 'failed', ?)
-            """,
-            (session_id, user_id, file_type, attachment.filename, error_msg),
+        return int(
+            await self._db.fetchval(
+                """
+                INSERT INTO metadata_file
+                    (session_id, user_id, type, file_name, total_pages, status, status_message)
+                VALUES ($1, $2, $3, $4, 0, 'failed', $5)
+                RETURNING id
+                """,
+                (session_id, user_id, file_type, attachment.filename, error_msg),
+            )
         )

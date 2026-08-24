@@ -1,10 +1,9 @@
-"""Rate-limit integration tests (hermetic: temp SQLite, fake orchestrator).
+"""Rate-limit integration tests with PostgreSQL and a fake orchestrator.
 
 Limits are read from Settings at request time, so each test pins its own
 values via env + get_settings.cache_clear().
 """
 
-import tempfile
 from types import SimpleNamespace
 from typing import AsyncIterator
 
@@ -15,7 +14,6 @@ from fastapi import FastAPI
 import config.settings as settings_mod
 from app.models.chat import KlaudiaMessage, KlaudiaResponse
 from app.routes import v1_router
-from app.services.extraction.infra.db_client import AppDBClient
 
 
 class FakeOrchestrator:
@@ -32,7 +30,7 @@ class FakeOrchestrator:
 
 
 @pytest.fixture
-async def client(monkeypatch) -> AsyncIterator[httpx.AsyncClient]:
+async def client(monkeypatch, postgres_db) -> AsyncIterator[httpx.AsyncClient]:
     monkeypatch.setenv("RATE_LIMIT_AUTH", "3/minute")
     monkeypatch.setenv("RATE_LIMIT_CHAT", "2/minute")
     settings_mod.get_settings.cache_clear()
@@ -42,13 +40,8 @@ async def client(monkeypatch) -> AsyncIterator[httpx.AsyncClient]:
     # Moving-window state is process-global; wipe it between tests.
     limiter.reset()
 
-    tmp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-    tmp_db.close()
-    db = AppDBClient(settings_mod.Settings(SQLITE_DB=tmp_db.name))
-    await db.connect()
-
     app = FastAPI()
-    app.state.container = SimpleNamespace(db_client=db)
+    app.state.container = SimpleNamespace(db_client=postgres_db)
     app.state.orchestrator = FakeOrchestrator()
     attach_rate_limiter(app)
     app.include_router(v1_router)
@@ -58,7 +51,6 @@ async def client(monkeypatch) -> AsyncIterator[httpx.AsyncClient]:
         transport=transport, base_url="http://test"
     ) as http_client:
         yield http_client
-    await db.close()
     settings_mod.get_settings.cache_clear()
 
 

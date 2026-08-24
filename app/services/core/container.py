@@ -8,7 +8,6 @@ from config.settings import Settings
 from app.services.core.llm_client import LLMClient
 from app.services.core.observability import LangfuseService
 from app.services.extraction.infra.db_client import AppDBClient
-from app.services.extraction.infra.db_client_pg import build_db_client
 from app.services.extraction.infra.dedup_cache import DedupCache
 from app.services.extraction.infra.kie_client import KIEClient
 from app.services.extraction.infra.object_store import MinIOClient
@@ -57,7 +56,7 @@ def _ensure_gcp_credentials(settings: Settings) -> None:
 def _build_mcp_registries(
     settings: Settings,
 ) -> tuple[MCPToolRegistry, MCPToolRegistry]:
-    """Construct (mcp_sqlite, mcp_gsheets) registries based on configured transport.
+    """Construct archive and spreadsheet registries for the configured transport.
 
     stdio: spawn the server as a subprocess of FastAPI. No port, no SSE keep-alive
            required — the connection is a pipe owned by this process.
@@ -68,24 +67,16 @@ def _build_mcp_registries(
 
     if transport == "stdio":
         python_bin = sys.executable
-        sqlite_db_abs = str((_PROJECT_ROOT / settings.sqlite_db).resolve())
-        server_env = dict(os.environ)
-        if settings.database_url:
-            server_env["DATABASE_URL"] = settings.database_url
-        sqlite_env = {**server_env, "SQLITE_DB": sqlite_db_abs}
+        server_env = {**os.environ, "DATABASE_URL": settings.database_url}
 
-        sqlite_reg = MCPToolRegistry.from_stdio(
+        archive_registry = MCPToolRegistry.from_stdio(
             "mcp-archive",
             command=python_bin,
             args=["main.py", "--transport", "stdio"],
             cwd=str(_PROJECT_ROOT / "mcp-archive"),
-            env=sqlite_env,
+            env=server_env,
         )
         if settings.sheets_backend == "ledger":
-            if not settings.database_url:
-                raise ValueError(
-                    "SHEETS_BACKEND=ledger requires DATABASE_URL (Postgres DSN)"
-                )
             sheets_reg = MCPToolRegistry.from_stdio(
                 "mcp-ledger",
                 command=python_bin,
@@ -101,7 +92,7 @@ def _build_mcp_registries(
                 cwd=str(_PROJECT_ROOT / "mcp-gsheets"),
                 env=server_env,
             )
-        return sqlite_reg, sheets_reg
+        return archive_registry, sheets_reg
 
     if transport in {"http", "sse"}:
         archive_url = settings.mcp_archive_url
@@ -164,7 +155,7 @@ class KlaudiaContainer:
         self.dedup_cache: Optional[DedupCache] = None
         self.object_store: Optional[MinIOClient] = None
         self.ingest_service: Optional[IngestService] = None
-        self.mcp_sqlite: Optional[MCPToolRegistry] = None
+        self.mcp_archive: Optional[MCPToolRegistry] = None
         self.mcp_gsheets: Optional[MCPToolRegistry] = None
         self.guardrails: Optional[GuardrailsAgent] = None
         self.supervisor: Optional[SupervisorAgent] = None
@@ -183,14 +174,14 @@ class KlaudiaContainer:
         container.langfuse = LangfuseService(settings)
         container.llm_client = LLMClient(settings, langfuse=container.langfuse)
         container.kie_client = KIEClient(settings, langfuse=container.langfuse)
-        container.db_client = build_db_client(settings)
+        container.db_client = AppDBClient(settings)
         await container.db_client.connect()
         container.dedup_cache = DedupCache(settings)
         try:
             await container.dedup_cache.connect()
         except Exception as e:
             logger.warning(
-                "Redis unavailable (%s). Dedup cache disabled; SQLite-only fallback.",
+                "Redis unavailable (%s). Dedup cache disabled; database fallback active.",
                 e,
             )
             container.dedup_cache = None
@@ -200,10 +191,6 @@ class KlaudiaContainer:
         except Exception as e:
             logger.error("MinIO unavailable (%s). Image/PDF uploads will fail.", e)
         if settings.sheets_backend == "ledger":
-            if not settings.database_url:
-                raise ValueError(
-                    "SHEETS_BACKEND=ledger requires DATABASE_URL (Postgres DSN)"
-                )
             container.ledger_store = LedgerStore(settings.database_url)
             await container.ledger_store.connect()
             container.spreadsheets = SpreadsheetService(container.ledger_store)
@@ -211,9 +198,9 @@ class KlaudiaContainer:
         if settings.memory_mode != "off":
             container.memory = MemoryService.from_settings(settings)
 
-        container.mcp_sqlite, container.mcp_gsheets = _build_mcp_registries(settings)
-        logger.info(f"MCP transport: {settings.mcp_transport}")
-        await container.mcp_sqlite.connect()
+        container.mcp_archive, container.mcp_gsheets = _build_mcp_registries(settings)
+        logger.info("MCP transport: %s", settings.mcp_transport)
+        await container.mcp_archive.connect()
         await container.mcp_gsheets.connect()
 
         container.approvals = ApprovalService(
@@ -256,7 +243,7 @@ class KlaudiaContainer:
         container.supervisor = SupervisorAgent(
             llm_api_key=settings.llm_api_key,
             llm_model=settings.llm_model,
-            mcp_sqlite=container.mcp_sqlite,
+            mcp_archive=container.mcp_archive,
             mcp_gsheets=container.mcp_gsheets,
             langfuse=container.langfuse,
             provider=settings.model_provider,
@@ -282,10 +269,12 @@ class KlaudiaContainer:
             await self.llm_client.shutdown()
         if self.kie_client:
             await self.kie_client.shutdown()
-        if self.mcp_sqlite:
-            await self.mcp_sqlite.disconnect()
+        if self.mcp_archive:
+            await self.mcp_archive.disconnect()
         if self.mcp_gsheets:
             await self.mcp_gsheets.disconnect()
+        if self.memory:
+            self.memory.close()
         if self.ledger_store:
             await self.ledger_store.close()
         if isinstance(self.dedup_cache, DedupCache):
@@ -301,7 +290,7 @@ class _NullDedupCache:
     """Null-object replacement for DedupCache when Redis is down.
 
     Every read misses, every write is a no-op. IngestService keeps working
-    against SQLite alone — slower, but no functional regression.
+    against PostgreSQL alone, with higher extraction latency.
     """
 
     async def get_blob(self, *_a, **_kw):  # noqa: D401

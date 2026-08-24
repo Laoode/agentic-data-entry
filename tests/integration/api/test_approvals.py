@@ -1,14 +1,11 @@
 """ApprovalService: park, list, approve (replay), reject, ownership.
 
-Runs against a temp SQLite database via the app's own DB client, so the
-portable SQL is exercised on the dev backend too.
+Runs against the isolated PostgreSQL integration database.
 """
 
 import pytest
 
 from app.services.core.approvals import ApprovalNotFoundError, ApprovalService
-from app.services.extraction.infra.db_client import AppDBClient
-from config.settings import Settings
 
 
 class FakeTool:
@@ -27,15 +24,12 @@ class FakeRegistry:
 
 
 @pytest.fixture
-async def service(tmp_path):
-    db = AppDBClient(Settings(SQLITE_DB=str(tmp_path / "approvals.db")))
-    await db.connect()
+async def service(postgres_db):
     tool = FakeTool("tool_clear_range")
-    svc = ApprovalService(db, FakeRegistry(tool))
+    svc = ApprovalService(postgres_db, FakeRegistry(tool))
     await svc.ensure_schema()
     svc.test_tool = tool  # handle for assertions
     yield svc
-    await db.close()
 
 
 async def _park(service, user_id=1, sheet="Jun"):

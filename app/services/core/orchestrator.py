@@ -1031,11 +1031,11 @@ class KlaudiaOrchestrator:
         for ef in enqueued:
             pages_rows = await self._c.db_client.fetchall(
                 "SELECT page, agent_extracted, status FROM pages "
-                "WHERE metadata_file_id = ? ORDER BY page",
+                "WHERE metadata_file_id = $1 ORDER BY page",
                 (ef.file_id,),
             )
             file_row = await self._c.db_client.fetchone(
-                "SELECT status, status_message FROM metadata_file WHERE id = ?",
+                "SELECT status, status_message FROM metadata_file WHERE id = $1",
                 (ef.file_id,),
             )
             import json as _json
@@ -1084,7 +1084,7 @@ class KlaudiaOrchestrator:
                 final_status = "partial"
                 msg = f"{ok}/{total} page(s) extracted"
             await self._c.db_client.execute(
-                "UPDATE metadata_file SET status = ?, status_message = ? WHERE id = ?",
+                "UPDATE metadata_file SET status = $1, status_message = $2 WHERE id = $3",
                 (final_status, msg, ef.file_id),
             )
             payload["status"] = final_status

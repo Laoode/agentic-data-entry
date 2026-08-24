@@ -56,11 +56,6 @@ jobs:
       - run:
           name: Run unit tests
           command: uv run pytest tests/unit -q --junitxml=test-results/unit.xml
-      - run:
-          name: Run API route tests (hermetic, temp SQLite)
-          command: >
-            uv run pytest tests/integration/api
-            -q --junitxml=test-results/api.xml
       - store_test_results:
           path: test-results
 
@@ -69,6 +64,9 @@ jobs:
     environment:
       MOCK_KIE: "true"
       LANGFUSE_ENABLED: "false"
+      DATABASE_URL: postgresql://klaudia:klaudia@127.0.0.1:5432/klaudia
+      PG_TEST_URL: postgresql://klaudia:klaudia@127.0.0.1:5432/klaudia
+      JWT_SECRET: test-secret-that-is-at-least-32-bytes-long
     steps:
       - checkout
       - install-deps
@@ -88,6 +86,7 @@ jobs:
           name: Run extraction pipeline integration tests (mock KIE)
           command: >
             uv run pytest
+            tests/integration/api
             tests/integration/extraction/test_ingest_pipeline.py
             tests/integration/extraction/test_async_pipeline.py
             tests/integration/database

@@ -1,6 +1,5 @@
 # Local infra for Klaudia development: `docker compose up -d`
-# Postgres is opt-in for the app (set DATABASE_URL); Redis + MinIO match the
-# defaults in config/settings.py so no extra env is needed.
+# PostgreSQL, Redis, and MinIO match the defaults in config/settings.py.
 
 services:
   postgres:
