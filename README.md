@@ -87,8 +87,8 @@ the model cannot reach. An agent cannot name another tenant's workspace even
 under prompt injection, because the parameter is not in its vocabulary.
 
 **Nothing leaves the building.** Long-term memory runs on self-hosted mem0 with
-pgvector on your own Postgres, and embeddings come from a local service. No
-managed memory platform, no third-party vector store.
+pgvector and PostgreSQL history on your own database. Embeddings come from a
+local service. No managed memory platform, no third-party vector store.
 
 ---
 
@@ -230,7 +230,7 @@ than erroring.
 | Agents | LangGraph supervisor with worker sub-agents |
 | Tool boundary | MCP (ledger server, document archive server) |
 | Ledger | PostgreSQL, sheet-semantics grids, 16-tool API |
-| Memory | mem0 (self-hosted) + pgvector + local embedding service |
+| Memory | mem0 + PostgreSQL history + pgvector + local embeddings |
 | Reasoning model | DeepSeek v4 pro today, swappable by configuration |
 | Extraction model | Qwen 3.5 4B LoRA fine-tune on vLLM |
 | Queue and cache | Redis, Taskiq workers |
