@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import io
 import logging
-import mimetypes
 from pathlib import PurePath
 from typing import Final
 
@@ -80,14 +79,6 @@ def is_pdf(filename: str | None, content_type: str | None) -> bool:
     if filename and PurePath(filename).suffix.lower() == ".pdf":
         return True
     return False
-
-
-def guess_content_type(filename: str) -> str | None:
-    """Best-effort MIME from extension; covers HEIC which mimetypes misses."""
-    ext = PurePath(filename).suffix.lower()
-    if ext in (".heic", ".heif"):
-        return "image/heif"
-    return mimetypes.guess_type(filename)[0]
 
 
 def to_canonical_jpg(

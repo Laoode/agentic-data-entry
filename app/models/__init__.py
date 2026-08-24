@@ -6,11 +6,8 @@ from app.models.chat import (
     KlaudiaRequest,
     KlaudiaResponse,
 )
-from app.models.message import Message, MessageRole
 
 __all__ = [
-    "Message",
-    "MessageRole",
     "KlaudiaMessage",
     "KlaudiaRequest",
     "KlaudiaResponse",

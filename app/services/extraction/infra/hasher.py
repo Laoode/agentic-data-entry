@@ -18,11 +18,6 @@ def hash_bytes(data: bytes) -> str:
     return blake3(data).hexdigest()
 
 
-def hash_chunks(chunks: bytes | bytearray | memoryview) -> str:
-    """Single-shot hash; thin wrapper to keep the call site agnostic to type."""
-    return blake3(bytes(chunks)).hexdigest()
-
-
 def shard_path(digest: str, *, depth: int = 2) -> str:
     """Two-level shard: 'ab/cd' from 'abcd…'. Keeps any single MinIO prefix
     listing bounded even at millions of objects.

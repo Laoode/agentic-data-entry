@@ -1,27 +1,11 @@
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
 
 from app.helpers.auth import get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-
-class SessionItem(BaseModel):
-    session_id: int
-    session_name: Optional[str] = None
-    created_at: str
-    updated_at: str
-
-
-class MessageItem(BaseModel):
-    sender: str
-    message_text: str
-    file_id: Optional[int] = None
-    timestamp: str
 
 
 @router.get("/sessions")
