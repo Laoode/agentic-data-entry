@@ -1,6 +1,6 @@
 """Provider-agnostic chat-LLM factory for the agentic stack.
 
-One factory keeps the supervisor, routers, and react workers ignorant of which
+One factory keeps the supervisor, routers, and tool-calling workers unaware of which
 backend they talk to. See docs/MODELS.md for the full provider matrix, the
 per-provider thinking-mode mechanics, and the DeepSeek caveats.
 """
@@ -20,9 +20,8 @@ _VLLM_PROVIDERS = frozenset({"vllm", "qwen", "openai"})
 _DEEPSEEK_PROVIDERS = frozenset({"deepseek"})
 _OPENAI_COMPATIBLE = _VLLM_PROVIDERS | _DEEPSEEK_PROVIDERS
 
-# Gemini 3 thinking budgets (generation_config). Binding is skipped when
-# thinking_level is None, so legacy 1.x/2.x model strings stay unaffected.
-_VALID_THINKING_LEVELS = frozenset({"none", "minimal", "low", "medium", "high"})
+# Gemini 3 thinking levels accepted by ChatGoogleGenerativeAI.
+_VALID_THINKING_LEVELS = frozenset({"minimal", "low", "medium", "high"})
 
 # OpenAI client rejects an empty api_key; a self-hosted vLLM started without
 # --api-key ignores the value, so this placeholder is safe there.
@@ -132,38 +131,38 @@ def _build_gemini_llm(
     google_cloud_location: Optional[str],
     thinking_level: Optional[str],
 ) -> BaseChatModel:
-    """Build a ChatGoogleGenerativeAI bound to Vertex AI or the Gemini Dev API."""
+    """Build ChatGoogleGenerativeAI for Vertex AI or the Gemini Developer API."""
     from langchain_google_genai import ChatGoogleGenerativeAI
+
+    normalized_thinking_level = None
+    if thinking_level is not None:
+        normalized_thinking_level = thinking_level.lower()
+        if normalized_thinking_level not in _VALID_THINKING_LEVELS:
+            raise ValueError(
+                f"Invalid thinking_level={thinking_level!r}. "
+                f"Valid values: {sorted(_VALID_THINKING_LEVELS)}"
+            )
 
     if use_vertexai:
         if not google_cloud_project:
             raise ValueError("use_vertexai=True but google_cloud_project is empty")
-        llm: BaseChatModel = ChatGoogleGenerativeAI(
+        return ChatGoogleGenerativeAI(
             model=model,
             vertexai=True,
             project=google_cloud_project,
             location=google_cloud_location or "global",
             temperature=temperature,
-        )
-    else:
-        if not llm_api_key:
-            raise ValueError("llm_api_key is required when use_vertexai=False")
-        llm = ChatGoogleGenerativeAI(
-            model=model,
-            google_api_key=llm_api_key,
-            temperature=temperature,
+            thinking_level=normalized_thinking_level,
         )
 
-    if thinking_level is not None:
-        level = thinking_level.lower()
-        if level not in _VALID_THINKING_LEVELS:
-            raise ValueError(
-                f"Invalid thinking_level={thinking_level!r}. "
-                f"Valid values: {sorted(_VALID_THINKING_LEVELS)}"
-            )
-        llm = llm.bind(generation_config={"thinking_config": {"thinking_level": level}})
-
-    return llm
+    if not llm_api_key:
+        raise ValueError("llm_api_key is required when use_vertexai=False")
+    return ChatGoogleGenerativeAI(
+        model=model,
+        google_api_key=llm_api_key,
+        temperature=temperature,
+        thinking_level=normalized_thinking_level,
+    )
 
 
 def _unwrap(llm: Any) -> Any:

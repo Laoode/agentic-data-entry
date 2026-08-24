@@ -1,9 +1,9 @@
 import logging
 from typing import Literal
 
-from langchain_core.messages import HumanMessage
+from langchain.agents import create_agent
 from langchain_core.language_models.chat_models import BaseChatModel
-from langgraph.prebuilt import create_react_agent
+from langchain_core.messages import HumanMessage
 from langgraph.types import Command
 
 from klaudia.core.supervisor._content import coerce_to_text
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 def make_sql_agent_node(llm: BaseChatModel, mcp_archive: MCPToolRegistry):
     """Create an SQL agent node for the supervisor graph."""
     tools = get_sql_tools(mcp_archive)
-    agent = create_react_agent(llm, tools=tools, prompt=SQL_AGENT_PROMPT)
+    agent = create_agent(llm, tools=tools, system_prompt=SQL_AGENT_PROMPT)
 
     async def sql_agent_node(state: SupervisorState) -> Command[Literal["supervisor"]]:
         # Focused context: file list + session id only, no parent persona and no

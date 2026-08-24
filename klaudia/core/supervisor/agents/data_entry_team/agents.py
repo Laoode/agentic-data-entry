@@ -1,10 +1,10 @@
 import logging
 from typing import Callable, Literal, Optional
 
+from langchain.agents import create_agent
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.graph import END, START, StateGraph
-from langgraph.prebuilt import create_react_agent
 from langgraph.types import Command
 from typing_extensions import TypedDict
 
@@ -149,16 +149,22 @@ def make_data_entry_team(
     """Build the data entry team subgraph.
 
     routing_llm: pre-bound with minimal thinking (team_supervisor routing call)
-    worker_llm:  pre-bound with low thinking (create_react_agent workers)
+    worker_llm:  pre-bound with low thinking (tool-calling workers)
     """
-    read_agent = create_react_agent(
-        worker_llm, tools=get_read_tools(mcp_gsheets), prompt=READ_AGENT_PROMPT
+    read_agent = create_agent(
+        worker_llm,
+        tools=get_read_tools(mcp_gsheets),
+        system_prompt=READ_AGENT_PROMPT,
     )
-    sheet_agent = create_react_agent(
-        worker_llm, tools=get_sheet_tools(mcp_gsheets), prompt=SHEET_AGENT_PROMPT
+    sheet_agent = create_agent(
+        worker_llm,
+        tools=get_sheet_tools(mcp_gsheets),
+        system_prompt=SHEET_AGENT_PROMPT,
     )
-    write_agent = create_react_agent(
-        worker_llm, tools=get_write_tools(mcp_gsheets), prompt=WRITE_AGENT_PROMPT
+    write_agent = create_agent(
+        worker_llm,
+        tools=get_write_tools(mcp_gsheets),
+        system_prompt=WRITE_AGENT_PROMPT,
     )
 
     async def read_node(state: SupervisorState) -> Command[Literal["supervisor"]]:
