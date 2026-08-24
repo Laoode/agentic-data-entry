@@ -159,3 +159,50 @@ async def test_session_isolation_between_users(client):
     )
     assert listed.status_code == 200
     assert listed.json()["sessions"] == []
+
+
+async def test_chat_rejects_foreign_session_before_orchestrator(client):
+    alice = await _register(client, "alice")
+    bob = await _register(client, "bob")
+    transport_app = client._transport.app  # httpx.ASGITransport
+    session_id = await transport_app.state.container.db_client.create_session(
+        alice["user_id"], "alice-private"
+    )
+
+    class UnexpectedOrchestrator:
+        async def process(self, **kwargs):
+            raise AssertionError("foreign session reached orchestrator")
+
+    transport_app.state.orchestrator = UnexpectedOrchestrator()
+    response = await client.post(
+        "/v1/chat",
+        headers={"Authorization": f"Bearer {bob['access_token']}"},
+        json={
+            "session_id": session_id,
+            "messages": [{"role": "user", "content": "show history"}],
+        },
+    )
+
+    assert response.status_code == 404
+
+
+async def test_chat_stream_hides_internal_errors(client):
+    alice = await _register(client, "alice")
+    transport_app = client._transport.app  # httpx.ASGITransport
+
+    class BrokenOrchestrator:
+        async def stream(self, **kwargs):
+            raise RuntimeError("sensitive-internal-detail")
+            yield
+
+    transport_app.state.orchestrator = BrokenOrchestrator()
+    transport_app.state.container.spreadsheets = None
+    response = await client.post(
+        "/v1/chat/stream",
+        headers={"Authorization": f"Bearer {alice['access_token']}"},
+        json={"messages": [{"role": "user", "content": "hello"}]},
+    )
+
+    assert response.status_code == 200
+    assert "sensitive-internal-detail" not in response.text
+    assert "Internal server error" in response.text

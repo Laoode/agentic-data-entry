@@ -21,6 +21,26 @@ SSE_HEADERS = {
 }
 
 
+async def _require_session_owner(
+    request: Request, user_id: int, session_id: int | None
+) -> None:
+    """Reject a missing or foreign session without exposing ownership.
+
+    Args:
+        request: Current FastAPI request.
+        user_id: Authenticated user ID.
+        session_id: Optional session selected by the client.
+
+    Raises:
+        HTTPException: If the selected session is missing or foreign.
+    """
+    if session_id is None:
+        return
+    owner = await request.app.state.container.db_client.get_session_owner(session_id)
+    if owner != user_id:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+
 @router.post("/chat", response_model=KlaudiaResponse)
 @limiter.limit(chat_limit)
 async def chat(
@@ -30,6 +50,7 @@ async def chat(
     user_id: int = Depends(get_current_user),
 ) -> KlaudiaResponse:
     """Process a chat message through the Klaudia pipeline (non-streaming)."""
+    await _require_session_owner(request, user_id, body.session_id)
     orchestrator = request.app.state.orchestrator
     try:
         return await orchestrator.process(
@@ -58,6 +79,7 @@ async def chat_stream(
     user_id: int = Depends(get_current_user),
 ) -> StreamingResponse:
     """Stream the Klaudia pipeline as Server-Sent Events."""
+    await _require_session_owner(request, user_id, body.session_id)
     orchestrator = request.app.state.orchestrator
 
     # Pre-validate an explicit spreadsheet selection so absent/foreign ids
@@ -83,9 +105,11 @@ async def chat_stream(
                     logger.info("Client disconnected; stopping stream")
                     return
                 yield _format_sse(event)
-        except Exception as exc:
+        except Exception:
             logger.exception("chat_stream failure")
-            yield _format_sse({"type": "error", "data": {"message": str(exc)}})
+            yield _format_sse(
+                {"type": "error", "data": {"message": "Internal server error"}}
+            )
 
     return StreamingResponse(
         event_source(),
