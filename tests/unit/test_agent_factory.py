@@ -39,9 +39,7 @@ def _capture_agent_calls(
         Returns:
             An unused agent stub.
         """
-        calls.append(
-            {"model": model, "tools": tools, "system_prompt": system_prompt}
-        )
+        calls.append({"model": model, "tools": tools, "system_prompt": system_prompt})
         return object()
 
     return create_agent
@@ -56,9 +54,7 @@ def test_sql_worker_uses_stable_agent_factory(monkeypatch):
 
     sql_agent.make_sql_agent_node(model, registry)
 
-    assert calls == [
-        {"model": model, "tools": [], "system_prompt": SQL_AGENT_PROMPT}
-    ]
+    assert calls == [{"model": model, "tools": [], "system_prompt": SQL_AGENT_PROMPT}]
 
 
 def test_data_entry_workers_use_stable_agent_factory(monkeypatch):
@@ -66,9 +62,7 @@ def test_data_entry_workers_use_stable_agent_factory(monkeypatch):
     calls: list[dict[str, Any]] = []
     model = object()
     registry = SimpleNamespace(tools=[])
-    monkeypatch.setattr(
-        team_agents, "create_agent", _capture_agent_calls(calls)
-    )
+    monkeypatch.setattr(team_agents, "create_agent", _capture_agent_calls(calls))
 
     team_agents.make_data_entry_team(model, model, registry)
 
