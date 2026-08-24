@@ -61,13 +61,7 @@ pids/
 
 # Docs
 docs/paper/
-REPO.MD
 docs/PLAN.md
-docs/OPERATIONS.md
 docs/SCALE.md
-docs/SOUL.md
-docs/PRD.md
 docs/MEMORY.md
-docs/MODELS.md
-docs/HAT.md
 docs/.local-backup/

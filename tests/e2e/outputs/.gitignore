@@ -1,8 +1,9 @@
-# Transient run artifacts — not tracked.
+# Transient run artifacts are not tracked.
 results_*.json
 *.out
 *legacy/
+*.postman_collection.json
 
-# Per-model summary tables ARE tracked, for side-by-side comparison over time.
+# Track per-model summary tables for comparison over time.
 !table-*.md
 !.gitignore
