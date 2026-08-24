@@ -12,7 +12,6 @@ from fastmcp.server.context import Context
 from mcp.types import ToolAnnotations
 
 from app.infra.db_client import DBClient
-from app.infra.db_client_pg import build_db_client
 from app.tools import (
     create_document,
     create_page,
@@ -50,8 +49,8 @@ IDEMPOTENT_WRITE = ToolAnnotations(
 
 
 @asynccontextmanager
-async def sqlite_lifespan(server: FastMCP) -> AsyncIterator[DBClient]:
-    db = build_db_client()
+async def archive_lifespan(server: FastMCP) -> AsyncIterator[DBClient]:
+    db = DBClient()
     await db.connect()
     logger.info(f"MCP DB server ready (backend={type(db).__name__})")
     try:
@@ -86,16 +85,13 @@ def _build_auth() -> JWTVerifier | None:
 mcp = FastMCP(
     name="mcp-archive",
     instructions=(
-        "SQLite MCP Server for receipt data management. "
+        "Receipt archive server for document data management. "
         "Provides tools for document, page, and extraction CRUD operations."
     ),
-    lifespan=sqlite_lifespan,
+    lifespan=archive_lifespan,
     auth=_build_auth(),
     strict_input_validation=True,
 )
-
-
-# --- Document operations ---
 
 
 @mcp.tool(annotations=READ_ONLY)
@@ -184,9 +180,6 @@ async def tool_update_document_status(
     return json.dumps({"ok": True})
 
 
-# --- Page operations ---
-
-
 @mcp.tool(annotations=READ_ONLY)
 async def tool_list_pages(
     metadata_file_id: int, ctx: Context = CurrentContext()
@@ -272,9 +265,6 @@ async def tool_update_page(
     db: DBClient = ctx.lifespan_context
     await update_page(db, page_id, agent_extracted, status, status_message)
     return json.dumps({"ok": True})
-
-
-# --- Extraction operations ---
 
 
 @mcp.tool(annotations=READ_ONLY)

@@ -95,7 +95,7 @@ async def orchestrator(container):
 def spy(container):
     from tests.e2e.spy import MCPSpy
 
-    return MCPSpy([container.mcp_sqlite, container.mcp_gsheets])
+    return MCPSpy([container.mcp_archive, container.mcp_gsheets])
 
 
 @pytest.fixture(scope="module")

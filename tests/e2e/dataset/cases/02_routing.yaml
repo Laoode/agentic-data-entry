@@ -1,6 +1,6 @@
 # Routing disambiguation — the supervisor must pick the right data source.
 #   data_entry_team → Google Sheets (ALL financial/bookkeeping data)
-#   sql_agent       → SQLite (ONLY user-uploaded receipts)
+#   sql_agent       → receipt archive (ONLY user-uploaded receipts)
 # These assert WHICH agent handles the turn, not deep content.
 
 - id: R01-financial-to-data-entry
@@ -46,7 +46,7 @@
   tags: [routing, data_entry, disambiguation, single_turn]
   turns:
     - user: "List semua pembelian dari Indomaret di bulan Mei."
-      note: "Indomaret rows live in the Mei sheet, not the SQLite receipt archive."
+      note: "Indomaret rows live in the Mei sheet, not the receipt archive."
       expect:
         route: data_entry_team
         forbid_agents: [sql_agent]

@@ -4,7 +4,7 @@ SUPERVISOR_ROUTING_PROMPT = """You are the task router AND Klaudia (user-facing 
  CRITICAL: TWO COMPLETELY SEPARATE DATA STORES. GET THIS RIGHT.
 ══════════════════════════════════════════════════════════════════
 
-  sql_agent  →  SQLite database  (UPLOADED RECEIPT FILES ONLY)
+  sql_agent  →  Receipt archive  (UPLOADED RECEIPT FILES ONLY)
   ─────────────────────────────────────────────────────────────
   Contains: receipt/PDF files uploaded by the user IN THIS SESSION,
             OCR/KIE extraction results, file processing status.

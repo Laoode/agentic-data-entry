@@ -1,4 +1,4 @@
-# SQL Agent — receipt archive (SQLite, read-only). Content tokens come from the
+# SQL Agent receipt archive is read-only. Content tokens come from the
 # 001-receipt label (ALFAMIDI CAWANG BARU). The "list files" case should be
 # answerable from the SESSION FILES context (FINISH) OR via sql_agent — both ok.
 

@@ -1,9 +1,8 @@
-"""End-to-end MCP server test across both DB backends.
+"""End-to-end tests for the PostgreSQL receipt archive server.
 
 Spawns the real mcp-archive server as a stdio subprocess (exactly how the
-app container runs it) and drives document/page/extraction tools through
-a FastMCP client. Parametrized over sqlite (temp file) and postgres
-(compose instance; skipped when unreachable).
+app container runs it) and drives document, page, and extraction tools
+through a FastMCP client.
 """
 
 import asyncio
@@ -12,7 +11,6 @@ import json
 import os
 import socket
 import sys
-import tempfile
 from pathlib import Path
 
 import jwt
@@ -20,12 +18,11 @@ import pytest
 from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
 from mcp.shared.exceptions import MCPError
+from tests.integration.postgres import POSTGRES_TEST_URL
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _SERVER_DIR = _PROJECT_ROOT / "mcp-archive"
-_PG_URL = os.environ.get(
-    "PG_TEST_URL", "postgresql://klaudia:klaudia@localhost:5432/klaudia"
-)
+_PG_URL = POSTGRES_TEST_URL
 
 EXPECTED_TOOL_COUNT = 11
 _HTTP_SECRET = "integration-mcp-secret-with-at-least-32-bytes"
@@ -42,20 +39,27 @@ async def _pg_available() -> bool:
         return False
 
 
-async def _seed_pg_session() -> int:
-    """Create schema prerequisites: wipe public tables, seed user+session."""
+async def _reset_and_seed_session() -> int:
+    """Clear archive data without dropping schema constraints."""
     import asyncpg
 
     conn = await asyncpg.connect(_PG_URL)
     try:
-        for table in ("pages", "metadata_file", "conversation", "session"):
-            await conn.execute(f"DROP TABLE IF EXISTS {table} CASCADE")
-        await conn.execute('DROP TABLE IF EXISTS "user" CASCADE')
-        # Server recreates schema on connect; pre-create user+session here
-        # is impossible before boot, so instead let the server boot first.
+        await conn.execute(
+            'TRUNCATE pages, metadata_file, conversation, session, "user" '
+            "RESTART IDENTITY CASCADE"
+        )
+        await conn.execute(
+            """INSERT INTO "user" (user_id, username, email, password_hash)
+               VALUES (1, 'dev', 'dev@local', 'not-a-real-hash')"""
+        )
+        return int(
+            await conn.fetchval(
+                "INSERT INTO session (user_id) VALUES (1) RETURNING session_id"
+            )
+        )
     finally:
         await conn.close()
-    return 0
 
 
 def _server_transport(env_overrides: dict[str, str]) -> StdioTransport:
@@ -184,58 +188,28 @@ async def _run_crud_flow(env_overrides: dict[str, str], session_id: int) -> None
         assert files[0]["pages"][0]["status"] == "extracted"
 
 
-async def test_mcp_server_sqlite_backend():
-    tmp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-    tmp_db.close()
-    import aiosqlite
-
-    # Session row must exist before the tool writes to it; boot the schema
-    # the same way the server does, then seed.
-    env = {"SQLITE_DB": tmp_db.name, "DATABASE_URL": ""}
-    transport = _server_transport(env)
-    async with Client(transport, mode="auto"):
-        pass  # server connect() created the schema
-    async with aiosqlite.connect(tmp_db.name) as conn:
-        cursor = await conn.execute("INSERT INTO session (user_id) VALUES (1)")
-        await conn.commit()
-        session_id = cursor.lastrowid
-
-    await _run_crud_flow(env, session_id)
-    os.unlink(tmp_db.name)
-
-
-async def test_mcp_server_postgres_backend():
+async def test_mcp_server_postgres():
     if not await _pg_available():
-        pytest.skip(f"Postgres not reachable at {_PG_URL}")
-    import asyncpg
+        pytest.skip("The isolated PostgreSQL test database is unavailable")
 
-    await _seed_pg_session()
-    # Boot once so the server applies the PG schema, then seed a session.
     env = {"DATABASE_URL": _PG_URL}
     transport = _server_transport(env)
     async with Client(transport, mode="auto"):
         pass
 
-    conn = await asyncpg.connect(_PG_URL)
-    try:
-        session_id = await conn.fetchval(
-            "INSERT INTO session (user_id) VALUES (1) RETURNING session_id"
-        )
-    finally:
-        await conn.close()
+    session_id = await _reset_and_seed_session()
 
     await _run_crud_flow(env, session_id)
 
 
 async def test_stateless_http_negotiates_modern_protocol_and_requires_auth():
     """HTTP serves the modern protocol and rejects anonymous clients."""
+    if not await _pg_available():
+        pytest.skip("The isolated PostgreSQL test database is unavailable")
     unused_tcp_port = _unused_tcp_port()
-    tmp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-    tmp_db.close()
     env = {
         **os.environ,
-        "DATABASE_URL": "",
-        "SQLITE_DB": tmp_db.name,
+        "DATABASE_URL": _PG_URL,
         "FASTMCP_HOST": "127.0.0.1",
         "FASTMCP_PORT": str(unused_tcp_port),
         "MCP_JWT_SECRET": _HTTP_SECRET,
@@ -266,4 +240,3 @@ async def test_stateless_http_negotiates_modern_protocol_and_requires_auth():
         if process.returncode is None:
             process.terminate()
             await process.wait()
-        os.unlink(tmp_db.name)

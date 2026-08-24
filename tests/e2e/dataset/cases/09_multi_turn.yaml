@@ -63,7 +63,7 @@
       expect: {route: any}
     # ── recall: turn-1 context is now gone → must fetch from the receipt DB
     - user: "Nama toko di struk PERTAMA yang saya upload tadi apa? Ambil dari arsip struk."
-      note: "Beyond the conversation window → sql_agent must read SQLite."
+      note: "Beyond the conversation window, sql_agent must read the receipt archive."
       expect:
         route_any_of: [sql_agent, none]
         forbid_agents: [data_entry_team]

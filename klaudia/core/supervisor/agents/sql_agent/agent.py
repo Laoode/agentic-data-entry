@@ -16,9 +16,9 @@ from klaudia.core.supervisor.tools.wrappers import get_sql_tools
 logger = logging.getLogger(__name__)
 
 
-def make_sql_agent_node(llm: BaseChatModel, mcp_sqlite: MCPToolRegistry):
+def make_sql_agent_node(llm: BaseChatModel, mcp_archive: MCPToolRegistry):
     """Create an SQL agent node for the supervisor graph."""
-    tools = get_sql_tools(mcp_sqlite)
+    tools = get_sql_tools(mcp_archive)
     agent = create_react_agent(llm, tools=tools, prompt=SQL_AGENT_PROMPT)
 
     async def sql_agent_node(state: SupervisorState) -> Command[Literal["supervisor"]]:

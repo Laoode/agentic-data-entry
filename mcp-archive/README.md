@@ -1,7 +1,7 @@
 # mcp-archive
 
-FastMCP server for document, page, and extraction metadata. It uses SQLite for
-zero-config development and Postgres when `DATABASE_URL` is set.
+FastMCP server for document, page, and extraction metadata backed by PostgreSQL.
+`DATABASE_URL` is required.
 
 ## Run
 

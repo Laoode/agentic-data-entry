@@ -239,7 +239,7 @@ def _with_coordinates(tool: BaseTool) -> BaseTool:
 
 
 def get_sql_tools(registry: MCPToolRegistry) -> list[BaseTool]:
-    """Get MCP-SQLite tools filtered for SQL Agent use.
+    """Get receipt archive tools filtered for SQL Agent use.
 
     tool_list_documents is intentionally excluded: the SESSION FILES section
     of the system prompt already contains file IDs for the current session,

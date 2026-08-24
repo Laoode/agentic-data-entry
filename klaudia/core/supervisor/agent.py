@@ -103,7 +103,7 @@ class SupervisorAgent:
         self,
         llm_api_key: str,
         llm_model: str,
-        mcp_sqlite: MCPToolRegistry,
+        mcp_archive: MCPToolRegistry,
         mcp_gsheets: MCPToolRegistry,
         langfuse: Optional[Any] = None,
         provider: str = "google",
@@ -141,7 +141,7 @@ class SupervisorAgent:
             **_llm_kwargs, thinking_level=thinking_level_worker
         )
 
-        self._mcp_sqlite = mcp_sqlite
+        self._mcp_archive = mcp_archive
         self._mcp_gsheets = mcp_gsheets
         self._langfuse = langfuse
 
@@ -208,8 +208,6 @@ class SupervisorAgent:
             return draft
 
     # Sheet list cache helpers
-    # ------------------------------------------------------------------
-
     def invalidate_sheets_cache(self) -> None:
         """Force a cache miss on the next get_available_sheets() call.
 
@@ -257,8 +255,6 @@ class SupervisorAgent:
 
         return cached
 
-    # ------------------------------------------------------------------
-
     def _graph_config(
         self,
         session_id: Optional[int],
@@ -280,7 +276,7 @@ class SupervisorAgent:
         # routing_llm → supervisor node + team_supervisor (classification tasks)
         # worker_llm  → sql_agent + worker agents (tool-augmented reasoning)
         supervisor_node = make_supervisor_node(self._routing_llm)
-        sql_agent_node = make_sql_agent_node(self._worker_llm, self._mcp_sqlite)
+        sql_agent_node = make_sql_agent_node(self._worker_llm, self._mcp_archive)
         data_entry_node = make_data_entry_team_node(
             routing_llm=self._routing_llm,
             worker_llm=self._worker_llm,
