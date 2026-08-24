@@ -2179,7 +2179,7 @@ requires-dist = [
     { name = "mcp-archive", editable = "mcp-archive" },
     { name = "mcp-gsheets", editable = "mcp-gsheets" },
     { name = "mcp-ledger", editable = "mcp-ledger" },
-    { name = "mem0ai", specifier = ">=2.0.13" },
+    { name = "mem0ai", specifier = "==2.0.13" },
     { name = "openai", specifier = ">=1.54.0" },
     { name = "pgvector", specifier = ">=0.5.0" },
     { name = "pillow", specifier = ">=10.0.0" },

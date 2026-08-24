@@ -16,6 +16,7 @@ class FakeBackend:
         self.added: list[dict] = []
         self.deleted: list[str] = []
         self.reset_called = False
+        self.closed = False
         self.raise_on_search = False
         self.last_search: dict | None = None
 
@@ -39,6 +40,9 @@ class FakeBackend:
 
     async def reset(self):
         self.reset_called = True
+
+    def close(self):
+        self.closed = True
 
 
 async def test_recall_formats_results_as_bullets():
@@ -129,3 +133,11 @@ async def test_reset_delegates_to_backend():
     backend = FakeBackend()
     await MemoryService(backend).reset()
     assert backend.reset_called
+
+
+def test_close_releases_backend():
+    backend = FakeBackend()
+
+    MemoryService(backend).close()
+
+    assert backend.closed

@@ -23,6 +23,7 @@ import logging
 import os
 from typing import Any, Protocol
 
+from app.services.core.memory_history import install_postgres_history_store
 from config.settings import Settings
 from klaudia.core.supervisor.tools.context import build_memory_context
 
@@ -77,6 +78,8 @@ class MemoryBackend(Protocol):
 
     async def reset(self) -> Any: ...
 
+    def close(self) -> None: ...
+
 
 def _results(payload: Any) -> list[dict[str, Any]]:
     """Normalize mem0's {"results": [...]} (or a bare list) to a list of dicts."""
@@ -102,7 +105,9 @@ class MemoryService:
         try:
             from mem0 import AsyncMemory
 
+            install_postgres_history_store()
             config = {
+                "history_db_path": settings.database_url,
                 "llm": {
                     "provider": "openai",
                     "config": {
@@ -221,6 +226,10 @@ class MemoryService:
     async def reset(self) -> None:
         """Clear all memories (used by the eval harness for case isolation)."""
         await self._m.reset()
+
+    def close(self) -> None:
+        """Release mem0 vector and history connections."""
+        self._m.close()
 
     async def _purge(self, user_id: int, predicate) -> int:
         """Delete a user's memories matching a predicate. Returns count deleted."""
