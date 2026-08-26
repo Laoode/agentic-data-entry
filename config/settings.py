@@ -16,7 +16,9 @@ class Settings(BaseSettings):
     stage: str = Field(default="development", alias="STAGE")
 
     jwt_secret: str = Field(
-        default="dev-secret-change-me-before-any-deploy", alias="JWT_SECRET"
+        default="dev-secret-change-me-before-any-deploy",
+        alias="JWT_SECRET",
+        repr=False,
     )
     jwt_expires_days: int = Field(default=7, alias="JWT_EXPIRES_DAYS")
 
@@ -28,15 +30,15 @@ class Settings(BaseSettings):
     llm_disable_thinking: bool = Field(default=True, alias="LLM_DISABLE_THINKING")
 
     vllm_llm_endpoint: str = Field(default="", alias="VLLM_LLM_ENDPOINT")
-    vllm_llm_api_key: str = Field(default="", alias="VLLM_LLM_API_KEY")
+    vllm_llm_api_key: str = Field(default="", alias="VLLM_LLM_API_KEY", repr=False)
     deepseek_base_url: str = Field(
         default="https://api.deepseek.com/v1", alias="DEEPSEEK_BASE_URL"
     )
-    deepseek_api_key: str = Field(default="", alias="DEEPSEEK_API_KEY")
+    deepseek_api_key: str = Field(default="", alias="DEEPSEEK_API_KEY", repr=False)
 
     # LLM (Google Gemini via native google-genai SDK)
     llm_model: str = Field(default="gemini-3-flash-preview", alias="LLM_MODEL")
-    llm_api_key: str = Field(default="", alias="LLM_API_KEY")
+    llm_api_key: str = Field(default="", alias="LLM_API_KEY", repr=False)
     llm_temperature: float = Field(default=0.5, alias="LLM_TEMPERATURE")
     llm_thinking_level_routing: str = Field(
         default="minimal", alias="LLM_THINKING_LEVEL_ROUTING"
@@ -55,7 +57,7 @@ class Settings(BaseSettings):
 
     kie_model: str = Field(default="deepseek-v4-flash-vision-exp", alias="KIE_MODEL")
     vllm_kie_endpoint: str = Field(default="", alias="VLLM_KIE_ENDPOINT")
-    vllm_kie_api_key: str = Field(default="", alias="VLLM_KIE_API_KEY")
+    vllm_kie_api_key: str = Field(default="", alias="VLLM_KIE_API_KEY", repr=False)
     mock_kie: bool = Field(default=True, alias="MOCK_KIE")
     numeric_verify_mode: str = Field(default="log", alias="NUMERIC_VERIFY_MODE")
 
@@ -68,13 +70,14 @@ class Settings(BaseSettings):
     llm_guardrails_model: str = Field(
         default="gemini-3.1-flash-lite-preview", alias="LLM_GUARDRAILS_MODEL"
     )
-    groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
+    groq_api_key: str = Field(default="", alias="GROQ_API_KEY", repr=False)
 
     # Database
     database_url: str = Field(
         default=DEFAULT_DATABASE_URL,
         alias="DATABASE_URL",
         min_length=1,
+        repr=False,
     )
 
     # Memory
@@ -92,23 +95,33 @@ class Settings(BaseSettings):
     memory_embed_dims: int = Field(default=384, alias="MEMORY_EMBED_DIMS")
 
     # Redis (hot cache + Taskiq broker + pubsub)
-    redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
+    redis_url: str = Field(
+        default="redis://localhost:6379/0", alias="REDIS_URL", repr=False
+    )
     dedup_cache_ttl_seconds: int = Field(default=86400, alias="DEDUP_CACHE_TTL_SECONDS")
 
     # MinIO (object storage)
     minio_endpoint: str = Field(default="http://127.0.0.1:9000", alias="MINIO_ENDPOINT")
     minio_region: str = Field(default="us-east-1", alias="MINIO_REGION")
-    minio_access_key: str = Field(default="minioadmin", alias="MINIO_ACCESS_KEY")
-    minio_secret_key: str = Field(default="minioadmin", alias="MINIO_SECRET_KEY")
+    minio_access_key: str = Field(
+        default="minioadmin", alias="MINIO_ACCESS_KEY", repr=False
+    )
+    minio_secret_key: str = Field(
+        default="minioadmin", alias="MINIO_SECRET_KEY", repr=False
+    )
     minio_bucket: str = Field(default="klaudia-blobs", alias="MINIO_BUCKET")
     minio_secure: bool = Field(default=False, alias="MINIO_SECURE")
 
     # Taskiq
     taskiq_broker_url: str = Field(
-        default="redis://localhost:6379/1", alias="TASKIQ_BROKER_URL"
+        default="redis://localhost:6379/1",
+        alias="TASKIQ_BROKER_URL",
+        repr=False,
     )
     taskiq_result_backend_url: str = Field(
-        default="redis://localhost:6379/2", alias="TASKIQ_RESULT_BACKEND_URL"
+        default="redis://localhost:6379/2",
+        alias="TASKIQ_RESULT_BACKEND_URL",
+        repr=False,
     )
     taskiq_queue_name: str = Field(default="ocr:extract", alias="TASKIQ_QUEUE_NAME")
     taskiq_result_ttl_seconds: int = Field(
@@ -143,13 +156,15 @@ class Settings(BaseSettings):
     mcp_gsheets_url: str = Field(
         default="http://localhost:8002/mcp", alias="MCP_GSHEETS_URL"
     )
-    mcp_auth_token: str = Field(default="", alias="MCP_AUTH_TOKEN")
+    mcp_auth_token: str = Field(default="", alias="MCP_AUTH_TOKEN", repr=False)
 
     sheets_backend: str = Field(default="ledger", alias="SHEETS_BACKEND")
 
     # Langfuse Observability
     langfuse_public_key: str = Field(default="", alias="LANGFUSE_PUBLIC_KEY")
-    langfuse_secret_key: str = Field(default="", alias="LANGFUSE_SECRET_KEY")
+    langfuse_secret_key: str = Field(
+        default="", alias="LANGFUSE_SECRET_KEY", repr=False
+    )
     langfuse_base_url: str = Field(
         default="https://cloud.langfuse.com", alias="LANGFUSE_BASE_URL"
     )

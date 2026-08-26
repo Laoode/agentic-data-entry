@@ -12,6 +12,30 @@ def test_deepseek_vision_is_default_kie_model():
     assert settings.kie_model == "deepseek-v4-flash-vision-exp"
 
 
+def test_settings_repr_hides_credentials():
+    """Keep credentials out of logs and test tracebacks."""
+    secret = "credential-that-must-not-appear"
+    settings = Settings(
+        _env_file=None,
+        JWT_SECRET=secret,
+        VLLM_LLM_API_KEY=secret,
+        DEEPSEEK_API_KEY=secret,
+        LLM_API_KEY=secret,
+        VLLM_KIE_API_KEY=secret,
+        GROQ_API_KEY=secret,
+        DATABASE_URL=secret,
+        REDIS_URL=secret,
+        MINIO_ACCESS_KEY=secret,
+        MINIO_SECRET_KEY=secret,
+        TASKIQ_BROKER_URL=secret,
+        TASKIQ_RESULT_BACKEND_URL=secret,
+        MCP_AUTH_TOKEN=secret,
+        LANGFUSE_SECRET_KEY=secret,
+    )
+
+    assert secret not in repr(settings)
+
+
 def test_production_rejects_development_database_url():
     settings = Settings(
         _env_file=None,
