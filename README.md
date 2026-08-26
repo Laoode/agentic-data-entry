@@ -44,8 +44,9 @@ would talk to a junior on your team, and it works directly in your ledgers:
 reads them, reconciles them, posts entries, closes the month, and tells you what
 it found.
 
-It runs entirely on your own infrastructure. Ledger data, memory, and documents
-stay in your Postgres and your object store.
+Storage runs on your own infrastructure. Ledger data, memory, and documents stay
+in your Postgres and object store. Hosted model options receive only the prompt
+and image or text payload sent to them.
 
 **What it does today**
 
@@ -86,9 +87,9 @@ from every tool schema the model can see, and forced from a request-scoped value
 the model cannot reach. An agent cannot name another tenant's workspace even
 under prompt injection, because the parameter is not in its vocabulary.
 
-**Nothing leaves the building.** Long-term memory runs on self-hosted mem0 with
-pgvector and PostgreSQL history on your own database. Embeddings come from a
-local service. No managed memory platform, no third-party vector store.
+**Data locality is configurable.** Long-term memory, embeddings, and storage run
+locally. Self-hosted inference keeps model input local; hosted DeepSeek or Gemini
+backends receive the requests routed to them.
 
 ---
 
@@ -198,9 +199,9 @@ digit accuracy, and JSON validity.
 Against the base model: +17.09 Entity F1, +43.71 Group F1, +21.85 Aligned,
 +16.77 ANLS*, +16.71 digit accuracy, JSON validity held at 100.
 
-The extraction backend is selectable (self-hosted fine-tune, a hosted vision
-model, or a fixture mock for offline runs), so the pipeline does not depend on
-any single model being available.
+DeepSeek V4 Flash Vision is the current extraction default. The self-hosted Qwen
+fine-tune, Gemini, and an offline fixture mock remain selectable through
+`KIE_MODEL` and `MOCK_KIE`.
 
 ---
 
@@ -232,7 +233,7 @@ than erroring.
 | Ledger | PostgreSQL, sheet-semantics grids, 16-tool API |
 | Memory | mem0 + PostgreSQL history + pgvector + local embeddings |
 | Reasoning model | DeepSeek v4 pro today, swappable by configuration |
-| Extraction model | Qwen 3.5 4B LoRA fine-tune on vLLM |
+| Extraction model | DeepSeek V4 Flash Vision; Qwen 3.5 4B fine-tune and Gemini selectable |
 | Queue and cache | Redis, Taskiq workers |
 | Object storage | MinIO, BLAKE3 content addressing |
 | Observability | Langfuse (fail-open tracing) |
