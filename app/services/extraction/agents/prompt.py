@@ -1,3 +1,8 @@
+import json
+
+from app.services.extraction.agents.config import EXTRACTION_SCHEMA
+
+
 EXTRACTION_RULES = """
 EXTRACTION RULES (read carefully):
 - Format output as JSON matching the schema exactly — no extra keys, no missing keys.
@@ -56,11 +61,6 @@ payment summary:
 DATA PRIVACY: Skip personal names (cashier/customer) and card numbers.
 """.strip()
 
-# ─── FEW-SHOT EXAMPLE ────────────────────────────────────────────────────────
-# CRITICAL: FEW_SHOT_OUTPUT must contain EVERY key from EXTRACTION_SCHEMA.
-# This receipt exercises every rule edge case listed above.
-# If you update EXTRACTION_SCHEMA, update this too.
-
 FEW_SHOT_RECEIPT_TEXT = """SUNRISE TRADING SDN BHD
 No. 12, Jalan Bahagia 3, Taman Sejahtera
 81300 Johor Bahru, Johor
@@ -87,7 +87,6 @@ ROUNDING    : +0.02
 TOTAL       : 203.70
 VISA CARD   : 203.70"""
 
-# MUST mirror EXTRACTION_SCHEMA exactly — every key present, correct array types
 FEW_SHOT_OUTPUT = {
     "info": {
         "store_name": "SUNRISE TRADING SDN BHD",
@@ -140,3 +139,21 @@ FEW_SHOT_OUTPUT = {
         "change": "",
     },
 }
+
+
+def build_extraction_prompt() -> str:
+    """Build the shared zero-shot receipt extraction prompt."""
+    schema_json = json.dumps(EXTRACTION_SCHEMA, ensure_ascii=False, indent=2)
+    few_shot_json = json.dumps(FEW_SHOT_OUTPUT, ensure_ascii=False, indent=2)
+    return (
+        "You are a receipt Key-Information-Extraction (KIE) assistant.\n"
+        "Output ONLY a JSON object that strictly matches the schema below.\n\n"
+        f"{EXTRACTION_RULES}\n\n"
+        "## JSON SCHEMA (shape) — your output MUST match these keys exactly:\n"
+        f"```json\n{schema_json}\n```\n\n"
+        "## FEW-SHOT EXAMPLE\n"
+        "Receipt (text representation):\n"
+        f"{FEW_SHOT_RECEIPT_TEXT}\n\n"
+        "Expected JSON output:\n"
+        f"```json\n{few_shot_json}\n```"
+    )

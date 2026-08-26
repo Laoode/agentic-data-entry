@@ -1,15 +1,7 @@
-"""Gemini KIE client — multimodal image -> JSON.
-
-extract_from_image(jpg_bytes) sends the receipt image with the full zero-shot
-prompt (schema + rules + few-shot) so a general Gemini model can extract without
-fine-tuning. Returns a raw dict (caller runs validate_and_merge for schema
-hygiene). google-genai's `response_mime_type='application/json'` forces JSON;
-malformed cases still go through the project's 3-layer parser.
-"""
+"""Gemini receipt extraction client."""
 
 from __future__ import annotations
 
-import json
 import logging
 from contextlib import contextmanager
 from typing import Any
@@ -19,42 +11,15 @@ from google.genai import types
 
 from app.exceptions import LLMError
 from app.services.core.observability import LangfuseService
-from app.services.extraction.agents.config import EXTRACTION_SCHEMA
 from app.services.extraction.agents.parser import parse_extraction_json
-from app.services.extraction.agents.prompt import (
-    EXTRACTION_RULES,
-    FEW_SHOT_OUTPUT,
-    FEW_SHOT_RECEIPT_TEXT,
-)
+from app.services.extraction.agents.prompt import build_extraction_prompt
 from config.settings import Settings
 
 logger = logging.getLogger(__name__)
 
 
-def _build_system_prompt() -> str:
-    schema_json = json.dumps(EXTRACTION_SCHEMA, ensure_ascii=False, indent=2)
-    few_shot_json = json.dumps(FEW_SHOT_OUTPUT, ensure_ascii=False, indent=2)
-    return (
-        "You are a receipt Key-Information-Extraction (KIE) assistant.\n"
-        "Output ONLY a JSON object that strictly matches the schema below.\n\n"
-        f"{EXTRACTION_RULES}\n\n"
-        "## JSON SCHEMA (shape) — your output MUST match these keys exactly:\n"
-        f"```json\n{schema_json}\n```\n\n"
-        "## FEW-SHOT EXAMPLE\n"
-        "Receipt (text representation):\n"
-        f"{FEW_SHOT_RECEIPT_TEXT}\n\n"
-        "Expected JSON output:\n"
-        f"```json\n{few_shot_json}\n```"
-    )
-
-
 class GeminiKIEClient:
-    """Gemini wrapper that returns extraction JSON for receipt input.
-
-    Holds its own google-genai client because the LLMClient used by Klaudia
-    agents (router, supervisor) is tuned for chat completion and we want a
-    separate temperature/config profile for extraction.
-    """
+    """Return receipt JSON from Gemini vision input."""
 
     def __init__(
         self,
@@ -82,7 +47,7 @@ class GeminiKIEClient:
             self._client = genai.Client(api_key=settings.llm_api_key)
             logger.info("GeminiKIEClient: Developer API mode model=%s", self._model)
 
-        self._system_prompt = _build_system_prompt()
+        self._system_prompt = build_extraction_prompt()
 
     @property
     def model_id(self) -> str:
