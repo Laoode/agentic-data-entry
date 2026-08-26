@@ -53,7 +53,7 @@ class Settings(BaseSettings):
         default="", alias="GOOGLE_APPLICATION_CREDENTIALS"
     )
 
-    kie_model: str = Field(default="gemini-3-flash-preview", alias="KIE_MODEL")
+    kie_model: str = Field(default="deepseek-v4-flash-vision-exp", alias="KIE_MODEL")
     vllm_kie_endpoint: str = Field(default="", alias="VLLM_KIE_ENDPOINT")
     vllm_kie_api_key: str = Field(default="", alias="VLLM_KIE_API_KEY")
     mock_kie: bool = Field(default=True, alias="MOCK_KIE")
