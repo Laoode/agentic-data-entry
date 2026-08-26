@@ -1,10 +1,4 @@
-"""Fine-tuned Qwen3.5-4B KIE client (vLLM, OpenAI-compatible).
-
-The served model is fine-tuned for receipt image -> structured JSON, and its
-vLLM chat template injects the same short prompt used during training. So this
-client sends the image only — no schema, no rules, no few-shot. Output is parsed
-with the shared 3-layer parser. See docs/MODELS.md for the KIE routing matrix.
-"""
+"""Fine-tuned Qwen3.5-4B receipt extraction client for vLLM."""
 
 from __future__ import annotations
 

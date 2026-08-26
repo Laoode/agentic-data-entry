@@ -1,9 +1,4 @@
-"""Provider-agnostic chat-LLM factory for the agentic stack.
-
-One factory keeps the supervisor, routers, and tool-calling workers unaware of which
-backend they talk to. See docs/MODELS.md for the full provider matrix, the
-per-provider thinking-mode mechanics, and the DeepSeek caveats.
-"""
+"""Build chat models for the configured agent provider."""
 
 from __future__ import annotations
 

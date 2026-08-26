@@ -1,20 +1,4 @@
-"""Provider router for the guardrail LLM checks (scope + output).
-
-The prompt-injection guard stays on Groq (see base.py). The scope (SARA /
-Financial Advice) and output blacklist checks run a tiny YES/NO classification
-that can target either backend, selected by GUARDRAILS_PROVIDER:
-
-    google   → Gemini via the shared google-genai LLMClient (thinking = minimal)
-    deepseek → DeepSeek V4 over the OpenAI-compatible API, thinking disabled
-
-Both run non-thinking; only the mechanism differs. Gemini binds
-thinking_level="minimal" inside LLMClient. DeepSeek sends
-extra_body={"thinking": {"type": "disabled"}} on the wire — the toggle is the
-request body, not the model name. See docs/MODELS.md.
-
-scope.py / output.py depend only on the `GuardrailChatLLM.chat()` surface, so
-routing is transparent to them.
-"""
+"""Route scope and output guardrail checks by model provider."""
 
 from __future__ import annotations
 
