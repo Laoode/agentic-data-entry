@@ -203,6 +203,11 @@ DeepSeek V4 Flash Vision is the current extraction default. The self-hosted Qwen
 fine-tune, Gemini, and an offline fixture mock remain selectable through
 `KIE_MODEL` and `MOCK_KIE`.
 
+Extraction agent; TOON used 2,212 tokens versus 4,487 for the original indented JSON, a 50.7% reduction. In the full runtime context,
+TOON used 2,428 tokens versus 2,929 for compact JSON, saving 501 tokens or 17.1%.
+The full agent-quality JSON/TOON comparison remains part of the later sandbox
+evaluation.
+
 ---
 
 ## 🔋 Memory
