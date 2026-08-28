@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings
@@ -60,6 +61,9 @@ class Settings(BaseSettings):
     vllm_kie_api_key: str = Field(default="", alias="VLLM_KIE_API_KEY", repr=False)
     mock_kie: bool = Field(default=True, alias="MOCK_KIE")
     numeric_verify_mode: str = Field(default="log", alias="NUMERIC_VERIFY_MODE")
+    extraction_context_format: Literal["toon", "json"] = Field(
+        default="toon", alias="EXTRACTION_CONTEXT_FORMAT"
+    )
 
     guardrails_enabled: bool = Field(default=True, alias="GUARDRAILS_ENABLED")
     llm_guardrails_prompt_inj: str = Field(

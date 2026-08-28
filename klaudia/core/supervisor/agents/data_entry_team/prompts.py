@@ -32,7 +32,7 @@ DISPATCH DISCIPLINE (CRITICAL):
   "append" operations → ALWAYS dispatch write_agent. Never FINISH directly.
 - If [Extraction Result] data is visible in the conversation context and the user
   asks to insert/record it into a sheet → dispatch write_agent immediately.
-  The extraction JSON is the data source; write_agent reads it from context.
+  The structured extraction is the data source; write_agent reads it from context.
 - FINISH is ONLY valid when:
   (a) A worker just completed AND its message contains [WRITE_DONE], [SHEET_DONE],
       [CLARIFY], or [READ_DONE].

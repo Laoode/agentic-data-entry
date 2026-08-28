@@ -15,6 +15,7 @@ from app.services.core.prompts import KLAUDIA_SYSTEM_PROMPT
 from app.services.core.verifier import verify_reply
 from app.services.extraction.infra.normalizer import is_pdf, is_supported_image
 from klaudia.core.supervisor.tools.context import (
+    ExtractionContextFormat,
     build_continuity_context,
     build_extraction_context,
     build_session_context,
@@ -95,6 +96,17 @@ def _format_evidence(tool_trace: list[tuple[str, dict, str]]) -> str:
             break
         parts.append(f"[{name}]\n{snippet}")
     return "\n\n".join(parts)
+
+
+def _build_extraction_contexts(
+    extraction_results: list[dict[str, Any]],
+    output_format: ExtractionContextFormat,
+) -> list[str]:
+    """Serialize each attachment once for prompt, history, and verification."""
+    return [
+        build_extraction_context(extraction_result, output_format)
+        for extraction_result in extraction_results
+    ]
 
 
 class KlaudiaOrchestrator:
@@ -268,6 +280,10 @@ class KlaudiaOrchestrator:
             time=meta.time,
             timezone=meta.timezone,
         )
+        extraction_contexts = _build_extraction_contexts(
+            extraction_results,
+            self._c.settings.extraction_context_format,
+        )
 
         # Build messages for supervisor
         llm_messages: list[dict[str, Any]] = [
@@ -284,8 +300,7 @@ class KlaudiaOrchestrator:
             )
 
         # Add extraction context if present (one block per attachment, in order)
-        for ext in extraction_results:
-            extraction_ctx = build_extraction_context(ext)
+        for extraction_ctx in extraction_contexts:
             llm_messages.append({"role": "user", "content": extraction_ctx})
 
         # Add current user message
@@ -293,10 +308,9 @@ class KlaudiaOrchestrator:
 
         # 6. Persist extraction contexts (if any) then the user message to DB.
         # Extraction contexts MUST be saved so future turns can access the full
-        # item-level JSON when the user follows up (e.g., "masukkan ke sheet"
+        # item-level data when the user follows up (e.g., "masukkan ke sheet"
         # after "ini total berapa?"). Without this, write_agent has no data.
-        for ext in extraction_results:
-            extraction_ctx = build_extraction_context(ext)
+        for extraction_ctx in extraction_contexts:
             if extraction_ctx:
                 await self._c.db_client.save_message(
                     session_id, user_id, "user", extraction_ctx
@@ -332,9 +346,7 @@ class KlaudiaOrchestrator:
 
         # 8b. Deterministic numeric verification (never trust LLM arithmetic).
         extra_texts = (
-            [user_text]
-            + [build_extraction_context(e) for e in extraction_results]
-            + [row["message_text"] for row in history]
+            [user_text] + extraction_contexts + [row["message_text"] for row in history]
         )
         content = await self._verify_numeric(content, tool_trace, extra_texts)
 
@@ -535,6 +547,10 @@ class KlaudiaOrchestrator:
                 time=meta.time,
                 timezone=meta.timezone,
             )
+            extraction_contexts = _build_extraction_contexts(
+                extraction_results,
+                self._c.settings.extraction_context_format,
+            )
 
             llm_messages: list[dict[str, Any]] = [
                 {"role": "system", "content": system_prompt}
@@ -543,14 +559,12 @@ class KlaudiaOrchestrator:
                 llm_messages.append(
                     {"role": row["sender"], "content": row["message_text"]}
                 )
-            for ext in extraction_results:
-                extraction_ctx = build_extraction_context(ext)
+            for extraction_ctx in extraction_contexts:
                 llm_messages.append({"role": "user", "content": extraction_ctx})
             llm_messages.append({"role": "user", "content": user_text})
 
             # Persist extraction contexts then user message (mirrors _process_inner).
-            for ext in extraction_results:
-                extraction_ctx = build_extraction_context(ext)
+            for extraction_ctx in extraction_contexts:
                 if extraction_ctx:
                     await self._c.db_client.save_message(
                         session_id, user_id, "user", extraction_ctx
@@ -597,7 +611,7 @@ class KlaudiaOrchestrator:
             # the client the reply cannot be recalled — log-only there.
             extra_texts = (
                 [user_text]
-                + [build_extraction_context(e) for e in extraction_results]
+                + extraction_contexts
                 + [row["message_text"] for row in history]
             )
             content = await self._verify_numeric(

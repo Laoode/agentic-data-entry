@@ -2083,6 +2083,7 @@ dependencies = [
     { name = "mcp", extra = ["cli"] },
     { name = "pydantic" },
     { name = "python-dotenv" },
+    { name = "toon-format" },
     { name = "typing-extensions" },
 ]
 
@@ -2098,6 +2099,7 @@ requires-dist = [
     { name = "mcp", extras = ["cli"], specifier = ">=1.13.0" },
     { name = "pydantic", specifier = ">=2.11.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
+    { name = "toon-format", git = "https://github.com/toon-format/toon-python.git?rev=e475c82e9da03dfaf88c0b277dee6b5d17100b13" },
     { name = "typing-extensions", specifier = ">=4.0.0" },
 ]
 
@@ -4638,6 +4640,11 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/2f/68/a18b4f307086954fdae32714cb4f85562e34f9d34ab206e61f1816aa6018/tiktoken-0.13.0-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:5cb65b60b9408563676d874a3a4ee573370066f0dc4e29d84e82e989c6517424", size = 1239218, upload-time = "2026-05-15T04:51:16.103Z" },
     { url = "https://files.pythonhosted.org/packages/16/5b/f2aa703a4fc5d2dff73460a7d46cc2f3f44aa0f3dd8eeb20d2a0ecf68862/tiktoken-0.13.0-cp314-cp314t-win_amd64.whl", hash = "sha256:85b78cc3a2c3d48723ca751fa981f1fedccd54194ca0471b957364353a898b07", size = 918110, upload-time = "2026-05-15T04:51:17.237Z" },
 ]
+
+[[package]]
+name = "toon-format"
+version = "0.9.0b1"
+source = { git = "https://github.com/toon-format/toon-python.git?rev=e475c82e9da03dfaf88c0b277dee6b5d17100b13#e475c82e9da03dfaf88c0b277dee6b5d17100b13" }
 
 [[package]]
 name = "tqdm"
