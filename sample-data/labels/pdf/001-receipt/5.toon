@@ -1,0 +1,45 @@
+info:
+  store_name: Nusr-et Steakhouse
+  store_location: "101 Knightsbridge London, SW1X 7RN"
+  store_contacts[0]:
+  tax_id: "323585011"
+  receipt_id: "10755"
+  payment_date: 23 Sep'21
+  payment_time: "21:16"
+  time_unit: PM
+items[22]{item_name,quantity,unit_price,discount_label,discount_price,tax_label,total_price}:
+  Buratta,"1","","","","","25.00"
+  Nusret Salad,"1","","","","","23.00"
+  Nusret Sushi,"2","","","","","46.00"
+  Prawn Tempura Roll,"2","","","","","60.00"
+  Giant Tomahawk,"1","","","","","630.00"
+  Kafes,"1","","","","","200.00"
+  Onion Flower,"1","","","","","18.00"
+  Herb Crusted Fries,"1","","","","","10.00"
+  Sweet Corn,"1","","","","","12.00"
+  Golden Burger,"1","","","","","100.00"
+  Asado for 2,"1","","","","","120.00"
+  Nusret Baklava,"2","","","","","44.00"
+  DBL Patron Coffee,"4","","","","","80.00"
+  DBL Grey Goose,"4","","","","","72.00"
+  Turkish Tea,"6","","","","","0.00"
+  Coca Cola,"2","","","","","18.00"
+  Virgin Mojito,"1","","","","","11.00"
+  Red Bull,"4","","","","","44.00"
+  Eira Still,"1","","","","","9.00"
+  Coca Cola Light,"2","","","","","18.00"
+  Nusret Godfather,"1","","","","","18.00"
+  Elvira,"1","","","","","18.00"
+payment:
+  total_items: ""
+  currency: £
+  subtotal_price: "1,576.00"
+  discounts[0]:
+  taxes[0]:
+  additional_charges[1]{charge_name,amount}:
+    15% Sevice Charge,"236.40"
+  grand_total: "1,812.40"
+  rounding: ""
+  payment_method: ""
+  tendered: ""
+  change: ""

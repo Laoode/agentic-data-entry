@@ -1,0 +1,31 @@
+info:
+  store_name: PT. SARI AGUNG BARU PLOSO BOGEN
+  store_location: "JL. PLOSO BOGEN NO.71, KEL. P TAMBAKSARI"
+  store_contacts[4]{type,value}:
+    "","08159142498"
+    Telp,021-1500959
+    Sms,"0817111234"
+    "",WWW.ALFAMARTKU.COM
+  tax_id: 73.590.078.9-619.000
+  receipt_id: U661-602-2612WU45
+  payment_date: 26-12-2016
+  payment_time: "00:48:01"
+  time_unit: ""
+items[3]{item_name,quantity,unit_price,discount_label,discount_price,tax_label,total_price}:
+  PULSA XL 300K,"1","300,300","","","","300,300"
+  FF UHT PF CONU,"1","6,200",Disc.,"-6,200","","6,200"
+  FF UHT PF CKT,"2","16,900",Disc.,"-25,900","","33,800"
+payment:
+  total_items: "3"
+  currency: ""
+  subtotal_price: ""
+  discounts[2]{discount_name,amount}:
+    Total Disc.,"32,100"
+    Voucher,"300,000"
+  taxes[0]:
+  additional_charges[0]:
+  grand_total: "308,200"
+  rounding: ""
+  payment_method: Tunai
+  tendered: "8,200"
+  change: "0"

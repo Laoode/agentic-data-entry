@@ -1,0 +1,27 @@
+info:
+  store_name: ALFAMART
+  store_location: ""
+  store_contacts[2]{type,value}:
+    Kritik&Saran,"1500959"
+    SMS/WA,"081110640888"
+  tax_id: ""
+  receipt_id: U807-307-09036DX2
+  payment_date: 09-03-2025
+  payment_time: "22:35:24"
+  time_unit: ""
+items[2]{item_name,quantity,unit_price,discount_label,discount_price,tax_label,total_price}:
+  ROMA KLP CK189G,"1","16,000","","","","16,000"
+  UBM PUF 350G,"1","18,000","","","","18,000"
+payment:
+  total_items: "2"
+  currency: ""
+  subtotal_price: ""
+  discounts[0]:
+  taxes[1]{tax_name,amount}:
+    PPN,"3,389"
+  additional_charges[0]:
+  grand_total: "34,000"
+  payment_method: Tunai
+  tendered: "34,000"
+  rounding: ""
+  change: "0"

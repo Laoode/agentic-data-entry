@@ -1,0 +1,29 @@
+info:
+  store_name: ""
+  store_location: ""
+  store_contacts[0]:
+  tax_id: ""
+  receipt_id: ""
+  payment_date: ""
+  payment_time: ""
+  time_unit: ""
+items[6]{item_name,quantity,unit_price,discount_label,discount_price,tax_label,total_price}:
+  Royale - Grandeur Prayer Robe - Onyx,"","975.000,00",12.12 - 12% OFF (12%),"-117.000,00","","975.000,00"
+  Deux.02 Sunglasses - White,"","1.575.000,00",12.12 - 12% OFF (12%),"-189.000,00","","1.575.000,00"
+  Halo Sling Bag - Black,"","2.675.000,00",12.12 - 12% OFF (12%),"-321.000,00","","2.675.000,00"
+  Foldable Box - Halo Slingbag,"","0,00","","","","0,00"
+  Booklet Leather Bag - Viva Magenta,"","0,00","","","","0,00"
+  Paperbag - L,"","5.000,00","","","","5.000,00"
+payment:
+  total_items: ""
+  currency: Rp
+  subtotal_price: "4.603.000,00"
+  discounts[0]:
+  taxes[1]{tax_name,amount}:
+    VAT (12%) Included in product price,"456.153,15"
+  additional_charges[0]:
+  grand_total: "4.603.000,00"
+  rounding: ""
+  payment_method: Balikpapan Payment
+  tendered: "4.603.000,00"
+  change: ""

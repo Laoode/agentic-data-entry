@@ -1,6 +1,7 @@
 """Settings validation tests."""
 
 import pytest
+from pydantic import ValidationError
 
 from config.settings import Settings
 
@@ -10,6 +11,19 @@ def test_deepseek_vision_is_default_kie_model():
     settings = Settings(_env_file=None)
 
     assert settings.kie_model == "deepseek-v4-flash-vision-exp"
+
+
+def test_toon_is_default_extraction_context_format() -> None:
+    """Use TOON for new extraction context unless configured otherwise."""
+    settings = Settings(_env_file=None)
+
+    assert settings.extraction_context_format == "toon"
+
+
+def test_extraction_context_format_rejects_unknown_value() -> None:
+    """Reject formats without a registered context encoder."""
+    with pytest.raises(ValidationError, match="EXTRACTION_CONTEXT_FORMAT"):
+        Settings(_env_file=None, EXTRACTION_CONTEXT_FORMAT="yaml")
 
 
 def test_settings_repr_hides_credentials():
