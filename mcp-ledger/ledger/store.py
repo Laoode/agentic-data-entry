@@ -20,9 +20,13 @@ import json
 import logging
 import os
 import uuid
+from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 import asyncpg
+
+from ledger.errors import SheetNotFoundError
+from ledger.operations import AppendRows, execute_append
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +51,31 @@ CREATE TABLE IF NOT EXISTS ledger_sheet (
     grid JSONB NOT NULL DEFAULT '[]',
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    revision BIGINT NOT NULL DEFAULT 0,
     UNIQUE (workspace, title)
+);
+
+ALTER TABLE ledger_sheet ADD COLUMN IF NOT EXISTS revision BIGINT NOT NULL DEFAULT 0;
+
+CREATE OR REPLACE FUNCTION advance_ledger_sheet_revision() RETURNS trigger AS $$
+BEGIN
+    NEW.revision := OLD.revision + 1;
+    NEW.updated_at := CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER ledger_sheet_revision
+BEFORE UPDATE ON ledger_sheet
+FOR EACH ROW EXECUTE FUNCTION advance_ledger_sheet_revision();
+
+CREATE TABLE IF NOT EXISTS ledger_operation (
+    workspace TEXT NOT NULL,
+    idempotency_key TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    receipt JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (workspace, idempotency_key)
 );
 
 -- Adopt pre-tenancy workspaces (sheets without a spreadsheet row) as
@@ -68,8 +96,14 @@ END $$;
 """
 
 
-class SheetNotFoundError(Exception):
-    """Raised when a sheet title does not exist in the workspace."""
+@dataclass(frozen=True)
+class SheetSnapshot:
+    """A grid and revision read from the same database row version."""
+
+    sheet_id: int
+    title: str
+    revision: int
+    values: list[list[Any]]
 
 
 class SheetExistsError(Exception):
@@ -247,14 +281,63 @@ class LedgerStore:
         return activity
 
     async def get_grid(self, workspace: str, title: str) -> list[list[Any]]:
+        """Read the current grid from a workbook's sheet.
+
+        Args:
+            workspace: Workbook containing the sheet.
+            title: Current sheet title.
+
+        Returns:
+            The sheet's literal cell values.
+
+        Raises:
+            SheetNotFoundError: The sheet is absent from this workbook.
+        """
+        return (await self.get_snapshot(workspace, title)).values
+
+    async def get_snapshot(self, workspace: str, title: str) -> SheetSnapshot:
+        """Read stable identity, revision and values together.
+
+        Args:
+            workspace: Workbook containing the sheet.
+            title: Current display title of the sheet.
+
+        Returns:
+            A snapshot suitable for preparing a checked operation.
+
+        Raises:
+            SheetNotFoundError: The sheet is absent from this workbook.
+        """
         row = await self.pool.fetchrow(
-            "SELECT grid FROM ledger_sheet WHERE workspace = $1 AND title = $2",
+            "SELECT sheet_id, title, revision, grid FROM ledger_sheet "
+            "WHERE workspace = $1 AND title = $2",
             workspace,
             title,
         )
         if row is None:
             raise SheetNotFoundError(f"Sheet '{title}' not found")
-        return json.loads(row["grid"])
+        return SheetSnapshot(
+            row["sheet_id"], row["title"], row["revision"], json.loads(row["grid"])
+        )
+
+    async def append_checked(
+        self, workspace: str, request: AppendRows
+    ) -> dict[str, Any]:
+        """Execute a revision-checked append and return its committed receipt.
+
+        Args:
+            workspace: Workbook bound by the authorisation layer.
+            request: Validated append with an idempotency key.
+
+        Returns:
+            The persisted operation receipt, including on retries.
+
+        Raises:
+            SheetNotFoundError: The sheet is outside the workbook.
+            RevisionConflictError: The requested revision is stale.
+            IdempotencyConflictError: The key was used for another request.
+        """
+        return await execute_append(self.pool, workspace, request)
 
     async def create_sheet(
         self, workspace: str, title: str, grid: Optional[list[list[Any]]] = None
@@ -285,8 +368,7 @@ class LedgerStore:
 
     async def rename_sheet(self, workspace: str, title: str, new_name: str) -> None:
         status = await self.pool.execute(
-            "UPDATE ledger_sheet SET title = $3, updated_at = CURRENT_TIMESTAMP "
-            "WHERE workspace = $1 AND title = $2",
+            "UPDATE ledger_sheet SET title = $3 WHERE workspace = $1 AND title = $2",
             workspace,
             title,
             new_name,
@@ -334,8 +416,7 @@ class LedgerStore:
                     raise SheetNotFoundError(f"Sheet '{title}' not found")
                 new_grid = mutate(json.loads(row["grid"]))
                 await conn.execute(
-                    "UPDATE ledger_sheet SET grid = $2, "
-                    "updated_at = CURRENT_TIMESTAMP WHERE sheet_id = $1",
+                    "UPDATE ledger_sheet SET grid = $2 WHERE sheet_id = $1",
                     row["sheet_id"],
                     json.dumps(new_grid),
                 )

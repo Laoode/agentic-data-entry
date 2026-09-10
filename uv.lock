@@ -2521,6 +2521,7 @@ source = { editable = "mcp-ledger" }
 dependencies = [
     { name = "asyncpg" },
     { name = "fastmcp" },
+    { name = "pydantic" },
     { name = "python-dotenv" },
 ]
 
@@ -2528,6 +2529,7 @@ dependencies = [
 requires-dist = [
     { name = "asyncpg", specifier = ">=0.30.0" },
     { name = "fastmcp", specifier = "==4.0.0b3" },
+    { name = "pydantic", specifier = ">=2.0.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
 ]
 
