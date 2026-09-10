@@ -287,3 +287,53 @@ async def test_search_limits_schema_and_reports_more_candidates(catalogue_setup)
     assert candidate["column_count"] == 70
     assert len(candidate["columns"]) == 16
     assert candidate["has_more_columns"] is True
+
+
+async def test_owner_discovery_spans_workbooks_without_foreign_counts(catalogue_setup):
+    """Owner filtering precedes ranking and limits across all owned workbooks."""
+    store, catalogue, workspace, sheet_id = catalogue_setup
+    first = await catalogue.register(workspace, registration(sheet_id))
+    owned = await store.create_spreadsheet(90201, f"owned-{uuid.uuid4().hex}")
+    foreign = await store.create_spreadsheet(90202, f"foreign-{uuid.uuid4().hex}")
+    try:
+        identities = {}
+        for workbook in (owned, foreign):
+            sheet = await store.create_sheet(
+                workbook["spreadsheetId"], "Claims", [["Employee", "Amount"]]
+            )
+            identities[workbook["spreadsheetId"]] = await catalogue.register(
+                workbook["spreadsheetId"],
+                registration(sheet["sheetId"], table_range="A1:B1"),
+            )
+        found = await catalogue.search_owned(
+            90201, ResourceSearch(intent="Employee claims", limit=2)
+        )
+        assert {item["table_id"] for item in found["candidates"]} == {
+            first["table_id"],
+            identities[owned["spreadsheetId"]]["table_id"],
+        }
+        assert found["has_more"] is False
+        assert (
+            await catalogue.search_owned(
+                90203, ResourceSearch(intent="Employee claims")
+            )
+        )["candidates"] == []
+        foreign_id = identities[foreign["spreadsheetId"]]["table_id"]
+        with pytest.raises(ResourceNotFoundError):
+            await catalogue.inspect_owned(90201, foreign_id)
+        inspected = await catalogue.inspect_owned(90201, first["table_id"])
+        assert inspected["table_id"] == first["table_id"]
+        await store.pool.execute(
+            "UPDATE ledger_spreadsheet SET user_id = $1 WHERE spreadsheet_id = $2",
+            90202,
+            workspace,
+        )
+        with pytest.raises(ResourceNotFoundError):
+            await catalogue.inspect_owned(90201, first["table_id"])
+        remaining = await catalogue.search_owned(
+            90201, ResourceSearch(intent="Employee claims")
+        )
+        assert len(remaining["candidates"]) == 1
+    finally:
+        await store.delete_spreadsheet(owned["spreadsheetId"])
+        await store.delete_spreadsheet(foreign["spreadsheetId"])

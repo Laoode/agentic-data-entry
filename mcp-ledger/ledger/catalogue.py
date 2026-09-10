@@ -365,13 +365,46 @@ class CatalogueStore:
         Raises:
             ResourceNotFoundError: The table is absent from this workbook.
         """
+        return await self._inspect(("s.workspace", workspace), table_id)
+
+    async def inspect_owned(self, user_id: int, table_id: str) -> dict[str, Any]:
+        """Inspect a table only when its workbook currently belongs to this user.
+
+        Args:
+            user_id: User identity supplied by authentication, never model input.
+            table_id: Requested stable table identity.
+
+        Returns:
+            Metadata from the same database snapshot as the ownership check.
+
+        Raises:
+            ResourceNotFoundError: The table is absent or belongs to another user.
+        """
+        return await self._inspect(("w.user_id", user_id), table_id)
+
+    async def _inspect(
+        self, scope: tuple[str, str | int], table_id: str
+    ) -> dict[str, Any]:
+        """Read metadata using a scope column selected by the public entry point.
+
+        Args:
+            scope: Code-defined SQL column and parameter value.
+            table_id: Stable resource identity.
+
+        Returns:
+            The authorised metadata descriptor.
+
+        Raises:
+            ResourceNotFoundError: No visible resource matches the identity.
+        """
+        column, identity = scope
         row = await self._pool.fetchrow(
-            _SELECT_RESOURCE + " WHERE s.workspace = $1 AND r.resource_id = $2",
-            workspace,
+            _SELECT_RESOURCE + f" WHERE {column} = $1 AND r.resource_id = $2",
+            identity,
             table_id,
         )
         if row is None:
-            raise ResourceNotFoundError("Table not found in the active workbook")
+            raise ResourceNotFoundError("Table not found")
         return _describe(row)
 
     async def search(self, workspace: str, query: ResourceSearch) -> dict[str, Any]:
@@ -384,6 +417,33 @@ class CatalogueStore:
         Returns:
             Bounded candidates and ranking evidence, never probability estimates.
         """
+        return await self._search(("s.workspace", workspace), query)
+
+    async def search_owned(self, user_id: int, query: ResourceSearch) -> dict[str, Any]:
+        """Search all currently owned workbooks without enumerating them first.
+
+        Args:
+            user_id: User identity supplied by authentication, never model input.
+            query: Bounded intent and metadata filters.
+
+        Returns:
+            Candidates ranked and counted only after the ownership filter.
+        """
+        return await self._search(("w.user_id", user_id), query)
+
+    async def _search(
+        self, scope: tuple[str, str | int], query: ResourceSearch
+    ) -> dict[str, Any]:
+        """Apply a code-selected scope before ranking indexed table metadata.
+
+        Args:
+            scope: Code-defined SQL column and parameter value.
+            query: Validated search concepts and hard filters.
+
+        Returns:
+            Bounded candidates with evidence and schema previews.
+        """
+        column, identity = scope
         tokens = list(
             dict.fromkeys(
                 re.findall(r"\w+", " ".join([query.intent, *query.concepts]).lower())
@@ -402,8 +462,8 @@ class CatalogueStore:
                    r.*,
         """,
             )
-            + """
-            WHERE s.workspace = $1
+            + f"""
+            WHERE {column} = $1
               AND ($4::text[] <@ r.column_keys)
               AND ($5::text IS NULL OR lower(r.entity) = lower($5))
               AND ($6::date IS NULL OR (
@@ -424,7 +484,7 @@ class CatalogueStore:
         )
         rows = await self._pool.fetch(
             statement,
-            workspace,
+            identity,
             tsquery,
             query.intent,
             [column.lower() for column in query.required_columns],

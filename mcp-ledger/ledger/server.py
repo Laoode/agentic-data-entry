@@ -6,7 +6,6 @@ e2e dataset run unchanged. `spreadsheet_id` maps to a ledger workspace
 (default from LEDGER_WORKSPACE, mirroring the old SHEET_ID fallback).
 """
 
-import json
 import os
 import re
 from collections.abc import AsyncIterator
@@ -22,7 +21,14 @@ from mcp.types import ToolAnnotations
 
 from ledger import grid as g
 from ledger.catalogue import CatalogueStore
-from ledger.resources import ResourceSearch, TableRegistration, TableUpdate
+from ledger.evidence import bounded_evidence as _bounded_evidence
+from ledger.evidence import schema_page
+from ledger.resources import (
+    ResourceInspection,
+    ResourceSearch,
+    TableRegistration,
+    TableUpdate,
+)
 from ledger.operations import AppendRows
 from ledger.query import AggregateQuery, aggregate_grid
 from ledger.store import (
@@ -37,7 +43,6 @@ load_dotenv()
 
 LEDGER_TITLE = os.environ.get("LEDGER_TITLE", "Klaudia Ledger")
 MAX_SNAPSHOT_CELLS = 2000
-MAX_EVIDENCE_BYTES = 65_536
 
 READ_ONLY = ToolAnnotations(
     read_only_hint=True,
@@ -156,28 +161,6 @@ async def _resolve_title(store: LedgerStore, workspace: str, name: str) -> str:
 
 def _range_label(sheet: str, notation: Optional[str]) -> str:
     return f"{sheet}!{notation}" if notation else sheet
-
-
-def _bounded_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
-    """Keep snapshot and aggregate responses within the context byte budget.
-
-    Args:
-        evidence: Complete evidence ready to return from a read operation.
-
-    Returns:
-        The unchanged evidence when it fits the budget.
-
-    Raises:
-        ValueError: The response is too large to return without truncation.
-    """
-    if (
-        len(json.dumps(evidence, ensure_ascii=False).encode("utf-8"))
-        > MAX_EVIDENCE_BYTES
-    ):
-        raise ValueError(
-            "Evidence exceeds 65536 bytes; narrow the range, filters or metrics"
-        )
-    return evidence
 
 
 # ── Read operations ──────────────────────────────────────────────────────────
@@ -315,19 +298,13 @@ async def tool_inspect_resource(
         ValueError: Pagination or response size exceeds the read budget.
         ResourceNotFoundError: The table is outside the workbook.
     """
-    if column_offset < 0 or not 1 <= column_limit <= 64:
-        raise ValueError("Column offset must be nonnegative and limit from 1 to 64")
+    query = ResourceInspection(
+        table_id=table_id, column_offset=column_offset, column_limit=column_limit
+    )
     descriptor = await CatalogueStore(_store(ctx).pool).inspect(
         _workspace(spreadsheet_id), table_id
     )
-    columns = descriptor["columns"]
-    descriptor.update(
-        columns=columns[column_offset : column_offset + column_limit],
-        column_count=len(columns),
-        column_offset=column_offset,
-        has_more_columns=column_offset + column_limit < len(columns),
-    )
-    return _bounded_evidence(descriptor)
+    return _bounded_evidence(schema_page(descriptor, query))
 
 
 @mcp.tool(annotations=READ_ONLY)

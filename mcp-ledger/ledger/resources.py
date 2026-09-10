@@ -8,6 +8,15 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 Name = Annotated[str, Field(min_length=1, max_length=256)]
 
 
+class ResourceInspection(BaseModel):
+    """Requested table and schema page, without authority fields."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    table_id: Name
+    column_offset: Annotated[StrictInt, Field(ge=0)] = 0
+    column_limit: Annotated[StrictInt, Field(ge=1, le=64)] = 32
+
+
 class ResourceNotFoundError(Exception):
     """A table is absent from the bound workbook."""
 
