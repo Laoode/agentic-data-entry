@@ -28,6 +28,10 @@ EXPECTED_TOOLS = {
     "tool_get_sheet_snapshot",
     "tool_append_rows_checked",
     "tool_aggregate_sheet",
+    "tool_register_table",
+    "tool_update_table",
+    "tool_search_resources",
+    "tool_inspect_resource",
 }
 
 

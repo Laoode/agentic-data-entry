@@ -99,3 +99,37 @@ unspecified; this tool makes no accounting-policy or currency-correctness claim.
 Catalogue-derived unit declarations and labelled final-response verification are
 later integration steps. Computation currently runs over the existing JSONB
 snapshot in the ledger process, not a row-level SQL query engine.
+
+## Registered resource catalogue
+
+The catalogue stores multiple non-overlapping table regions per sheet, each with
+stable table and column IDs. It requires PostgreSQL's `pg_trgm` extension; the
+migration account must be able to install it, or an administrator must install it
+before the service starts.
+
+- `tool_register_table(definition)` registers finite bounds whose first row has
+  complete, unique text headers. Supply the observed sheet revision, name and
+  optional description, grain, aliases, entity and period coverage.
+- `tool_update_table(change)` requires the table ID plus expected catalogue and
+  source sheet revisions. Metadata and same-sheet bounds can change while IDs
+  persist. Changed header names/order require future explicit column remapping.
+- `tool_search_resources(query)` searches indexed metadata through exact names,
+  aliases, full-text terms and trigrams. Model-provided `concepts` expand intent;
+  optional required columns, entity and date act as hard filters. It returns up
+  to 20 candidates, reasons, freshness and the first 16 columns per candidate.
+- `tool_inspect_resource(table_id, column_offset, column_limit)` reads metadata
+  and paginates columns (32 by default, at most 64). It does not load cell records.
+
+Search and inspection share the 65,536-byte read budget. Narrow candidate limits
+if metadata exceeds it. Register/update return compact commit confirmations, so
+large schemas cannot cause a response-size failure after a successful write.
+These metadata writes reject duplicate/stale requests; they do not yet provide
+financial-operation idempotency receipts.
+
+Search covers explicitly registered tables only. Descriptions, grain, entity and
+period are caller-declared content; headers come from the source sheet. Any sheet
+revision change marks old metadata stale. Refresh requires another checked update;
+automatic detection, refresh, formula relationships and column remapping remain
+pending. Existing legacy tools and chat workers do not consume this catalogue yet.
+The trusted application still supplies the bound workbook. This adds no shared
+workspace ACL or cross-workbook access.

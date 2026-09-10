@@ -241,7 +241,7 @@ than erroring.
 | API | FastAPI, JWT auth, per-user rate limits |
 | Agents | LangGraph supervisor with worker sub-agents |
 | Tool boundary | MCP (ledger server, document archive server) |
-| Ledger | PostgreSQL, sheet-semantics grids, 19-tool API |
+| Ledger | PostgreSQL, sheet-semantics grids, 23-tool API |
 | Memory | mem0 + PostgreSQL history + pgvector + local embeddings |
 | Reasoning model | DeepSeek v4 pro today, swappable by configuration |
 | Extraction model | DeepSeek V4 Flash Vision; Qwen 3.5 4B fine-tune and Gemini selectable |

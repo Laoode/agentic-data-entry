@@ -96,6 +96,10 @@ async def test_tool_surface_matches_gsheets():
             "tool_get_sheet_snapshot",
             "tool_append_rows_checked",
             "tool_aggregate_sheet",
+            "tool_register_table",
+            "tool_update_table",
+            "tool_search_resources",
+            "tool_inspect_resource",
         }
 
 
@@ -344,3 +348,114 @@ async def test_batch_update_structural_ops():
             {"requests": [{"deleteSheet": {"sheetId": sheet_id}}]},
         )
         assert out["replies"][0] == {}
+
+
+async def test_catalogue_tools_register_discover_inspect_and_update():
+    """MCP discovery preserves registered identities and source freshness."""
+    async with ledger_server() as client:
+        await _call(client, "tool_create_sheet", {"title": "Claims"})
+        await _call(
+            client,
+            "tool_update_cells",
+            {
+                "sheet": "Claims",
+                "range": "A1:B2",
+                "data": [["Employee", "Amount"], ["A", 185000]],
+            },
+        )
+        snapshot = await _call(client, "tool_get_sheet_snapshot", {"sheet": "Claims"})
+        definition = {
+            "sheet_id": snapshot["sheet_id"],
+            "expected_sheet_revision": snapshot["revision"],
+            "table_range": "A1:B2",
+            "name": "Employee claims",
+            "aliases": ["taxi reimbursement"],
+        }
+        registered = await _call(
+            client, "tool_register_table", {"definition": definition}
+        )
+        assert registered["status"] == "committed"
+        found = await _call(
+            client,
+            "tool_search_resources",
+            {
+                "query": {
+                    "intent": "taxi reimbursement",
+                    "required_columns": ["Amount"],
+                },
+            },
+        )
+        assert found["candidates"][0]["table_id"] == registered["table_id"]
+        inspected = await _call(
+            client, "tool_inspect_resource", {"table_id": registered["table_id"]}
+        )
+        assert inspected["freshness"] == "current"
+        assert len(inspected["columns"]) == 2
+        definition["name"] = "Travel claims"
+        updated = await _call(
+            client,
+            "tool_update_table",
+            {
+                "change": {
+                    "table_id": registered["table_id"],
+                    "expected_catalogue_revision": 1,
+                    "definition": definition,
+                }
+            },
+        )
+        assert updated["table_id"] == registered["table_id"]
+        assert updated["catalogue_revision"] == 2
+
+
+async def test_wide_catalogue_schema_remains_discoverable_and_paginated():
+    """Large valid schemas cannot turn catalogue commits into response failures."""
+    async with ledger_server() as client:
+        await _call(client, "tool_create_sheet", {"title": "Wide"})
+        headers = [f"{index:03d}" + "x" * 253 for index in range(256)]
+        await _call(
+            client,
+            "tool_update_cells",
+            {
+                "sheet": "Wide",
+                "range": "A1:IV1",
+                "data": [headers],
+            },
+        )
+        snapshot = await _call(
+            client, "tool_get_sheet_snapshot", {"sheet": "Wide", "range": "A1:A1"}
+        )
+        registered = await _call(
+            client,
+            "tool_register_table",
+            {
+                "definition": {
+                    "sheet_id": snapshot["sheet_id"],
+                    "expected_sheet_revision": snapshot["revision"],
+                    "table_range": "A1:IV1",
+                    "name": "Wide claims",
+                }
+            },
+        )
+        assert registered["status"] == "committed"
+        found = await _call(
+            client,
+            "tool_search_resources",
+            {"query": {"intent": "Wide claims", "limit": 1}},
+        )
+        assert found["candidates"][0]["table_id"] == registered["table_id"]
+        assert found["candidates"][0]["column_count"] == 256
+        assert len(found["candidates"][0]["columns"]) == 16
+        pages = []
+        for offset in range(0, 256, 64):
+            page = await _call(
+                client,
+                "tool_inspect_resource",
+                {
+                    "table_id": registered["table_id"],
+                    "column_offset": offset,
+                    "column_limit": 64,
+                },
+            )
+            pages.extend(column["name"] for column in page["columns"])
+            assert page["has_more_columns"] is (offset < 192)
+        assert pages == headers
