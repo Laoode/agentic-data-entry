@@ -1,7 +1,7 @@
 # mcp-ledger
 
 Postgres-backed MCP server with the 16 Google Sheets-compatible tools plus
-snapshot reads and revision-checked appends.
+snapshot reads, revision-checked appends and labelled aggregation.
 
 Drop-in replacement for the data-entry agents: prompts and the e2e dataset
 retain their existing tools, with no Sheets API quotas. Individual grid mutations
@@ -43,6 +43,8 @@ still load the full grid from storage before returning the requested range.
 `tool_get_sheet_snapshot(sheet, range)` returns stable sheet identity, revision
 and literal values from one database snapshot. The default range is `A1:Z20`;
 explicit ranges must be finite rectangles of at most 2,000 cells.
+Snapshot and aggregate responses also have a 65,536-byte JSON budget. Oversized
+responses fail with a request to narrow the selection; they are never truncated.
 
 `tool_append_rows_checked(operation)` accepts `sheet_id`, `expected_revision`,
 `idempotency_key` and literal `rows`. It appends after the last populated row of
@@ -63,8 +65,37 @@ The app's scope wrapper supplies the workbook. Stable sheet IDs do not bypass
 that boundary. Direct MCP clients are trusted service callers and must provide
 an authorised workbook; MCP bearer authentication does not itself implement
 per-user resource permissions. The current chat workers retain their legacy
-tools until the agent cutover; these two tools are available through MCP.
+tools until the agent cutover; the new tools are available through MCP.
 
 Operation receipts remain in `ledger_operation` if a sheet or workbook is
 deleted. They retain IDs and change counts, not cell payloads. Retention and
 user-erasure policy must be applied to this history before production rollout.
+
+## Labelled aggregation
+
+`tool_aggregate_sheet(sheet, query)` computes `sum` and nonblank `count` metrics
+over a finite `table_range`. Its first row supplies unique headers. Select the
+table itself, excluding nearby tables, subtotals and summary footers. Queries
+support exact equality filters and up to three grouping columns. Numeric grouping
+treats `1` and `1.0` alike while keeping booleans and text distinct.
+
+The result includes the stable source sheet ID, revision, range, applied query,
+matched record count and groups. Each metric retains its column and operation,
+with its value encoded as decimal text and explicit nonblank/blank counts.
+Empty cells are excluded; invalid selected operands abort the query. Raw records
+are not returned. Limits are one million selected cells, eight metrics and up to
+100 groups (20 by default). Group overflow fails instead of returning partial totals.
+
+Sums use a fixed 64-digit decimal context and reject inexact arithmetic. Raw
+numbers are accepted by default. For text known to use a decimal point without
+thousands separators, set `numeric_text: "decimal"`. This is an explicit source
+format declaration; the tool does not guess whether `15.000` means fifteen or
+fifteen thousand. Currency symbols, comma separators and formulas are rejected.
+
+Declare `unit_column` for currency/unit checks. Every matched row must then have
+a nonblank text unit, and units must agree within each group. Filter or group by
+currency to keep currencies separate. Without this declaration, unit is
+unspecified; this tool makes no accounting-policy or currency-correctness claim.
+Catalogue-derived unit declarations and labelled final-response verification are
+later integration steps. Computation currently runs over the existing JSONB
+snapshot in the ledger process, not a row-level SQL query engine.

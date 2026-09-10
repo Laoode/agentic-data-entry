@@ -95,6 +95,7 @@ async def test_tool_surface_matches_gsheets():
         assert {tool.name for tool in tools} == GSHEETS_PARITY_TOOLS | {
             "tool_get_sheet_snapshot",
             "tool_append_rows_checked",
+            "tool_aggregate_sheet",
         }
 
 
@@ -134,6 +135,73 @@ async def test_checked_append_uses_snapshot_and_replays_receipt():
             raise_on_error=False,
         )
         assert oversized.is_error
+
+
+async def test_aggregate_evidence_keeps_source_revision_and_labels():
+    """MCP returns labelled sums from one versioned source without raw records."""
+    async with ledger_server() as client:
+        await _call(client, "tool_create_sheet", {"title": "Journal"})
+        await _call(
+            client,
+            "tool_append_rows",
+            {"sheet": "Journal", "data": [["Debit", "Credit"], [42500000, 41050000]]},
+        )
+        query = {
+            "table_range": "A1:B2",
+            "metrics": [
+                {"column": column, "operation": "sum"} for column in ("Debit", "Credit")
+            ],
+        }
+        evidence = await _call(
+            client, "tool_aggregate_sheet", {"sheet": "Journal", "query": query}
+        )
+        assert evidence["source"]["revision"] == 1
+        assert evidence["source"]["range"] == "Journal!A1:B2"
+        assert evidence["query"]["metrics"] == query["metrics"]
+        assert evidence["matched_rows"] == 1
+        assert [metric["value"] for metric in evidence["groups"][0]["metrics"]] == [
+            "42500000",
+            "41050000",
+        ]
+        assert "values" not in evidence
+        await _call(
+            client,
+            "tool_update_cells",
+            {"sheet": "Journal", "range": "B2", "data": [[42500000]]},
+        )
+        after = await _call(
+            client, "tool_aggregate_sheet", {"sheet": "Journal", "query": query}
+        )
+        assert after["source"]["revision"] == 2
+        assert after["groups"][0]["metrics"][1]["value"] == "42500000"
+
+
+async def test_new_read_tools_reject_oversized_evidence():
+    """Large cell text cannot bypass a read tool's context budget."""
+    async with ledger_server() as client:
+        await _call(client, "tool_create_sheet", {"title": "Large text"})
+        await _call(
+            client,
+            "tool_append_rows",
+            {"sheet": "Large text", "data": [["Category", "Amount"], ["x" * 65536, 1]]},
+        )
+        snapshot = await client.call_tool(
+            "tool_get_sheet_snapshot", {"sheet": "Large text"}, raise_on_error=False
+        )
+        assert snapshot.is_error
+        aggregate = await client.call_tool(
+            "tool_aggregate_sheet",
+            {
+                "sheet": "Large text",
+                "query": {
+                    "table_range": "A1:B2",
+                    "metrics": [{"column": "Amount", "operation": "sum"}],
+                    "group_by": ["Category"],
+                },
+            },
+            raise_on_error=False,
+        )
+        assert aggregate.is_error
 
 
 async def test_sheet_lifecycle():

@@ -27,6 +27,7 @@ EXPECTED_TOOLS = {
     "tool_batch_update",
     "tool_get_sheet_snapshot",
     "tool_append_rows_checked",
+    "tool_aggregate_sheet",
 }
 
 

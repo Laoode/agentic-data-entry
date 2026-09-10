@@ -80,6 +80,27 @@ def _trim_row(row: list[Any]) -> list[Any]:
     return row[:end]
 
 
+def validate_bounded_range(notation: str, cell_limit: int) -> None:
+    """Require explicit cell corners and a finite rectangle within a cell budget.
+
+    Args:
+        notation: A cell or rectangle in A1 notation.
+        cell_limit: Maximum number of cells in the rectangle.
+
+    Raises:
+        ValueError: The range is unbounded, reversed, invalid or too large.
+    """
+    if not all(_CELL_RE.fullmatch(corner) for corner in notation.split(":")):
+        raise ValueError("A finite rectangle with explicit A1 cell corners is required")
+    first_row, first_column, last_row, last_column = parse_range(notation)
+    if min(first_row, first_column, last_row, last_column) < 0:
+        raise ValueError("Cell coordinates must be positive")
+    if last_row < first_row or last_column < first_column:
+        raise ValueError("Range must not be reversed")
+    if (last_row - first_row + 1) * (last_column - first_column + 1) > cell_limit:
+        raise ValueError(f"Range exceeds the {cell_limit} cell budget")
+
+
 def slice_range(grid: list[list[Any]], notation: Optional[str]) -> list[list[Any]]:
     """Read a range from the grid, Sheets-style: trailing empty cells and
     rows are trimmed from the result."""

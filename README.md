@@ -133,6 +133,12 @@ Storage is one Postgres (ledger grids, document registry, tenancy, and the
 memory vectors), Redis for dedup and queues, MinIO for document blobs. Tools are
 reached over MCP, so the tool boundary stays explicit and auditable.
 
+The ledger now also exposes bounded snapshot reads, revision-checked appends
+with stored operation receipts, and deterministic labelled sums/counts over
+selected table regions. These are backend capabilities; the current chat workers
+retain their existing tools until the agent migration. They do not yet add formula
+evaluation or change the published live-agent benchmark scores.
+
 **Tenancy model:** user → spreadsheets → sheets. Each request resolves to exactly
 one spreadsheet and is bound to it for its whole lifetime.
 
@@ -235,7 +241,7 @@ than erroring.
 | API | FastAPI, JWT auth, per-user rate limits |
 | Agents | LangGraph supervisor with worker sub-agents |
 | Tool boundary | MCP (ledger server, document archive server) |
-| Ledger | PostgreSQL, sheet-semantics grids, 16-tool API |
+| Ledger | PostgreSQL, sheet-semantics grids, 19-tool API |
 | Memory | mem0 + PostgreSQL history + pgvector + local embeddings |
 | Reasoning model | DeepSeek v4 pro today, swappable by configuration |
 | Extraction model | DeepSeek V4 Flash Vision; Qwen 3.5 4B fine-tune and Gemini selectable |
