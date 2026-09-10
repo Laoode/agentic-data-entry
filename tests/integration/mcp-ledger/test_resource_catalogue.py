@@ -1,0 +1,289 @@
+"""Resource identity, freshness and discovery within a bound workbook."""
+
+import asyncio
+import uuid
+from datetime import date
+
+import pytest
+
+from ledger.catalogue import CatalogueStore
+from ledger.resources import (
+    ResourceExistsError,
+    ResourceNotFoundError,
+    ResourceSearch,
+    TableRegistration,
+    TableUpdate,
+)
+from ledger.errors import RevisionConflictError, SheetNotFoundError
+from ledger.store import LedgerStore
+from tests.integration.postgres import POSTGRES_TEST_URL
+
+
+@pytest.fixture
+async def catalogue_setup():
+    """Create an isolated workbook containing two distinct table regions."""
+    store = LedgerStore(POSTGRES_TEST_URL)
+    await store.connect()
+    workbook = await store.create_spreadsheet(90201, f"catalogue-{uuid.uuid4().hex}")
+    workspace = workbook["spreadsheetId"]
+    sheet = await store.create_sheet(
+        workspace,
+        "Finance",
+        [
+            ["Date", "Employee", "Amount"],
+            ["2026-09-09", "A", 185000],
+            ["2026-09-10", "B", 90000],
+            [],
+            [],
+            ["Invoice", "Customer", "Balance"],
+            ["INV-1", "Client", 100000],
+            ["INV-2", "Client", 200000],
+        ],
+    )
+    try:
+        yield store, CatalogueStore(store.pool), workspace, sheet["sheetId"]
+    finally:
+        await store.delete_spreadsheet(workspace)
+        await store.close()
+
+
+def registration(sheet_id: int, **changes) -> TableRegistration:
+    """Build the employee-claims definition with optional test overrides."""
+    fields = dict(
+        sheet_id=sheet_id,
+        expected_sheet_revision=0,
+        table_range="A1:C3",
+        name="Employee claims",
+        description="Employee travel and taxi reimbursements",
+        grain="one row per employee expense claim",
+        aliases=["team rides"],
+        entity="Jakarta",
+        period_start=date(2026, 1, 1),
+        period_end=date(2026, 12, 31),
+    )
+    return TableRegistration(**(fields | changes))
+
+
+async def test_two_tables_have_stable_distinct_identities(catalogue_setup):
+    """A worksheet can expose two independently addressable semantic tables."""
+    _, catalogue, workspace, sheet_id = catalogue_setup
+    claims = await catalogue.register(workspace, registration(sheet_id))
+    invoices = await catalogue.register(
+        workspace,
+        registration(
+            sheet_id,
+            table_range="A6:C8",
+            name="Receivables",
+            description="Customer invoices awaiting payment",
+            grain="one row per invoice",
+            aliases=[],
+        ),
+    )
+    assert claims["table_id"] != invoices["table_id"]
+    assert claims["record_count"] == 2
+    assert [column["name"] for column in claims["columns"]] == [
+        "Date",
+        "Employee",
+        "Amount",
+    ]
+    assert (
+        len(
+            {
+                column["column_id"]
+                for table in (claims, invoices)
+                for column in table["columns"]
+            }
+        )
+        == 6
+    )
+    assert (await catalogue.inspect(workspace, claims["table_id"])) == claims
+
+
+async def test_rename_and_metadata_update_preserve_ids(catalogue_setup):
+    """Names change without replacing table or column identity."""
+    store, catalogue, workspace, sheet_id = catalogue_setup
+    original = await catalogue.register(workspace, registration(sheet_id))
+    await store.rename_sheet(workspace, "Finance", "Operating expenses")
+    stale = await catalogue.inspect(workspace, original["table_id"])
+    assert stale["sheet_name"] == "Operating expenses"
+    assert stale["freshness"] == "stale"
+    updated = await catalogue.update(
+        workspace,
+        TableUpdate(
+            table_id=original["table_id"],
+            expected_catalogue_revision=1,
+            definition=registration(
+                sheet_id, expected_sheet_revision=1, name="Travel claims"
+            ),
+        ),
+    )
+    assert updated["table_id"] == original["table_id"]
+    assert updated["columns"] == original["columns"]
+    assert updated["catalogue_revision"] == 2
+    assert updated["freshness"] == "current"
+
+
+async def test_registration_rejects_stale_source_and_duplicate_range(catalogue_setup):
+    """Registration cannot describe an unobserved revision or replace a table."""
+    store, catalogue, workspace, sheet_id = catalogue_setup
+    await catalogue.register(workspace, registration(sheet_id))
+    with pytest.raises(ResourceExistsError):
+        await catalogue.register(workspace, registration(sheet_id, table_range="a1:c3"))
+    await store.mutate_grid(workspace, "Finance", lambda rows: rows + [[1]])
+    with pytest.raises(RevisionConflictError):
+        await catalogue.register(workspace, registration(sheet_id, table_range="A6:C8"))
+
+
+async def test_concurrent_metadata_updates_reject_lost_updates(catalogue_setup):
+    """Only one update may consume an observed catalogue revision."""
+    _, catalogue, workspace, sheet_id = catalogue_setup
+    original = await catalogue.register(workspace, registration(sheet_id))
+    change = TableUpdate(
+        table_id=original["table_id"],
+        expected_catalogue_revision=1,
+        definition=registration(sheet_id, name="Renamed claims"),
+    )
+    outcomes = await asyncio.gather(
+        catalogue.update(workspace, change),
+        catalogue.update(workspace, change),
+        return_exceptions=True,
+    )
+    assert sum(isinstance(outcome, RevisionConflictError) for outcome in outcomes) == 1
+
+
+async def test_changed_headers_need_explicit_identity_remapping(catalogue_setup):
+    """A source header change cannot silently reuse another column's identity."""
+    store, catalogue, workspace, sheet_id = catalogue_setup
+    original = await catalogue.register(workspace, registration(sheet_id))
+    await store.mutate_grid(
+        workspace, "Finance", lambda rows: [["Amount", "Employee", "Date"], *rows[1:]]
+    )
+    with pytest.raises(ValueError, match="header"):
+        await catalogue.update(
+            workspace,
+            TableUpdate(
+                table_id=original["table_id"],
+                expected_catalogue_revision=1,
+                definition=registration(sheet_id, expected_sheet_revision=1),
+            ),
+        )
+    assert (await catalogue.inspect(workspace, original["table_id"]))[
+        "catalogue_revision"
+    ] == 1
+
+
+async def test_foreign_resource_is_not_discoverable_or_inspectable(catalogue_setup):
+    _, catalogue, workspace, sheet_id = catalogue_setup
+    original = await catalogue.register(workspace, registration(sheet_id))
+    assert (await catalogue.search("foreign", ResourceSearch(intent="taxi")))[
+        "candidates"
+    ] == []
+    with pytest.raises(ResourceNotFoundError):
+        await catalogue.inspect("foreign", original["table_id"])
+    with pytest.raises(SheetNotFoundError):
+        await catalogue.register("foreign", registration(sheet_id))
+    with pytest.raises(ResourceNotFoundError):
+        await catalogue.update(
+            "foreign",
+            TableUpdate(
+                table_id=original["table_id"],
+                expected_catalogue_revision=1,
+                definition=registration(sheet_id),
+            ),
+        )
+
+
+async def test_alias_and_concept_search_report_evidence(catalogue_setup):
+    _, catalogue, workspace, sheet_id = catalogue_setup
+    original = await catalogue.register(workspace, registration(sheet_id))
+    aliases = await catalogue.search(workspace, ResourceSearch(intent="team rides"))
+    assert aliases["candidates"][0]["table_id"] == original["table_id"]
+    assert "exact alias" in aliases["candidates"][0]["reasons"]
+    concepts = await catalogue.search(
+        workspace,
+        ResourceSearch(
+            intent="record yesterday's Grab ride",
+            concepts=["taxi", "reimbursement"],
+            required_columns=["amount"],
+            entity="Jakarta",
+            on_date=date(2026, 9, 9),
+        ),
+    )
+    assert concepts["candidates"][0]["table_id"] == original["table_id"]
+    assert "required columns present" in concepts["candidates"][0]["reasons"]
+    assert "confidence" not in concepts["candidates"][0]
+
+
+async def test_structured_filters_do_not_relax_to_other_entities(catalogue_setup):
+    _, catalogue, workspace, sheet_id = catalogue_setup
+    await catalogue.register(workspace, registration(sheet_id))
+    for changes in (
+        {"entity": "Bali"},
+        {"on_date": date(2027, 1, 1)},
+        {"required_columns": ["Credit"]},
+    ):
+        assert (
+            await catalogue.search(workspace, ResourceSearch(intent="taxi", **changes))
+        )["candidates"] == []
+
+
+async def test_search_marks_stale_schema_without_loading_grid(catalogue_setup):
+    store, catalogue, workspace, sheet_id = catalogue_setup
+    await catalogue.register(workspace, registration(sheet_id))
+    await store.pool.execute(
+        "UPDATE ledger_sheet SET grid = '[]' WHERE sheet_id = $1", sheet_id
+    )
+    candidates = (await catalogue.search(workspace, ResourceSearch(intent="taxi")))[
+        "candidates"
+    ]
+    assert candidates[0]["freshness"] == "stale"
+    assert [column["name"] for column in candidates[0]["columns"]] == [
+        "Date",
+        "Employee",
+        "Amount",
+    ]
+
+
+async def test_sheet_deletion_removes_catalogue_entries(catalogue_setup):
+    store, catalogue, workspace, sheet_id = catalogue_setup
+    original = await catalogue.register(workspace, registration(sheet_id))
+    await store.delete_sheet(workspace, "Finance")
+    with pytest.raises(ResourceNotFoundError):
+        await catalogue.inspect(workspace, original["table_id"])
+    assert (await catalogue.search(workspace, ResourceSearch(intent="taxi")))[
+        "candidates"
+    ] == []
+
+
+async def test_exact_punctuation_name_is_discoverable(catalogue_setup):
+    """Exact identity labels remain searchable without text-search lexemes."""
+    _, catalogue, workspace, sheet_id = catalogue_setup
+    registered = await catalogue.register(workspace, registration(sheet_id, name="$"))
+    found = await catalogue.search(workspace, ResourceSearch(intent="$"))
+    assert found["candidates"][0]["table_id"] == registered["table_id"]
+    assert "exact name" in found["candidates"][0]["reasons"]
+
+
+async def test_search_limits_schema_and_reports_more_candidates(catalogue_setup):
+    """Wide tables and candidate overflow remain explicit and bounded."""
+    store, catalogue, workspace, _ = catalogue_setup
+    for index in range(2):
+        sheet = await store.create_sheet(
+            workspace, f"Wide {index}", [[f"Column {n}" for n in range(70)]]
+        )
+        await catalogue.register(
+            workspace,
+            registration(
+                sheet["sheetId"],
+                table_range="A1:BR1",
+                name=f"Wide claims {index}",
+            ),
+        )
+    found = await catalogue.search(
+        workspace, ResourceSearch(intent="Wide claims", limit=1)
+    )
+    assert found["has_more"] is True
+    candidate = found["candidates"][0]
+    assert candidate["column_count"] == 70
+    assert len(candidate["columns"]) == 16
+    assert candidate["has_more_columns"] is True

@@ -27,6 +27,7 @@ import asyncpg
 
 from ledger.errors import SheetNotFoundError
 from ledger.operations import AppendRows, execute_append
+from ledger.catalogue import CATALOGUE_SCHEMA
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +130,7 @@ class LedgerStore:
         self._pool = await asyncpg.create_pool(self._dsn, min_size=1, max_size=5)
         async with self._pool.acquire() as conn:
             await conn.execute(_SCHEMA)
+            await conn.execute(CATALOGUE_SCHEMA)
         logger.info("Ledger store connected (schema applied)")
 
     async def close(self) -> None:
