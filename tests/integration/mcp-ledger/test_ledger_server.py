@@ -92,7 +92,48 @@ async def ledger_server():
 async def test_tool_surface_matches_gsheets():
     async with ledger_server() as ledger_session:
         tools = await ledger_session.list_tools()
-        assert {tool.name for tool in tools} == GSHEETS_PARITY_TOOLS
+        assert {tool.name for tool in tools} == GSHEETS_PARITY_TOOLS | {
+            "tool_get_sheet_snapshot",
+            "tool_append_rows_checked",
+        }
+
+
+async def test_checked_append_uses_snapshot_and_replays_receipt():
+    """The MCP boundary preserves revisions, scope and committed replay."""
+    async with ledger_server() as client:
+        await _call(client, "tool_create_sheet", {"title": "Claims"})
+        snapshot = await _call(client, "tool_get_sheet_snapshot", {"sheet": "Claims"})
+        operation = {
+            "sheet_id": snapshot["sheet_id"],
+            "expected_revision": snapshot["revision"],
+            "idempotency_key": "claim-1",
+            "rows": [["Transport", 185000]],
+        }
+        receipt = await _call(
+            client, "tool_append_rows_checked", {"operation": operation}
+        )
+        replay = await _call(
+            client, "tool_append_rows_checked", {"operation": operation}
+        )
+        assert receipt == replay
+        assert receipt["status"] == "committed"
+        after = await _call(
+            client, "tool_get_sheet_snapshot", {"sheet": "Claims", "range": "B1:B1"}
+        )
+        assert after["values"] == [[185000]]
+        assert after["revision"] == receipt["after_revision"]
+        stale = await client.call_tool(
+            "tool_append_rows_checked",
+            {"operation": operation | {"idempotency_key": "claim-2"}},
+            raise_on_error=False,
+        )
+        assert stale.is_error
+        oversized = await client.call_tool(
+            "tool_get_sheet_snapshot",
+            {"sheet": "Claims", "range": "A:Z"},
+            raise_on_error=False,
+        )
+        assert oversized.is_error
 
 
 async def test_sheet_lifecycle():

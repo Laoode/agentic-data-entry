@@ -25,6 +25,8 @@ EXPECTED_TOOLS = {
     "tool_copy_sheet",
     "tool_delete_sheet",
     "tool_batch_update",
+    "tool_get_sheet_snapshot",
+    "tool_append_rows_checked",
 }
 
 
@@ -44,6 +46,8 @@ async def test_ledger_tools_publish_safety_annotations():
     assert tools["tool_get_sheet_data"].annotations.open_world_hint is False
     assert tools["tool_delete_sheet"].annotations.destructive_hint is True
     assert tools["tool_append_rows"].annotations.destructive_hint is False
+    assert tools["tool_get_sheet_snapshot"].annotations.read_only_hint is True
+    assert tools["tool_append_rows_checked"].annotations.idempotent_hint is True
 
 
 def test_http_auth_rejects_short_shared_secret(monkeypatch):

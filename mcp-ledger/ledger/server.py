@@ -20,6 +20,7 @@ from fastmcp.server.context import Context
 from mcp.types import ToolAnnotations
 
 from ledger import grid as g
+from ledger.operations import AppendRows
 from ledger.store import (
     DEFAULT_WORKSPACE,
     LedgerStore,
@@ -31,6 +32,7 @@ from ledger.store import (
 load_dotenv()
 
 LEDGER_TITLE = os.environ.get("LEDGER_TITLE", "Klaudia Ledger")
+MAX_SNAPSHOT_CELLS = 2000
 
 READ_ONLY = ToolAnnotations(
     read_only_hint=True,
@@ -41,6 +43,12 @@ READ_ONLY = ToolAnnotations(
 NON_DESTRUCTIVE_WRITE = ToolAnnotations(
     read_only_hint=False,
     destructive_hint=False,
+    open_world_hint=False,
+)
+CHECKED_APPEND = ToolAnnotations(
+    read_only_hint=False,
+    destructive_hint=False,
+    idempotent_hint=True,
     open_world_hint=False,
 )
 IDEMPOTENT_WRITE = ToolAnnotations(
@@ -146,6 +154,78 @@ def _range_label(sheet: str, notation: Optional[str]) -> str:
 
 
 # ── Read operations ──────────────────────────────────────────────────────────
+
+
+@mcp.tool(annotations=READ_ONLY)
+async def tool_get_sheet_snapshot(
+    sheet: str,
+    range: str = "A1:Z20",
+    spreadsheet_id: Optional[str] = None,
+    ctx: Context = CurrentContext(),
+) -> dict[str, Any]:
+    """Read a bounded range with stable sheet identity and its source revision.
+
+    Args:
+        sheet: Current sheet title.
+        range: Finite A1 rectangle of at most 2000 cells, including headers if needed.
+        spreadsheet_id: Workbook supplied by the request scope.
+        ctx: Injected server context.
+
+    Returns:
+        Raw values, the exact range, stable sheet ID and revision from one snapshot.
+
+    Raises:
+        ValueError: The range is unbounded, reversed or exceeds the cell budget.
+        SheetNotFoundError: The sheet is absent from the workbook.
+    """
+    bounds = g.parse_range(range)
+    if any(bound is None or bound < 0 for bound in bounds):
+        raise ValueError("Snapshot reads require a finite A1 rectangle")
+    row_start, column_start, row_end, column_end = bounds
+    if row_end < row_start or column_end < column_start:
+        raise ValueError("Snapshot range must not be reversed")
+    if (row_end - row_start + 1) * (column_end - column_start + 1) > MAX_SNAPSHOT_CELLS:
+        raise ValueError("Snapshot range exceeds 2000 cells; request a smaller range")
+    store = _store(ctx)
+    workspace = _workspace(spreadsheet_id)
+    title = await _resolve_title(store, workspace, sheet)
+    snapshot = await store.get_snapshot(workspace, title)
+    return {
+        "spreadsheet_id": workspace,
+        "sheet_id": snapshot.sheet_id,
+        "title": snapshot.title,
+        "revision": snapshot.revision,
+        "range": _range_label(snapshot.title, range),
+        "values": g.slice_range(snapshot.values, range),
+    }
+
+
+@mcp.tool(annotations=CHECKED_APPEND)
+async def tool_append_rows_checked(
+    operation: AppendRows,
+    spreadsheet_id: Optional[str] = None,
+    ctx: Context = CurrentContext(),
+) -> dict[str, Any]:
+    """Append literal rows once, using a revision from tool_get_sheet_snapshot.
+
+    Reuse the exact operation and key when retrying the same intended append.
+    Use a new key for a new action. This appends to the whole sheet, not an
+    embedded table. It does not calculate formulas or validate accounting rules.
+
+    Args:
+        operation: Stable sheet ID, observed revision, idempotency key and rows.
+        spreadsheet_id: Workbook supplied by the request scope.
+        ctx: Injected server context.
+
+    Returns:
+        The committed receipt, or the original receipt for an identical retry.
+
+    Raises:
+        SheetNotFoundError: The target is absent from the workbook.
+        RevisionConflictError: Re-read the sheet before proposing a new operation.
+        IdempotencyConflictError: The key already represents different arguments.
+    """
+    return await _store(ctx).append_checked(_workspace(spreadsheet_id), operation)
 
 
 @mcp.tool(annotations=READ_ONLY)
