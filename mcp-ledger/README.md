@@ -133,3 +133,10 @@ automatic detection, refresh, formula relationships and column remapping remain
 pending. Existing legacy tools and chat workers do not consume this catalogue yet.
 The trusted application still supplies the bound workbook. This adds no shared
 workspace ACL or cross-workbook access.
+
+The application also offers owner-scoped HTTP discovery through
+`POST /v1/resources/search` and `GET /v1/resources/{table_id}`. Those routes obtain
+the user ID from the verified application JWT and join current workbook ownership
+within the catalogue read. They reuse the same search ranking, schema pagination
+and byte budget. Direct MCP tools keep their existing trusted-service workbook
+scope; they do not accept a model-provided user ID or gain cross-workbook access.

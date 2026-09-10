@@ -139,8 +139,21 @@ selected table regions. These are backend capabilities; the current chat workers
 retain their existing tools until the agent migration. They do not yet add formula
 evaluation or change the published live-agent benchmark scores.
 
-**Tenancy model:** user → spreadsheets → sheets. Each request resolves to exactly
-one spreadsheet and is bound to it for its whole lifetime.
+**Tenancy model:** user → spreadsheets → sheets. Chat and its existing MCP tools
+remain bound to one spreadsheet per request. Authenticated catalogue reads can
+search all workbooks currently owned by the user:
+
+- `POST /v1/resources/search`: search registered table metadata with intent and
+  optional concepts, required columns, entity and date filters.
+- `GET /v1/resources/{table_id}`: inspect metadata and paginate its columns with
+  `column_offset` and `column_limit` (32 by default, at most 64).
+
+These endpoints derive identity from the bearer JWT and check ownership within
+each database read. Foreign tables do not affect candidates or continuation
+counts; foreign and missing IDs return the same 404. Reads have a 65,536-byte
+output budget and require the ledger backend. Discovery covers registered tables
+only; stale metadata remains marked. Shared-workspace roles, agent-selected
+workbooks and multi-workbook writes are not enabled by this change.
 
 ---
 

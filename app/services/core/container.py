@@ -20,6 +20,8 @@ from app.services.guardrails import GuardrailsAgent, GuardrailsConfig
 from klaudia.core.supervisor.agent import SupervisorAgent
 from klaudia.interfaces.tool_registry import MCPToolRegistry
 from ledger.store import LedgerStore
+from ledger.catalogue import CatalogueStore
+from app.services.catalogue.service import CatalogueService
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +163,7 @@ class KlaudiaContainer:
         self.supervisor: Optional[SupervisorAgent] = None
         self.ledger_store: Optional[LedgerStore] = None
         self.spreadsheets: Optional[SpreadsheetService] = None
+        self.catalogue: Optional[CatalogueService] = None
         self.memory: Optional[MemoryService] = None
         self.approvals: Optional[ApprovalService] = None
         self.extraction_agent: Optional[ExtractionAgent] = None
@@ -194,6 +197,9 @@ class KlaudiaContainer:
             container.ledger_store = LedgerStore(settings.database_url)
             await container.ledger_store.connect()
             container.spreadsheets = SpreadsheetService(container.ledger_store)
+            container.catalogue = CatalogueService(
+                CatalogueStore(container.ledger_store.pool)
+            )
 
         if settings.memory_mode != "off":
             container.memory = MemoryService.from_settings(settings)

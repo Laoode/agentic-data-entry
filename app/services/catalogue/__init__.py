@@ -1,0 +1,1 @@
+"""Authenticated resource discovery services."""
