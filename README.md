@@ -155,6 +155,15 @@ output budget and require the ledger backend. Discovery covers registered tables
 only; stale metadata remains marked. Shared-workspace roles, agent-selected
 workbooks and multi-workbook writes are not enabled by this change.
 
+The alternative agent components in `klaudia/core/agent/` expose task-bound
+`search_resources`, `inspect_resource` and `release_resource` tools. The server
+supplies immutable user identity and an optional active-workbook hint. Inspection
+records up to 20 resource references with observed revisions; search alone does
+not select a target. Each inspection rechecks ownership, and failed reinspection
+discards the previous reference. These observations grant no write permission.
+The working set is in memory for one task; durable checkpoints and the new model
+loop remain pending. The legacy chat runtime is still the default.
+
 ---
 
 ## 🧪 The Sandbox: how correctness is measured

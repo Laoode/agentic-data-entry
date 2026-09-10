@@ -337,3 +337,34 @@ async def test_owner_discovery_spans_workbooks_without_foreign_counts(catalogue_
     finally:
         await store.delete_spreadsheet(owned["spreadsheetId"])
         await store.delete_spreadsheet(foreign["spreadsheetId"])
+
+
+async def test_agent_discovery_tools_recheck_real_ownership(catalogue_setup):
+    """Task tools preserve database ownership checks after selecting a resource."""
+    from app.services.catalogue.service import CatalogueService
+    from klaudia.core.agent.context import TaskContext
+    from klaudia.core.agent.tools import DiscoveryTools
+
+    store, catalogue, workspace, sheet_id = catalogue_setup
+    registered = await catalogue.register(workspace, registration(sheet_id))
+    service = CatalogueService(catalogue)
+    owner = DiscoveryTools(
+        service, TaskContext(user_id=90201, active_workbook_id="untrusted-ui-hint")
+    )
+    stranger = DiscoveryTools(service, TaskContext(user_id=90202))
+    found = await owner.tools[0].ainvoke({"intent": "claims"})
+    assert found["candidates"][0]["table_id"] == registered["table_id"]
+    assert owner.working_set == ()
+    await owner.tools[1].ainvoke({"table_id": registered["table_id"]})
+    assert owner.working_set[0].spreadsheet_id == workspace
+    with pytest.raises(ResourceNotFoundError):
+        await stranger.tools[1].ainvoke({"table_id": registered["table_id"]})
+    assert stranger.working_set == ()
+    await store.pool.execute(
+        "UPDATE ledger_spreadsheet SET user_id = $1 WHERE spreadsheet_id = $2",
+        90202,
+        workspace,
+    )
+    with pytest.raises(ResourceNotFoundError):
+        await owner.tools[1].ainvoke({"table_id": registered["table_id"]})
+    assert owner.working_set == ()
