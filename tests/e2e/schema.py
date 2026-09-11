@@ -60,6 +60,7 @@ class Expect(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     capabilities_all: list[Capability] = Field(default_factory=list)
+    answer_lines: list[str] = Field(default_factory=list)
     metric_evidence: list[MetricExpectation] = Field(default_factory=list)
     committed_operations_min: int | None = Field(default=None, ge=1)
     ledger_state: dict[str, list[list[JsonValue]]] = Field(default_factory=dict)
@@ -176,7 +177,9 @@ class Case(BaseModel):
     category: str
     title: str
     tags: list[str] = Field(default_factory=list)
-    resource_scope: Literal["bound_workbook", "owned_workbooks"] = "bound_workbook"
+    resource_scope: Literal[
+        "bound_workbook", "owned_workbooks", "single_workbook_fixture"
+    ] = "bound_workbook"
     # True when the case mutates the real Google Sheet (write/sheet ops). Lets
     # callers deselect destructive cases without running them.
     mutating: bool = False

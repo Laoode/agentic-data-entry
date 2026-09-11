@@ -89,6 +89,27 @@ The runner's `observe_state` callback reads the fixture database after the turn.
 It never enters the model context. A requested state check without that observer
 fails. State-read failures preserve the report row and any observed receipts.
 
+### Shared comparison fixtures
+
+`resource_scope: single_workbook_fixture` is reserved for independently seeded,
+single-turn comparisons. `SingleWorkbookSUT` checks that the trial owner owns
+exactly the seeded workbook before and after execution. It rejects historical
+scope contracts instead of silently converting them.
+
+`answer_lines` requires each expected string to match a full response line after
+trimming its surrounding whitespace. Unlike digit-substring checks, it preserves
+the metric label and sign. Pair it with `ledger_state` for write outcomes.
+
+`seeded_comparison_case` supplies identical prompts, initial records and expected
+workbook state for the sum and append cases, without native-tool requirements.
+`fixture_digest` excludes random identities and fingerprints these inputs and
+expectations. `comparison_summary` retains failed trials in pass counts and
+reports median and nearest-rank p95 for positive measured latencies, with the
+sample count. Timing covers the delegated runtime, excluding fixture scope checks.
+These helpers do not yet provide a live repeated-run command or enforce a
+complete trial schedule. No new benchmark score follows from their unit tests.
+The runtime paths use different tools, so this is not an orchestration-only test.
+
 ### KIE cache assertions
 
 Cache hit/miss is measured from the `ExtractionAgent` result (per-page

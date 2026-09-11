@@ -168,6 +168,14 @@ def _content_ok(
     detail: dict = {}
     ok = True
 
+    if expect.answer_lines:
+        observed_lines = {line.strip() for line in text.splitlines()}
+        missing = [line for line in expect.answer_lines if line not in observed_lines]
+        detail["answer_lines"] = not missing
+        if missing:
+            ok = False
+            reasons.append(f"answer_lines: missing exact labelled lines {missing}")
+
     if expect.content_any:
         hit = any(k.lower() in tl for k in expect.content_any)
         detail["content_any"] = hit
@@ -214,9 +222,10 @@ def _content_ok(
 
     if expect.pending_approvals_min is not None:
         got = len(view.pending_approvals)
-        ok = got >= expect.pending_approvals_min
-        detail["pending_approvals_min"] = ok
-        if not ok:
+        approvals_ok = got >= expect.pending_approvals_min
+        detail["pending_approvals_min"] = approvals_ok
+        if not approvals_ok:
+            ok = False
             reasons.append(
                 f"pending_approvals_min: expected >= "
                 f"{expect.pending_approvals_min}, got {got}"

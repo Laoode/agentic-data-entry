@@ -42,13 +42,14 @@ class CapabilityFixture:
 
 @asynccontextmanager
 async def seeded_capability_case(
-    store: LedgerStore, scenario: Scenario
+    store: LedgerStore, scenario: Scenario, *, user_id: int = CAPABILITY_USER
 ) -> AsyncIterator[CapabilityFixture]:
     """Create an isolated registered table and remove only this fixture on exit.
 
     Args:
         store: Connected sandbox ledger, never a development store.
         scenario: Exact aggregation or checked append case.
+        user_id: Isolated fixture owner supplied by comparison runs when needed.
 
     Yields:
         Case expectations and a database state observer.
@@ -62,9 +63,7 @@ async def seeded_capability_case(
         ["Date", "Merchant", "Category", "Amount"],
         *generated.grids["Claims"][1:],
     ]
-    workbook = await store.create_spreadsheet(
-        CAPABILITY_USER, f"capability-{uuid4().hex}"
-    )
+    workbook = await store.create_spreadsheet(user_id, f"capability-{uuid4().hex}")
     workbook_id = workbook["spreadsheetId"]
     try:
         sheet = await store.create_sheet(workbook_id, "Claims", values)
@@ -111,7 +110,7 @@ async def seeded_capability_case(
             turns=[
                 Turn(
                     user=message,
-                    as_user=CAPABILITY_USER,
+                    as_user=user_id,
                     spreadsheet="active",
                     expect=expected,
                 )
