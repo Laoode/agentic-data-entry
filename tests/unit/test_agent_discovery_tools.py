@@ -131,3 +131,53 @@ async def test_direct_coroutine_calls_cannot_override_identity():
         )
     service.search.assert_not_awaited()
     service.inspect.assert_not_awaited()
+
+
+async def test_calculate_requires_inspection_and_binds_observed_revisions():
+    """Calculation arguments cannot replace the inspected location or revisions."""
+    service = AsyncMock()
+    session = DiscoveryTools(service, TaskContext(user_id=42))
+    calculate = next(tool for tool in session.tools if tool.name == "calculate")
+    request = {
+        "table_id": "tbl_claims",
+        "metrics": [{"column": "Amount", "operation": "sum"}],
+    }
+    with pytest.raises(ValueError, match="Inspect"):
+        await calculate.ainvoke(request)
+    service.calculate.assert_not_awaited()
+    service.inspect.return_value = descriptor(revision=7)
+    await session.tools[1].ainvoke({"table_id": "tbl_claims"})
+    service.calculate.return_value = {"groups": []}
+    await calculate.ainvoke(request)
+    identity, checked = service.calculate.await_args.args
+    assert identity == 42
+    assert checked.expected_sheet_revision == 7
+    assert checked.expected_catalogue_revision == 7
+    for field in (
+        "user_id",
+        "spreadsheet_id",
+        "table_range",
+        "expected_sheet_revision",
+    ):
+        with pytest.raises(ValidationError):
+            await calculate.coroutine(**request, **{field: 999})
+
+
+async def test_calculation_conflict_discards_reference():
+    """A changed source cannot leave a selected reference ready for another attempt."""
+    from ledger.errors import RevisionConflictError
+
+    service = AsyncMock()
+    session = DiscoveryTools(service, TaskContext(user_id=42))
+    service.inspect.return_value = descriptor()
+    await session.tools[1].ainvoke({"table_id": "tbl_claims"})
+    service.calculate.side_effect = RevisionConflictError("Source changed")
+    calculate = next(tool for tool in session.tools if tool.name == "calculate")
+    with pytest.raises(RevisionConflictError):
+        await calculate.ainvoke(
+            {
+                "table_id": "tbl_claims",
+                "metrics": [{"column": "Amount", "operation": "sum"}],
+            }
+        )
+    assert session.working_set == ()

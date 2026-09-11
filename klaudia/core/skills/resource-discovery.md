@@ -6,4 +6,4 @@ Procedure:
 5. If candidates remain ambiguous, ask for the missing business distinction, such as entity or period. Do not ask for spreadsheet coordinates when discovery can resolve them.
 6. An empty result covers registered tables only. Do not claim the user has no relevant data.
 7. Mark stale metadata as an observation needing refresh. Release references that no longer matter to keep the working set small.
-8. Report observed names and schema with their limits. This runtime cannot read transaction rows, compute totals, refresh catalogue metadata, or write records.
+8. Report observed names and schema with their limits. Use the table-calculation skill for supported sums and counts. This runtime cannot return transaction rows, refresh catalogue metadata, or write records.

@@ -140,3 +140,22 @@ the user ID from the verified application JWT and join current workbook ownershi
 within the catalogue read. They reuse the same search ranking, schema pagination
 and byte budget. Direct MCP tools keep their existing trusted-service workbook
 scope; they do not accept a model-provided user ID or gain cross-workbook access.
+
+## Calculations over registered tables
+
+The application catalogue service also calculates sums/counts by stable table ID.
+It checks current ownership, expected sheet revision, expected catalogue revision
+and catalogue freshness against one database snapshot. The agent injects revisions
+from its inspected working-set reference; model input cannot replace workbook IDs,
+physical bounds or expected revisions. No additional MCP endpoint is introduced.
+
+The resolved query and source identities accompany each result. Metrics include
+stable column IDs as well as names. The registered-table path preserves stored
+fractional JSON numbers as Decimal operands; it rejects inexact sums beyond 64
+digits. Numeric group labels must fit the existing JSON scalar representation
+without rounding. Unused columns and filtered-out operands do not block a total.
+The existing unit, blank-value, numeric-text and group-count policies still apply.
+
+A result describes the observed snapshot. It does not certify registration meaning,
+perform formula recalculation or grant write permission. This path still loads the
+whole sheet JSONB value; row-level query storage remains pending.

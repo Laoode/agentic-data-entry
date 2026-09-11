@@ -9,7 +9,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from klaudia.core.agent.context import ResourceReference, TaskContext
 from ledger.evidence import bounded_evidence
-from ledger.resources import ResourceInspection, ResourceSearch
+from ledger.resources import ResourceInspection, ResourceSearch, ResourceNotFoundError
+from ledger.calculations import CalculationRequest, CheckedCalculation
+from ledger.errors import RevisionConflictError
 
 MAX_WORKING_RESOURCES = 20
 
@@ -38,6 +40,25 @@ class CatalogueReader(Protocol):
 
         Returns:
             Bounded metadata, schema page and revision evidence.
+        """
+        ...
+
+    async def calculate(
+        self, user_id: int, query: CheckedCalculation
+    ) -> dict[str, Any]:
+        """Calculate owned metrics against inspected source revisions.
+
+        Args:
+            user_id: Authenticated identity.
+            query: Requested metrics and trusted observed revisions.
+
+        Returns:
+            Exact labelled metrics from one ownership-checked source snapshot.
+
+        Raises:
+            ResourceNotFoundError: Source is absent or foreign.
+            RevisionConflictError: Data or metadata changed since inspection.
+            ValueError: Inputs or evidence exceed calculation budgets.
         """
         ...
 
@@ -95,6 +116,12 @@ class DiscoveryTools:
                 description="Remove a resource reference from this task's working set to free capacity. Does not change or delete ledger data.",
                 args_schema=ReleaseResource,
             ),
+            StructuredTool.from_function(
+                coroutine=self._calculate,
+                name="calculate",
+                description="Compute exact sums or nonblank counts over an inspected registered table. Rechecks ownership and observed revisions. Choose columns, filters, groups and an explicit unit column where known. Rejects stale catalogue metadata. Does not write data or evaluate formulas.",
+                args_schema=CalculationRequest,
+            ),
         )
 
     @property
@@ -111,7 +138,7 @@ class DiscoveryTools:
         """Return task-bound tools with no identity fields in their schemas.
 
         Returns:
-            Search, inspect and release tools for this task only.
+            Discovery and calculation tools for this task only.
         """
         return self._tools
 
@@ -194,3 +221,41 @@ class DiscoveryTools:
         async with self._lock:
             removed = self._references.pop(query.table_id, None)
             return {"table_id": query.table_id, "released": removed is not None}
+
+    async def _calculate(self, **arguments: Any) -> dict[str, Any]:
+        """Bind calculations to a selected reference and current ownership checks.
+
+        Args:
+            arguments: Model-selected metrics and table identity, without location.
+
+        Returns:
+            Bounded labelled metrics with checked source revisions.
+
+        Raises:
+            ValueError: The table was not inspected or the calculation is invalid.
+            RevisionConflictError: The observation or catalogue is stale.
+            ResourceNotFoundError: The table is absent or no longer owned.
+        """
+        query = CalculationRequest.model_validate(arguments)
+        async with self._lock:
+            reference = self._references.get(query.table_id)
+            if reference is None:
+                raise ValueError("Inspect the table before calculating")
+            if reference.freshness != "current":
+                self._references.pop(query.table_id)
+                raise RevisionConflictError(
+                    "Catalogue metadata is stale; refresh it before calculating"
+                )
+            checked = CheckedCalculation(
+                **query.model_dump(),
+                expected_sheet_revision=reference.current_sheet_revision,
+                expected_catalogue_revision=reference.catalogue_revision,
+            )
+            try:
+                evidence = await self._catalogue.calculate(
+                    self._context.user_id, checked
+                )
+            except (ResourceNotFoundError, RevisionConflictError):
+                self._references.pop(query.table_id, None)
+                raise
+            return bounded_evidence(evidence)

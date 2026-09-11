@@ -3,6 +3,7 @@
 from typing import Any
 
 from ledger.catalogue import CatalogueStore
+from ledger.calculations import CheckedCalculation
 from ledger.evidence import bounded_evidence, schema_page
 from ledger.resources import ResourceSearch, ResourceInspection
 
@@ -49,3 +50,22 @@ class CatalogueService:
         """
         descriptor = await self._store.inspect_owned(user_id, query.table_id)
         return bounded_evidence(schema_page(descriptor, query))
+
+    async def calculate(
+        self, user_id: int, query: CheckedCalculation
+    ) -> dict[str, Any]:
+        """Calculate registered metrics with current ownership and revision checks.
+
+        Args:
+            user_id: Identity supplied by the authentication boundary.
+            query: Metrics and observed sheet/catalogue revisions.
+
+        Returns:
+            Bounded exact metrics with stable identities and source revisions.
+
+        Raises:
+            ResourceNotFoundError: The table is absent or foreign.
+            RevisionConflictError: Source or metadata revisions do not match.
+            ValueError: Calculation inputs or output budget are invalid.
+        """
+        return bounded_evidence(await self._store.calculate_owned(user_id, query))

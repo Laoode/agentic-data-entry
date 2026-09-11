@@ -59,7 +59,7 @@ async def test_agent_loads_skill_then_discovers_without_changing_identity():
     assert answer.status == "answered"
     assert answer.model_steps == 3
     assert answer.tools_called == ("load_skill", "search_resources")
-    assert answer.loaded_skills == {"resource-discovery": "1"}
+    assert answer.loaded_skills == {"resource-discovery": "2"}
     assert service.search.await_args.args[0] == 42
     assert "wb_active" not in model.inputs[0][0].content
     assert "Procedure:" not in model.inputs[0][0].content

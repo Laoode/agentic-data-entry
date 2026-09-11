@@ -22,6 +22,7 @@ from klaudia.core.agent.prompt import build_system_prompt
 from klaudia.core.agent.tools import CatalogueReader, DiscoveryTools
 from klaudia.core.skills.registry import LoadSkill, SkillRegistry
 from ledger.resources import ResourceNotFoundError
+from ledger.errors import RevisionConflictError
 
 
 class RunLimits(BaseModel):
@@ -268,6 +269,8 @@ class _RunSession:
             detail = "Invalid tool arguments; follow the declared schema and omit authority fields"
         except ResourceNotFoundError:
             detail = "Table not found"
+        except RevisionConflictError:
+            detail = "Source or catalogue changed; inspect again and refresh stale metadata before calculating"
         except ValueError as exc:
             detail = str(exc)[:512]
         return ToolMessage(

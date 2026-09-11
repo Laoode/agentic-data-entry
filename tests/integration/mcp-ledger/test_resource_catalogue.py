@@ -388,7 +388,7 @@ async def test_main_agent_discovers_and_inspects_real_catalogue(catalogue_setup)
             return self
 
         async def ainvoke(self, messages, config=None):
-            """Search, inspect the returned identity, then report the observed schema."""
+            """Search, inspect, calculate and report the observed metric evidence."""
             if messages[-1].type == "human":
                 name, arguments = "search_resources", {"intent": "taxi claims"}
             elif messages[-1].name == "search_resources":
@@ -397,9 +397,19 @@ async def test_main_agent_discovers_and_inspects_real_catalogue(catalogue_setup)
                     "inspect_resource",
                     {"table_id": candidate["table_id"]},
                 )
+            elif messages[-1].name == "inspect_resource":
+                inspected = json.loads(messages[-1].content)
+                name, arguments = (
+                    "calculate",
+                    {
+                        "table_id": inspected["table_id"],
+                        "metrics": [{"column": "Amount", "operation": "sum"}],
+                    },
+                )
             else:
+                metric = json.loads(messages[-1].content)["groups"][0]["metrics"][0]
                 return AIMessage(
-                    content="The claims table has Date, Employee and Amount columns."
+                    content=f"{metric['operation']} of {metric['column']}: {metric['value']}"
                 )
             return AIMessage(
                 content="",
@@ -411,9 +421,109 @@ async def test_main_agent_discovers_and_inspects_real_catalogue(catalogue_setup)
     _, catalogue, workspace, sheet_id = catalogue_setup
     registered = await catalogue.register(workspace, registration(sheet_id))
     outcome = await MainAgent(DiscoveryModel(), CatalogueService(catalogue)).run(
-        "Find the taxi claims schema",
+        "Find the taxi claims table and sum its Amount column",
         TaskContext(user_id=90201),
     )
     assert outcome.status == "answered"
-    assert outcome.tools_called == ("search_resources", "inspect_resource")
+    assert outcome.tools_called == ("search_resources", "inspect_resource", "calculate")
+    assert outcome.content == "sum of Amount: 275000"
     assert outcome.working_set[0].table_id == registered["table_id"]
+
+
+async def test_registered_calculation_uses_owned_bounds_and_labelled_evidence(
+    catalogue_setup,
+):
+    """The selected table excludes neighbouring records and identifies its metrics."""
+    from ledger.calculations import CheckedCalculation
+
+    _, catalogue, workspace, sheet_id = catalogue_setup
+    table = await catalogue.register(workspace, registration(sheet_id))
+    request = CheckedCalculation(
+        table_id=table["table_id"],
+        expected_sheet_revision=0,
+        expected_catalogue_revision=1,
+        metrics=[{"column": "Amount", "operation": "sum"}],
+    )
+    evidence = await catalogue.calculate_owned(90201, request)
+    assert evidence["groups"][0]["metrics"][0]["value"] == "275000"
+    assert (
+        evidence["groups"][0]["metrics"][0]["column_id"]
+        == table["columns"][2]["column_id"]
+    )
+    assert evidence["source"]["range"] == "A1:C3"
+    assert evidence["source"]["sheet_revision"] == 0
+    assert evidence["source"]["catalogue_revision"] == 1
+    assert evidence["source"]["table_id"] == table["table_id"]
+    assert evidence["query"]["metrics"] == [{"column": "Amount", "operation": "sum"}]
+    assert "grid" not in evidence
+    with pytest.raises(ResourceNotFoundError):
+        await catalogue.calculate_owned(90202, request)
+
+
+async def test_calculation_rejects_stale_sheet_and_catalogue(catalogue_setup):
+    """An observation cannot silently calculate against changed data or bounds."""
+    from ledger.calculations import CheckedCalculation
+
+    store, catalogue, workspace, sheet_id = catalogue_setup
+    table = await catalogue.register(workspace, registration(sheet_id))
+    request = CheckedCalculation(
+        table_id=table["table_id"],
+        expected_sheet_revision=0,
+        expected_catalogue_revision=1,
+        metrics=[{"column": "Amount", "operation": "sum"}],
+    )
+    await catalogue.update(
+        workspace,
+        TableUpdate(
+            table_id=table["table_id"],
+            expected_catalogue_revision=1,
+            definition=registration(sheet_id, table_range="A1:C2"),
+        ),
+    )
+    with pytest.raises(RevisionConflictError):
+        await catalogue.calculate_owned(90201, request)
+    fresh = request.model_copy(update={"expected_catalogue_revision": 2})
+    assert (await catalogue.calculate_owned(90201, fresh))["groups"][0]["metrics"][0][
+        "value"
+    ] == "185000"
+    await store.pool.execute(
+        "UPDATE ledger_sheet SET grid = grid WHERE sheet_id = $1", sheet_id
+    )
+    with pytest.raises(RevisionConflictError):
+        await catalogue.calculate_owned(90201, fresh)
+    with pytest.raises(RevisionConflictError):
+        await catalogue.calculate_owned(
+            90201, fresh.model_copy(update={"expected_sheet_revision": 1})
+        )
+    await store.pool.execute(
+        "UPDATE ledger_spreadsheet SET user_id = 90202 WHERE spreadsheet_id = $1",
+        workspace,
+    )
+    with pytest.raises(ResourceNotFoundError):
+        await catalogue.calculate_owned(90201, fresh)
+
+
+async def test_calculation_preserves_postgres_fractional_digits(catalogue_setup):
+    """The database-to-calculation path never rounds a stored decimal through float."""
+    from ledger.calculations import CheckedCalculation
+
+    store, catalogue, workspace, sheet_id = catalogue_setup
+    await store.pool.execute(
+        "UPDATE ledger_sheet SET grid = $1::jsonb WHERE sheet_id = $2",
+        '[["Amount"], [0.123456789012345678901], [0.1]]',
+        sheet_id,
+    )
+    table = await catalogue.register(
+        workspace,
+        registration(sheet_id, expected_sheet_revision=1, table_range="A1:A3"),
+    )
+    evidence = await catalogue.calculate_owned(
+        90201,
+        CheckedCalculation(
+            table_id=table["table_id"],
+            expected_sheet_revision=1,
+            expected_catalogue_revision=1,
+            metrics=[{"column": "Amount", "operation": "sum"}],
+        ),
+    )
+    assert evidence["groups"][0]["metrics"][0]["value"] == "0.223456789012345678901"

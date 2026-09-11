@@ -19,8 +19,13 @@ class SkillDescription:
 
 _SKILLS = (
     SkillDescription(
-        "resource-discovery",
+        "table-calculation",
         "1",
+        "Calculate exact sums and counts from inspected tables with explicit units and source revisions.",
+    ),
+    SkillDescription(
+        "resource-discovery",
+        "2",
         "Find tables from business intent and resolve ambiguity using evidence.",
     ),
     SkillDescription(

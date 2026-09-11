@@ -8,6 +8,8 @@ from typing import Any
 import asyncpg
 
 from ledger import grid
+from ledger.calculations import CheckedCalculation, decode_calculation_grid
+from ledger.query import AggregateQuery, aggregate_grid
 from ledger.errors import RevisionConflictError, SheetNotFoundError
 from ledger.resources import (
     ResourceExistsError,
@@ -381,6 +383,76 @@ class CatalogueStore:
             ResourceNotFoundError: The table is absent or belongs to another user.
         """
         return await self._inspect(("w.user_id", user_id), table_id)
+
+    async def calculate_owned(
+        self, user_id: int, request: CheckedCalculation
+    ) -> dict[str, Any]:
+        """Calculate from one snapshot of owned data and registered table bounds.
+
+        Args:
+            user_id: Authenticated identity supplied by the application.
+            request: Metrics and revisions observed during table inspection.
+
+        Returns:
+            Labelled metrics, stable source identities and the resolved query.
+
+        Raises:
+            ResourceNotFoundError: The table is absent or foreign.
+            RevisionConflictError: Data or metadata changed, or the catalogue is stale.
+            ValueError: Metrics, operands, units or bounds are invalid.
+        """
+        request = request.model_copy(deep=True)
+        row = await self._pool.fetchrow(
+            """
+            SELECT r.resource_id, r.table_range, r.columns, r.revision AS catalogue_revision,
+                   r.source_revision, s.sheet_id, s.workspace, s.revision AS sheet_revision, s.grid
+            FROM ledger_resource r
+            JOIN ledger_sheet s ON s.sheet_id = r.sheet_id
+            JOIN ledger_spreadsheet w ON w.spreadsheet_id = s.workspace
+            WHERE w.user_id = $1 AND r.resource_id = $2
+            """,
+            user_id,
+            request.table_id,
+        )
+        if row is None:
+            raise ResourceNotFoundError("Table not found")
+        if (
+            row["sheet_revision"] != request.expected_sheet_revision
+            or row["catalogue_revision"] != request.expected_catalogue_revision
+            or row["source_revision"] != row["sheet_revision"]
+        ):
+            raise RevisionConflictError(
+                "Source or catalogue changed; inspect the table and refresh stale metadata before calculating"
+            )
+        query = AggregateQuery(
+            table_range=row["table_range"],
+            **request.model_dump(
+                exclude={
+                    "table_id",
+                    "expected_sheet_revision",
+                    "expected_catalogue_revision",
+                }
+            ),
+        )
+        evidence = aggregate_grid(decode_calculation_grid(row["grid"]), query)
+        column_ids = {
+            column["name"]: column["column_id"] for column in json.loads(row["columns"])
+        }
+        for group in evidence["groups"]:
+            for metric in group["metrics"]:
+                metric["column_id"] = column_ids[metric["column"]]
+        return {
+            "source": {
+                "table_id": row["resource_id"],
+                "spreadsheet_id": row["workspace"],
+                "sheet_id": row["sheet_id"],
+                "range": row["table_range"],
+                "sheet_revision": row["sheet_revision"],
+                "catalogue_revision": row["catalogue_revision"],
+            },
+            "query": query.model_dump(),
+            **evidence,
+        }
 
     async def _inspect(
         self, scope: tuple[str, str | int], table_id: str

@@ -156,7 +156,7 @@ only; stale metadata remains marked. Shared-workspace roles, agent-selected
 workbooks and multi-workbook writes are not enabled by this change.
 
 The alternative agent components in `klaudia/core/agent/` expose task-bound
-`search_resources`, `inspect_resource` and `release_resource` tools. The server
+`search_resources`, `inspect_resource`, `release_resource` and `calculate` tools. The server
 supplies immutable user identity and an optional active-workbook hint. Inspection
 records up to 20 resource references with observed revisions; search alone does
 not select a target. Each inspection rechecks ownership, and failed reinspection
@@ -168,7 +168,7 @@ The legacy chat runtime is still the default.
 tool-capable chat model from the existing provider factory and an ownership-checked
 `CatalogueService`. Each `run(message, TaskContext(...))` creates fresh tools and
 state. The stable system prefix lists skill summaries; `load_skill` retrieves
-allowlisted, versioned discovery and schema-inspection procedures on demand.
+allowlisted, versioned discovery, schema-inspection and calculation procedures on demand.
 Caller-supplied `RunnableConfig` callbacks flow to model and tool calls.
 
 Default limits are 12 model steps, 24 tool calls, 131,072 bytes of serialized
@@ -176,8 +176,19 @@ messages and 120 seconds per run. The byte limit excludes tool schemas and
 provider framing and is not a token estimate. Results distinguish answers,
 exhausted budgets and invalid model output. Unexpected infrastructure failures
 propagate. `answered` records a model response, not proof of financial completion.
-No new chat endpoint or default routing change is enabled. Transaction reads,
-calculations, writes and live-model comparisons remain separate integration work.
+The agent's `calculate` tool sums or counts an inspected registered table. The
+model supplies its ID, metrics and filters; the task reference supplies observed
+revisions. PostgreSQL resolves ownership, bounds, grid and revisions in one read.
+Changed revisions or stale catalogue metadata fail explicitly. Results retain
+metric column IDs, source revisions, units and the applied query. Stored fractions
+remain Decimal operands through calculation; sums reject results beyond the
+64-digit exact precision budget. Fractional group labels that cannot round-trip
+through the current JSON numeric format also fail instead of rounding.
+
+No new chat endpoint or default routing change is enabled. Returning transaction
+rows, formula evaluation, writes and live-model comparisons remain separate work.
+The backend still reads a whole JSONB sheet before selecting the registered region.
+This adds a checked calculation path, not a row-level SQL query engine.
 
 ---
 

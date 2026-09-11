@@ -15,7 +15,8 @@ MAX_QUERY_CELLS = 1_000_000
 DECIMAL_PRECISION = 64
 _DECIMAL_TEXT = re.compile(r"[+-]?[0-9]+(?:\.[0-9]+)?\Z")
 ColumnName = Annotated[str, Field(min_length=1, max_length=256)]
-ScalarIdentity = tuple[str, CellValue | Decimal]
+QueryValue = CellValue | Decimal
+ScalarIdentity = tuple[str, QueryValue]
 GroupIdentity = tuple[ScalarIdentity, ...]
 
 
@@ -35,11 +36,10 @@ class EqualityFilter(BaseModel):
     value: CellValue
 
 
-class AggregateQuery(BaseModel):
-    """A selected table rectangle, its metrics and optional grouping constraints."""
+class AggregationSpec(BaseModel):
+    """Metrics and grouping policies independent of a physical table location."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
-    table_range: Annotated[str, Field(min_length=1, max_length=64)]
     metrics: Annotated[list[Metric], Field(min_length=1, max_length=8)]
     filters: Annotated[list[EqualityFilter], Field(max_length=8)] = Field(
         default_factory=list
@@ -52,7 +52,7 @@ class AggregateQuery(BaseModel):
     max_groups: Annotated[int, Field(strict=True, ge=1, le=100)] = 20
 
     @model_validator(mode="after")
-    def unique_targets(self) -> "AggregateQuery":
+    def unique_targets(self) -> "AggregationSpec":
         """Reject duplicate metrics or group keys.
 
         Returns:
@@ -69,6 +69,12 @@ class AggregateQuery(BaseModel):
         return self
 
 
+class AggregateQuery(AggregationSpec):
+    """A selected table rectangle and its validated aggregation policies."""
+
+    table_range: Annotated[str, Field(min_length=1, max_length=64)]
+
+
 def _number(value: Any, numeric_text: Literal["reject", "decimal"]) -> Decimal:
     """Parse raw numbers and plain decimal text without guessing display formats.
 
@@ -82,7 +88,7 @@ def _number(value: Any, numeric_text: Literal["reject", "decimal"]) -> Decimal:
     Raises:
         ValueError: The cell is not a supported numeric value.
     """
-    if type(value) in (int, float):
+    if type(value) in (int, float, Decimal):
         text = str(value)
     elif (
         numeric_text == "decimal"
@@ -101,7 +107,7 @@ def _number(value: Any, numeric_text: Literal["reject", "decimal"]) -> Decimal:
     return number
 
 
-def _cell(row: list[Any], index: int) -> CellValue:
+def _cell(row: list[Any], index: int) -> QueryValue:
     """Read a scalar cell, treating missing trailing cells as blank.
 
     Args:
@@ -115,14 +121,16 @@ def _cell(row: list[Any], index: int) -> CellValue:
         ValueError: The cell contains a container or a non-finite number.
     """
     value = row[index] if index < len(row) else None
-    if value is not None and type(value) not in (str, int, float, bool):
+    if value is not None and type(value) not in (str, int, float, bool, Decimal):
         raise ValueError("Query columns must contain scalar cells")
     if type(value) is float and not math.isfinite(value):
+        raise ValueError("Query columns must contain finite values")
+    if type(value) is Decimal and not value.is_finite():
         raise ValueError("Query columns must contain finite values")
     return value
 
 
-def _identity(value: CellValue) -> ScalarIdentity:
+def _identity(value: QueryValue) -> ScalarIdentity:
     """Use the same exact scalar identity for grouping and filtering.
 
     Args:
@@ -131,7 +139,7 @@ def _identity(value: CellValue) -> ScalarIdentity:
     Returns:
         A hashable identity keeping text and booleans distinct from numbers.
     """
-    if type(value) in (int, float):
+    if type(value) in (int, float, Decimal):
         return "number", Decimal(str(value))
     return type(value).__name__, value
 
@@ -146,7 +154,7 @@ class _MetricTotal:
     non_null_count: int = 0
     blank_count: int = 0
 
-    def add(self, value: CellValue) -> None:
+    def add(self, value: QueryValue) -> None:
         """Add a scalar value under the metric's sum or count contract.
 
         Args:
@@ -184,7 +192,7 @@ class _MetricTotal:
 class _Group:
     """Metrics belonging to one exact grouping key and optional unit."""
 
-    key: dict[str, CellValue]
+    key: dict[str, QueryValue]
     totals: list[_MetricTotal]
     units: set[str] = field(default_factory=set)
 
@@ -221,10 +229,32 @@ class _Group:
             JSON-compatible group evidence.
         """
         return {
-            "key": self.key,
+            "key": {name: _json_group_value(value) for name, value in self.key.items()},
             "unit": next(iter(self.units), None),
             "metrics": [total.evidence() for total in self.totals],
         }
+
+
+def _json_group_value(value: QueryValue) -> CellValue:
+    """Keep numeric group labels exact within the existing JSON scalar contract.
+
+    Args:
+        value: Observed grouping value, possibly a PostgreSQL decimal.
+
+    Returns:
+        A JSON scalar preserving the grouping value.
+
+    Raises:
+        ValueError: A fractional label cannot round-trip through a JSON float.
+    """
+    if type(value) is not Decimal:
+        return value
+    if value == value.to_integral_value():
+        return int(value)
+    number = float(value)
+    if Decimal(str(number)) != value:
+        raise ValueError("Grouping value exceeds lossless JSON numeric precision")
+    return number
 
 
 def _table_columns(rows: list[list[Any]], request: AggregateQuery) -> dict[str, int]:
