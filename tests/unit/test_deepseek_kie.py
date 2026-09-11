@@ -15,7 +15,7 @@ from app.services.extraction.infra.kie_client import KIEClient
 from config.settings import Settings
 
 
-MODEL = "deepseek-v4-flash-vision-exp"
+MODEL = "deepseek-flash"
 IMAGE_BYTES = b"jpeg-image"
 
 

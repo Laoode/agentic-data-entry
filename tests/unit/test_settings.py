@@ -10,7 +10,7 @@ def test_deepseek_vision_is_default_kie_model():
     """Use DeepSeek vision when no KIE model is configured."""
     settings = Settings(_env_file=None)
 
-    assert settings.kie_model == "deepseek-v4-flash-vision-exp"
+    assert settings.kie_model == "deepseek-flash"
 
 
 def test_toon_is_default_extraction_context_format() -> None:

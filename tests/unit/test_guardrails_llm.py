@@ -122,7 +122,7 @@ async def test_deepseek_disables_thinking_via_extra_body():
 
     result = await router.chat(
         messages=[{"role": "user", "content": "hi"}],
-        model="deepseek-v4-flash",
+        model="deepseek-flash",
         temperature=0.0,
         max_tokens=10,
     )
@@ -131,7 +131,7 @@ async def test_deepseek_disables_thinking_via_extra_body():
     client = _FakeAsyncOpenAI.instances[0]
     assert client.base_url == "https://api.deepseek.com/v1"
     kwargs = client._completions.last_kwargs
-    assert kwargs["model"] == "deepseek-v4-flash"
+    assert kwargs["model"] == "deepseek-flash"
     assert kwargs["temperature"] == 0.0
     assert kwargs["max_tokens"] == 10
     assert kwargs["extra_body"] == {"thinking": {"type": "disabled"}}
@@ -144,7 +144,7 @@ async def test_deepseek_leaves_thinking_untouched_when_not_disabled():
         disable_thinking=False,
     )
     await llm.chat(
-        messages=[{"role": "user", "content": "hi"}], model="deepseek-v4-flash"
+        messages=[{"role": "user", "content": "hi"}], model="deepseek-flash"
     )
     kwargs = _FakeAsyncOpenAI.instances[0]._completions.last_kwargs
     assert kwargs["extra_body"] is None
@@ -153,10 +153,10 @@ async def test_deepseek_leaves_thinking_untouched_when_not_disabled():
 async def test_deepseek_reuses_single_client_across_calls():
     llm = DeepSeekGuardrailLLM("https://api.deepseek.com/v1", "sk-test")
     await llm.chat(
-        messages=[{"role": "user", "content": "a"}], model="deepseek-v4-flash"
+        messages=[{"role": "user", "content": "a"}], model="deepseek-flash"
     )
     await llm.chat(
-        messages=[{"role": "user", "content": "b"}], model="deepseek-v4-flash"
+        messages=[{"role": "user", "content": "b"}], model="deepseek-flash"
     )
     assert len(_FakeAsyncOpenAI.instances) == 1
 
@@ -190,7 +190,7 @@ async def test_deepseek_wraps_api_errors_in_llmerror(monkeypatch):
     llm._get_client()._completions.create = _boom
     with pytest.raises(LLMError):
         await llm.chat(
-            messages=[{"role": "user", "content": "hi"}], model="deepseek-v4-flash"
+            messages=[{"role": "user", "content": "hi"}], model="deepseek-flash"
         )
 
 
@@ -207,7 +207,7 @@ async def test_router_shutdown_closes_deepseek_client():
         ),
     )
     await router.chat(
-        messages=[{"role": "user", "content": "hi"}], model="deepseek-v4-flash"
+        messages=[{"role": "user", "content": "hi"}], model="deepseek-flash"
     )
     await router.shutdown()
     assert _FakeAsyncOpenAI.instances[0].closed is True

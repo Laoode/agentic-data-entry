@@ -56,7 +56,7 @@ class Settings(BaseSettings):
         default="", alias="GOOGLE_APPLICATION_CREDENTIALS"
     )
 
-    kie_model: str = Field(default="deepseek-v4-flash-vision-exp", alias="KIE_MODEL")
+    kie_model: str = Field(default="deepseek-flash", alias="KIE_MODEL")
     vllm_kie_endpoint: str = Field(default="", alias="VLLM_KIE_ENDPOINT")
     vllm_kie_api_key: str = Field(default="", alias="VLLM_KIE_API_KEY", repr=False)
     mock_kie: bool = Field(default=True, alias="MOCK_KIE")
@@ -89,7 +89,7 @@ class Settings(BaseSettings):
     memory_write_mode: str = Field(default="inline", alias="MEMORY_WRITE_MODE")
     memory_top_k: int = Field(default=6, alias="MEMORY_TOP_K")
     memory_collection: str = Field(default="klaudia_memory", alias="MEMORY_COLLECTION")
-    memory_llm_model: str = Field(default="deepseek-v4-flash", alias="MEMORY_LLM_MODEL")
+    memory_llm_model: str = Field(default="deepseek-flash", alias="MEMORY_LLM_MODEL")
     memory_embed_base_url: str = Field(
         default="http://localhost:8100/v1", alias="MEMORY_EMBED_BASE_URL"
     )

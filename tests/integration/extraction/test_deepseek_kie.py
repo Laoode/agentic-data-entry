@@ -25,7 +25,7 @@ load_dotenv()
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 SAMPLE_IMAGE = PROJECT_ROOT / "sample-data" / "receipt" / "004-receipt.png"
 GROUND_TRUTH = PROJECT_ROOT / "sample-data" / "labels" / "images" / "004-receipt.json"
-MODEL = "deepseek-v4-flash-vision-exp"
+MODEL = "deepseek-flash"
 
 
 @pytest.mark.asyncio
