@@ -164,11 +164,11 @@ discards the previous reference. These observations grant no write permission.
 The working set is in memory for one task; durable checkpoints remain pending.
 The legacy chat runtime is still the default.
 
-`MainAgent` adds a programmatic, read-only alternative loop. It accepts a
+`MainAgent` adds a programmatic alternative loop, read-only by default. It accepts a
 tool-capable chat model from the existing provider factory and an ownership-checked
 `CatalogueService`. Each `run(message, TaskContext(...))` creates fresh tools and
 state. The stable system prefix lists skill summaries; `load_skill` retrieves
-allowlisted, versioned discovery, schema-inspection and calculation procedures on demand.
+allowlisted, versioned discovery, schema-inspection, calculation and append procedures on demand.
 Caller-supplied `RunnableConfig` callbacks flow to model and tool calls.
 
 Default limits are 12 model steps, 24 tool calls, 131,072 bytes of serialized
@@ -186,7 +186,7 @@ remain Decimal operands through calculation; sums reject results beyond the
 through the current JSON numeric format also fail instead of rounding.
 
 No new chat endpoint or default routing change is enabled. Returning transaction
-rows, formula evaluation, writes and live-model comparisons remain separate work.
+rows, formula evaluation and live-model comparisons remain separate work.
 The backend still reads a whole JSONB sheet before selecting the registered region.
 This adds a checked calculation path, not a row-level SQL query engine.
 
@@ -194,8 +194,27 @@ The backend also provides `LedgerStore.append_table_owned` for named records.
 Ownership stays locked through the cell, catalogue and receipt transaction.
 It checks observed revisions, consumes blank table rows and rejects collisions
 or formula-bearing tables. Exact retries return the committed receipt after
-rechecking ownership. This backend write is not exposed to the agent or HTTP/MCP
-tools yet; caller-managed retry identity and receipts need the next integration.
+rechecking ownership.
+
+Explicitly supplying `operations=OperationService(ledger_store)` to `MainAgent`
+enables `prepare_table_append` and `execute_operation`. Preparation takes a table
+ID and complete named records; inspected references supply revisions. It stores
+the exact request as text in the existing ledger operation row before execution.
+Identical records at identical revisions share a server-generated reference.
+Execution accepts only that reference, rechecks current ownership and commits
+through the existing append transaction. Preparation changes no cells and is not
+human approval. Formula-bearing tables remain unsupported for appends.
+
+Retries use the original reference and return the original committed receipt.
+`RunOutcome` includes observed operation references and deduplicated receipts;
+committed writes invalidate task references on the changed sheet. A failed run
+with operation references raises `AgentExecutionError` with its recovery outcome
+and original cause. External cancellation carries the same evidence through
+`AgentRunCancelled`, a cancellation exception. A runtime deadline returns a
+timeout outcome, including observed references. Callers must retain these references
+and retry them rather than start a new append when the outcome is unknown.
+Durable conversation checkpoints and automatic task resume remain pending.
+No HTTP/MCP write endpoint or production chat cutover is enabled by this change.
 
 ---
 

@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS ledger_table_operation (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (user_id, idempotency_key)
 );
+ALTER TABLE ledger_table_operation ADD COLUMN IF NOT EXISTS request_payload TEXT;
 """
 
 RecordField = Annotated[StrictStr, Field(min_length=1, max_length=256)]
@@ -32,17 +33,123 @@ TableRecord = Annotated[
 ]
 
 
-class TableAppend(BaseModel):
-    """Named records bound to an inspected table and a caller-managed retry key."""
+class TableAppendProposal(BaseModel):
+    """Named records bound to server-observed table revisions before key assignment."""
 
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
     table_id: Annotated[StrictStr, Field(min_length=1, max_length=256)]
     expected_sheet_revision: Annotated[StrictInt, Field(ge=0)]
     expected_catalogue_revision: Annotated[StrictInt, Field(gt=0)]
+    records: Annotated[list[TableRecord], Field(min_length=1, max_length=100)]
+
+
+class TableAppend(TableAppendProposal):
+    """An exact checked append carrying its execution retry identity."""
+
     idempotency_key: Annotated[
         StrictStr, Field(min_length=1, max_length=128, pattern=r"\S")
     ]
-    records: Annotated[list[TableRecord], Field(min_length=1, max_length=100)]
+
+
+async def prepare_table_append(
+    pool: asyncpg.Pool, user_id: int, request: TableAppendProposal
+) -> dict[str, str]:
+    """Persist an exact request before execution without changing ledger cells.
+
+    Args:
+        pool: Ledger connections with operation storage installed.
+        user_id: Authenticated caller identity.
+        request: Records and server-observed revisions before key assignment.
+
+    Returns:
+        A stable reference for identical records at identical observed revisions.
+
+    Raises:
+        ResourceNotFoundError: The table is absent or foreign.
+        ValueError: The request exceeds the byte budget.
+    """
+    payload = json.dumps(
+        request.model_dump(exclude={"idempotency_key"}),
+        sort_keys=True,
+        ensure_ascii=False,
+        allow_nan=False,
+    )
+    operation_ref = "prepared:" + hashlib.sha256(payload.encode()).hexdigest()
+    checked = TableAppend(**json.loads(payload), idempotency_key=operation_ref)
+    payload = _request_payload(checked)
+    fingerprint = hashlib.sha256(payload.encode()).hexdigest()
+    async with pool.acquire() as connection:
+        async with connection.transaction():
+            workspace = await connection.fetchval(
+                "SELECT w.spreadsheet_id FROM ledger_resource r JOIN ledger_sheet s ON s.sheet_id = r.sheet_id JOIN ledger_spreadsheet w ON w.spreadsheet_id = s.workspace WHERE r.resource_id = $1 AND w.user_id = $2 FOR SHARE OF w",
+                checked.table_id,
+                user_id,
+            )
+            if workspace is None:
+                raise ResourceNotFoundError("Table not found")
+            await connection.execute(
+                "INSERT INTO ledger_table_operation (user_id, idempotency_key, fingerprint, workspace, request_payload) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING",
+                user_id,
+                operation_ref,
+                fingerprint,
+                workspace,
+                payload,
+            )
+    return {
+        "operation_ref": operation_ref,
+        "status": "prepared",
+        "table_id": checked.table_id,
+    }
+
+
+async def execute_prepared_append(
+    pool: asyncpg.Pool, user_id: int, operation_ref: str
+) -> dict[str, Any]:
+    """Execute or replay the stored request with current ownership checks.
+
+    Args:
+        pool: Ledger operation storage.
+        user_id: Authenticated caller, never supplied by the model.
+        operation_ref: Reference returned by preparation.
+
+    Returns:
+        The atomically committed receipt, including exact retries.
+
+    Raises:
+        ResourceNotFoundError: The proposal or current ownership is absent.
+        RevisionConflictError: An uncommitted proposal has stale revisions.
+        ValueError: The stored append fails execution validation.
+    """
+    payload = await pool.fetchval(
+        "SELECT request_payload FROM ledger_table_operation WHERE user_id = $1 AND idempotency_key = $2",
+        user_id,
+        operation_ref,
+    )
+    if payload is None:
+        raise ResourceNotFoundError("Operation not found")
+    return await execute_table_append(
+        pool, user_id, TableAppend.model_validate_json(payload)
+    )
+
+
+def _request_payload(request: TableAppend) -> str:
+    """Serialize an exact bounded request for persistence and fingerprinting.
+
+    Args:
+        request: Validated immutable append contract.
+
+    Returns:
+        Canonical JSON preserving record order.
+
+    Raises:
+        ValueError: The request exceeds the byte budget.
+    """
+    payload = json.dumps(
+        request.model_dump(), sort_keys=True, ensure_ascii=False, allow_nan=False
+    )
+    if len(payload.encode("utf-8")) > 65536:
+        raise ValueError("Append exceeds the 65536-byte request budget")
+    return payload
 
 
 async def execute_table_append(
@@ -65,11 +172,7 @@ async def execute_table_append(
         ValueError: Records, formula cells or destination bounds are unsafe.
     """
     request = request.model_copy(deep=True)
-    payload = json.dumps(
-        request.model_dump(), sort_keys=True, ensure_ascii=False, allow_nan=False
-    )
-    if len(payload.encode("utf-8")) > 65536:
-        raise ValueError("Append exceeds the 65536-byte request budget")
+    payload = _request_payload(request)
     fingerprint = hashlib.sha256(payload.encode("utf-8")).hexdigest()
     async with pool.acquire() as connection:
         async with connection.transaction():

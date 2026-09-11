@@ -1,4 +1,4 @@
-"""Bounded alternative single-agent loop for read-only catalogue work."""
+"""Bounded alternative single-agent loop with optional checked appends."""
 
 import asyncio
 import json
@@ -18,8 +18,13 @@ from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, ValidationError
 
 from klaudia.core.agent.context import ResourceReference, TaskContext
-from klaudia.core.agent.prompt import build_system_prompt
+from klaudia.core.agent.prompt import (
+    APPEND_CONTRACT,
+    READ_CONTRACT,
+    build_system_prompt,
+)
 from klaudia.core.agent.tools import CatalogueReader, DiscoveryTools
+from klaudia.core.agent.writes import OperationExecutor, WriteTools
 from klaudia.core.skills.registry import LoadSkill, SkillRegistry
 from ledger.resources import ResourceNotFoundError
 from ledger.errors import RevisionConflictError
@@ -42,6 +47,8 @@ StopReason = Literal[
     "context_limit",
     "timeout",
     "invalid_model_output",
+    "failed",
+    "cancelled",
 ]
 
 
@@ -55,6 +62,34 @@ class RunOutcome:
     tools_called: tuple[str, ...]
     loaded_skills: dict[str, str]
     working_set: tuple[ResourceReference, ...]
+    operation_receipts: tuple[dict[str, Any], ...] = ()
+    operation_references: tuple[str, ...] = ()
+
+
+class AgentExecutionError(RuntimeError):
+    """Execution failure carrying operation evidence for caller-managed recovery."""
+
+    def __init__(self, outcome: RunOutcome) -> None:
+        """Keep recovery evidence while exception chaining retains the cause.
+
+        Args:
+            outcome: Observed references and receipts from the failed run.
+        """
+        super().__init__("Agent execution failed; inspect outcome before retrying")
+        self.outcome = outcome
+
+
+class AgentRunCancelled(asyncio.CancelledError):
+    """Cancellation retaining operation evidence without suppressing cancellation."""
+
+    def __init__(self, outcome: RunOutcome) -> None:
+        """Keep references needed to recover a cancelled operation.
+
+        Args:
+            outcome: Evidence observed before cancellation.
+        """
+        super().__init__("Agent run cancelled; inspect outcome before retrying")
+        self.outcome = outcome
 
 
 def _context_size(messages: list[BaseMessage]) -> int:
@@ -84,6 +119,7 @@ class MainAgent:
         catalogue: CatalogueReader,
         *,
         limits: RunLimits | None = None,
+        operations: OperationExecutor | None = None,
     ) -> None:
         """Accept the same configured chat model used for runtime comparisons.
 
@@ -91,12 +127,16 @@ class MainAgent:
             model: Tool-capable chat model supplied by the application.
             catalogue: Ownership-enforcing application reader.
             limits: Server-controlled budgets, independent of model arguments.
+            operations: Explicit opt-in executor for durable checked appends.
         """
         self._model = model
         self._catalogue = catalogue
         self._limits = limits or RunLimits()
+        self._operations = operations
         self._registry = SkillRegistry()
-        self._prompt = build_system_prompt(self._registry)
+        self._prompt = build_system_prompt(
+            self._registry, APPEND_CONTRACT if operations is not None else READ_CONTRACT
+        )
 
     async def run(
         self,
@@ -116,17 +156,30 @@ class MainAgent:
             An answer or explicit stopping reason with observed references.
 
         Raises:
-            Exception: Unexpected provider, storage or package failures propagate.
+            AgentExecutionError: Failure after observing an operation reference;
+                outcome retains evidence and the original cause is chained.
+            AgentRunCancelled: Cancellation with operation recovery evidence.
+            Exception: Failures before operation references exist propagate unchanged.
         """
         session = _RunSession(self, context, config)
         deadline = asyncio.timeout(self._limits.timeout_seconds)
         try:
             async with deadline:
                 return await session.execute(message)
-        except TimeoutError:
+        except TimeoutError as exc:
             if not deadline.expired():
+                if session.writes is not None and session.writes.operation_references:
+                    raise AgentExecutionError(session.outcome("failed")) from exc
                 raise
             return session.outcome("timeout")
+        except asyncio.CancelledError as exc:
+            if session.writes is not None and session.writes.operation_references:
+                raise AgentRunCancelled(session.outcome("cancelled")) from exc
+            raise
+        except Exception as exc:
+            if session.writes is not None and session.writes.operation_references:
+                raise AgentExecutionError(session.outcome("failed")) from exc
+            raise
 
 
 class _RunSession:
@@ -146,6 +199,11 @@ class _RunSession:
         self.context = context
         self.config = config
         self.discovery = DiscoveryTools(agent._catalogue, context)
+        self.writes = (
+            WriteTools(self.discovery, agent._operations)
+            if agent._operations is not None
+            else None
+        )
         self.loaded: dict[str, str] = {}
         self.calls: list[str] = []
         self.steps = 0
@@ -156,6 +214,8 @@ class _RunSession:
             args_schema=LoadSkill,
         )
         self.tools = {tool.name: tool for tool in (*self.discovery.tools, skill_tool)}
+        if self.writes is not None:
+            self.tools.update({tool.name: tool for tool in self.writes.tools})
         self.model = agent._model.bind_tools(list(self.tools.values()))
 
     async def load_skill(self, **arguments: Any) -> dict[str, str]:
@@ -192,6 +252,8 @@ class _RunSession:
             tuple(self.calls),
             dict(self.loaded),
             self.discovery.working_set,
+            self.writes.receipts if self.writes is not None else (),
+            self.writes.operation_references if self.writes is not None else (),
         )
 
     async def execute(self, message: str) -> RunOutcome:
@@ -268,9 +330,9 @@ class _RunSession:
         except ValidationError:
             detail = "Invalid tool arguments; follow the declared schema and omit authority fields"
         except ResourceNotFoundError:
-            detail = "Table not found"
+            detail = "Table or operation not found"
         except RevisionConflictError:
-            detail = "Source or catalogue changed; inspect again and refresh stale metadata before calculating"
+            detail = "Source or catalogue changed; inspect again and refresh stale metadata before proposing new work. Retry existing operations only by their stored reference."
         except ValueError as exc:
             detail = str(exc)[:512]
         return ToolMessage(

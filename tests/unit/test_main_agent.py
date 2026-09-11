@@ -7,6 +7,7 @@ from langchain_core.messages import AIMessage, ToolMessage
 
 from klaudia.core.agent.agent import MainAgent, RunLimits
 from klaudia.core.agent.context import TaskContext
+from tests.unit.test_agent_discovery_tools import descriptor
 
 
 class ScriptedModel:
@@ -37,6 +38,185 @@ def call(name, arguments, identity="call_1"):
             {"name": name, "args": arguments, "id": identity, "type": "tool_call"}
         ],
     )
+
+
+async def test_optional_writes_bind_revisions_and_return_receipts():
+    """Only an explicit executor enables writes with server-bound evidence."""
+    service = AsyncMock()
+    service.inspect.return_value = descriptor()
+    operations = AsyncMock()
+    operations.prepare.return_value = {
+        "operation_ref": "prepared:one",
+        "status": "prepared",
+    }
+    receipt = {
+        "operation_id": "op_one",
+        "status": "committed",
+        "target": {"table_id": "tbl_claims", "sheet_id": 8},
+        "calculation_status": "not_supported",
+    }
+    operations.execute.return_value = receipt
+    model = ScriptedModel(
+        [
+            call("inspect_resource", {"table_id": "tbl_claims"}),
+            call(
+                "prepare_table_append",
+                {"table_id": "tbl_claims", "records": [{"Amount": 20}]},
+                "prepare",
+            ),
+            call("execute_operation", {"operation_ref": "prepared:one"}, "execute"),
+            call("execute_operation", {"operation_ref": "prepared:one"}, "retry"),
+            AIMessage(content="Added the record; formula calculation is unsupported."),
+        ]
+    )
+    outcome = await MainAgent(model, service, operations=operations).run(
+        "Add a claim", TaskContext(user_id=42)
+    )
+    user_id, checked = operations.prepare.await_args.args
+    assert user_id == 42
+    assert checked.expected_sheet_revision == 1
+    assert checked.expected_catalogue_revision == 1
+    assert operations.execute.await_args.args == (42, "prepared:one")
+    assert outcome.operation_receipts == (receipt,)
+    assert outcome.working_set == ()
+    schemas = {
+        tool.name: tool.args_schema.model_json_schema()["properties"]
+        for tool in model.tools
+    }
+    assert set(schemas["prepare_table_append"]) == {"table_id", "records"}
+    assert set(schemas["execute_operation"]) == {"operation_ref"}
+    assert "read-only catalogue tools" not in model.inputs[0][0].content
+
+
+async def test_writes_are_disabled_by_default_and_require_inspection():
+    """Default runs expose no writes; opt-in preparation requires fresh evidence."""
+    model = ScriptedModel([AIMessage(content="Ready")])
+    await MainAgent(model, AsyncMock()).run("Hello", TaskContext(user_id=1))
+    assert "execute_operation" not in {tool.name for tool in model.tools}
+    operations = AsyncMock()
+    model = ScriptedModel(
+        [
+            call(
+                "prepare_table_append",
+                {"table_id": "tbl_claims", "records": [{"Amount": 20}]},
+            ),
+            AIMessage(content="I need to inspect the table."),
+        ]
+    )
+    await MainAgent(model, AsyncMock(), operations=operations).run(
+        "Add a claim", TaskContext(user_id=1)
+    )
+    operations.prepare.assert_not_awaited()
+    assert model.inputs[1][-1].status == "error"
+
+
+async def test_execution_timeout_retains_reference_without_claiming_commit():
+    """An unknown execution outcome remains recoverable by its original reference."""
+    import asyncio
+
+    async def uncertain_execution(*arguments):
+        """Simulate waiting for a receipt after the request was sent."""
+        await asyncio.Event().wait()
+
+    operations = AsyncMock()
+    operations.execute.side_effect = uncertain_execution
+    model = ScriptedModel(
+        [call("execute_operation", {"operation_ref": "prepared:old"})]
+    )
+    outcome = await MainAgent(
+        model,
+        AsyncMock(),
+        operations=operations,
+        limits=RunLimits(timeout_seconds=0.05),
+    ).run("Retry the saved operation", TaskContext(user_id=42))
+    assert outcome.status == "timeout"
+    assert outcome.operation_references == ("prepared:old",)
+    assert outcome.operation_receipts == ()
+
+
+async def test_uncommitted_executor_response_cannot_become_receipt():
+    """A broken executor contract propagates instead of certifying completion."""
+    operations = AsyncMock()
+    operations.execute.return_value = {"status": "prepared"}
+    model = ScriptedModel(
+        [call("execute_operation", {"operation_ref": "prepared:old"})]
+    )
+    from klaudia.core.agent.agent import AgentExecutionError
+
+    with pytest.raises(AgentExecutionError) as failure:
+        await MainAgent(model, AsyncMock(), operations=operations).run(
+            "Execute", TaskContext(user_id=42)
+        )
+    assert "no committed receipt" in str(failure.value.__cause__)
+
+
+async def test_execution_failure_exposes_original_reference_for_recovery():
+    """A lost receipt propagates with the server reference needed for retry."""
+    from klaudia.core.agent.agent import AgentExecutionError
+
+    operations = AsyncMock()
+    operations.execute.side_effect = ConnectionError("receipt response lost")
+    model = ScriptedModel(
+        [call("execute_operation", {"operation_ref": "prepared:old"})]
+    )
+    with pytest.raises(AgentExecutionError) as failure:
+        await MainAgent(model, AsyncMock(), operations=operations).run(
+            "Retry", TaskContext(user_id=42)
+        )
+    assert isinstance(failure.value.__cause__, ConnectionError)
+    assert failure.value.outcome.operation_references == ("prepared:old",)
+    assert failure.value.outcome.operation_receipts == ()
+
+
+async def test_provider_failure_keeps_observed_commit_evidence():
+    """A failed final model call must not hide an already committed append."""
+    from klaudia.core.agent.agent import AgentExecutionError
+
+    operations = AsyncMock()
+    receipt = {
+        "operation_id": "op_one",
+        "status": "committed",
+        "target": {"sheet_id": 8},
+    }
+    operations.execute.return_value = receipt
+    model = ScriptedModel(
+        [call("execute_operation", {"operation_ref": "prepared:old"})]
+    )
+    with pytest.raises(AgentExecutionError) as failure:
+        await MainAgent(model, AsyncMock(), operations=operations).run(
+            "Execute", TaskContext(user_id=42)
+        )
+    assert failure.value.outcome.operation_receipts == (receipt,)
+
+
+async def test_cancelled_execution_preserves_reference_and_cancellation():
+    """External cancellation propagates as cancellation with recovery evidence."""
+    import asyncio
+    from klaudia.core.agent.agent import AgentRunCancelled
+
+    started = asyncio.Event()
+
+    async def wait_for_cancel(*arguments):
+        """Pause execution after its reference has been retained."""
+        started.set()
+        await asyncio.Event().wait()
+
+    operations = AsyncMock()
+    operations.execute.side_effect = wait_for_cancel
+    model = ScriptedModel(
+        [call("execute_operation", {"operation_ref": "prepared:old"})]
+    )
+    task = asyncio.create_task(
+        MainAgent(model, AsyncMock(), operations=operations).run(
+            "Execute", TaskContext(user_id=42)
+        )
+    )
+    await started.wait()
+    task.cancel()
+    with pytest.raises(AgentRunCancelled) as cancellation:
+        await task
+    assert cancellation.value.outcome.operation_references == ("prepared:old",)
+    assert task.cancelled()
 
 
 async def test_agent_loads_skill_then_discovers_without_changing_identity():

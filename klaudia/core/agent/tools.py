@@ -151,6 +151,36 @@ class DiscoveryTools:
         """
         return tuple(self._references.values())
 
+    def reference(self, table_id: str) -> ResourceReference:
+        """Get one inspected reference without granting continuing access.
+
+        Args:
+            table_id: Selected table identity.
+
+        Returns:
+            Immutable observed revisions.
+
+        Raises:
+            ValueError: The table has not been inspected in this task.
+        """
+        reference = self._references.get(table_id)
+        if reference is None:
+            raise ValueError("Inspect the table before preparing an append")
+        return reference
+
+    async def invalidate_sheet(self, sheet_id: int) -> None:
+        """Discard observations invalidated by a committed sheet mutation.
+
+        Args:
+            sheet_id: Changed sheet identity from a committed receipt.
+        """
+        async with self._lock:
+            self._references = {
+                table_id: reference
+                for table_id, reference in self._references.items()
+                if reference.sheet_id != sheet_id
+            }
+
     async def _search(self, **arguments: Any) -> dict[str, Any]:
         """Search through the bound identity without selecting candidates.
 

@@ -367,3 +367,169 @@ async def test_unregistered_occupied_cells_block_expansion(append_setup):
     with pytest.raises(ValueError, match="occupied cells"):
         await store.append_table_owned(90401, request(table["table_id"]))
     assert (await store.get_snapshot(workspace, "Footer")).revision == 0
+
+
+async def test_prepared_append_survives_restart_and_lost_receipt(append_setup):
+    """A durable proposal replays its original revisions after execution."""
+    from ledger.table_operations import prepare_table_append, execute_prepared_append
+
+    store, _, workspace, _, table_id = append_setup
+    proposal = await prepare_table_append(store.pool, 90401, request(table_id))
+    assert proposal["status"] == "prepared"
+    assert (await store.get_snapshot(workspace, "Finance")).revision == 0
+    assert await prepare_table_append(store.pool, 90401, request(table_id)) == proposal
+    receipt = await execute_prepared_append(
+        store.pool, 90401, proposal["operation_ref"]
+    )
+    restarted = LedgerStore(POSTGRES_TEST_URL)
+    await restarted.connect()
+    try:
+        assert (
+            await execute_prepared_append(
+                restarted.pool, 90401, proposal["operation_ref"]
+            )
+            == receipt
+        )
+    finally:
+        await restarted.close()
+    assert (await store.get_snapshot(workspace, "Finance")).revision == 1
+
+
+async def test_prepared_append_checks_identity_and_current_revision(append_setup):
+    """Possessing a proposal reference cannot grant access or bypass revisions."""
+    from ledger.table_operations import prepare_table_append, execute_prepared_append
+
+    store, _, workspace, _, table_id = append_setup
+    proposal = await prepare_table_append(store.pool, 90401, request(table_id))
+    with pytest.raises(ResourceNotFoundError):
+        await execute_prepared_append(store.pool, 90402, proposal["operation_ref"])
+    await store.append_table_owned(
+        90401, request(table_id, idempotency_key="other:" + table_id)
+    )
+    with pytest.raises(RevisionConflictError):
+        await execute_prepared_append(store.pool, 90401, proposal["operation_ref"])
+    await store.pool.execute(
+        "UPDATE ledger_spreadsheet SET user_id = 90402 WHERE spreadsheet_id = $1",
+        workspace,
+    )
+    with pytest.raises(ResourceNotFoundError):
+        await execute_prepared_append(store.pool, 90401, proposal["operation_ref"])
+
+
+@pytest.mark.parametrize("amount", [1e20, -0.0])
+async def test_prepared_append_preserves_exact_numeric_request(append_setup, amount):
+    """Persistence must not normalise numeric tokens used by the fingerprint."""
+    from ledger.table_operations import prepare_table_append, execute_prepared_append
+
+    store, _, _, _, table_id = append_setup
+    proposal = await prepare_table_append(
+        store.pool,
+        90401,
+        request(table_id, records=[{"Employee": "C", "Amount": amount}]),
+    )
+    receipt = await execute_prepared_append(
+        store.pool, 90401, proposal["operation_ref"]
+    )
+    assert receipt["status"] == "committed"
+    assert (
+        await execute_prepared_append(store.pool, 90401, proposal["operation_ref"])
+        == receipt
+    )
+
+
+async def test_main_agent_prepares_executes_and_retries_real_append(append_setup):
+    """Agent tools cross real ownership, storage and receipt boundaries."""
+    import json
+
+    from langchain_core.messages import AIMessage, ToolMessage
+    from app.services.catalogue.service import CatalogueService
+    from app.services.core.operations import OperationService
+    from klaudia.core.agent.agent import MainAgent
+    from klaudia.core.agent.context import TaskContext
+    from tests.unit.test_main_agent import call
+
+    store, catalogue, workspace, _, table_id = append_setup
+
+    class AppendModel:
+        """Use actual prepared evidence rather than inventing operation references."""
+
+        def bind_tools(self, tools):
+            """Accept the agent's declared capabilities."""
+            return self
+
+        async def ainvoke(self, messages, config=None):
+            """Advance a deterministic append script from returned tool evidence."""
+            evidence = [
+                message for message in messages if isinstance(message, ToolMessage)
+            ]
+            if not evidence:
+                return call("inspect_resource", {"table_id": table_id})
+            if len(evidence) == 1:
+                return call(
+                    "prepare_table_append",
+                    {
+                        "table_id": table_id,
+                        "records": [{"Employee": "C", "Amount": 20}],
+                    },
+                    "prepare",
+                )
+            if len(evidence) < 4:
+                proposal = json.loads(evidence[1].content)
+                return call(
+                    "execute_operation",
+                    {"operation_ref": proposal["operation_ref"]},
+                    f"execute_{len(evidence)}",
+                )
+            return AIMessage(
+                content="Added one record; formulas were not recalculated."
+            )
+
+    outcome = await MainAgent(
+        AppendModel(), CatalogueService(catalogue), operations=OperationService(store)
+    ).run("Add C's claim of 20", TaskContext(user_id=90401))
+    assert outcome.status == "answered"
+    assert len(outcome.operation_receipts) == 1
+    assert outcome.operation_receipts[0]["changes"]["records_appended"] == 1
+    assert outcome.operation_receipts[0]["calculation_status"] == "not_supported"
+    assert (await store.get_snapshot(workspace, "Finance")).revision == 1
+    assert (await store.get_grid(workspace, "Finance"))[2] == ["C", 20]
+
+
+async def test_lost_commit_response_recovers_through_operation_service(append_setup):
+    """An agent failure after commit retains a reference that replays without duplicates."""
+    from app.services.catalogue.service import CatalogueService
+    from app.services.core.operations import OperationService
+    from klaudia.core.agent.agent import MainAgent, AgentExecutionError
+    from klaudia.core.agent.context import TaskContext
+    from tests.unit.test_main_agent import ScriptedModel, call
+
+    store, catalogue, workspace, _, table_id = append_setup
+    operations = OperationService(store)
+    proposal = await operations.prepare(90401, request(table_id))
+
+    class LostReceiptService(OperationService):
+        """Simulate transport failure after the ledger commits."""
+
+        async def execute(self, user_id, operation_ref):
+            """Commit normally and discard the response."""
+            await super().execute(user_id, operation_ref)
+            raise ConnectionError("response lost after commit")
+
+    model = ScriptedModel(
+        [call("execute_operation", {"operation_ref": proposal["operation_ref"]})]
+    )
+    with pytest.raises(AgentExecutionError) as failure:
+        await MainAgent(
+            model, CatalogueService(catalogue), operations=LostReceiptService(store)
+        ).run("Execute saved append", TaskContext(user_id=90401))
+    reference = failure.value.outcome.operation_references[0]
+    assert failure.value.outcome.operation_receipts == ()
+    receipt = await OperationService(store).execute(90401, reference)
+    assert receipt["status"] == "committed"
+    assert (await store.get_snapshot(workspace, "Finance")).revision == 1
+    await store.pool.execute(
+        "UPDATE ledger_spreadsheet SET user_id = 90402 WHERE spreadsheet_id = $1",
+        workspace,
+    )
+    with pytest.raises(ResourceNotFoundError):
+        await operations.execute(90401, reference)
