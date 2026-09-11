@@ -28,6 +28,11 @@ import asyncpg
 from ledger.errors import SheetNotFoundError
 from ledger.operations import AppendRows, execute_append
 from ledger.catalogue import CATALOGUE_SCHEMA
+from ledger.table_operations import (
+    TABLE_OPERATION_SCHEMA,
+    TableAppend,
+    execute_table_append,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +136,7 @@ class LedgerStore:
         async with self._pool.acquire() as conn:
             await conn.execute(_SCHEMA)
             await conn.execute(CATALOGUE_SCHEMA)
+            await conn.execute(TABLE_OPERATION_SCHEMA)
         logger.info("Ledger store connected (schema applied)")
 
     async def close(self) -> None:
@@ -340,6 +346,26 @@ class LedgerStore:
             IdempotencyConflictError: The key was used for another request.
         """
         return await execute_append(self.pool, workspace, request)
+
+    async def append_table_owned(
+        self, user_id: int, request: TableAppend
+    ) -> dict[str, Any]:
+        """Append named records with transactional ownership and revision checks.
+
+        Args:
+            user_id: Identity supplied by the authenticated application.
+            request: Table identity, observed revisions, records and stable retry key.
+
+        Returns:
+            A committed receipt, including an exact replay of a prior request.
+
+        Raises:
+            ResourceNotFoundError: The source workbook is absent or foreign.
+            RevisionConflictError: The inspected source or catalogue is stale.
+            IdempotencyConflictError: The retry key belongs to another request.
+            ValueError: Fields, occupied cells or formula content block the append.
+        """
+        return await execute_table_append(self.pool, user_id, request)
 
     async def create_sheet(
         self, workspace: str, title: str, grid: Optional[list[list[Any]]] = None

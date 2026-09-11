@@ -190,6 +190,13 @@ rows, formula evaluation, writes and live-model comparisons remain separate work
 The backend still reads a whole JSONB sheet before selecting the registered region.
 This adds a checked calculation path, not a row-level SQL query engine.
 
+The backend also provides `LedgerStore.append_table_owned` for named records.
+Ownership stays locked through the cell, catalogue and receipt transaction.
+It checks observed revisions, consumes blank table rows and rejects collisions
+or formula-bearing tables. Exact retries return the committed receipt after
+rechecking ownership. This backend write is not exposed to the agent or HTTP/MCP
+tools yet; caller-managed retry identity and receipts need the next integration.
+
 ---
 
 ## 🧪 The Sandbox: how correctness is measured

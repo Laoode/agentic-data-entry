@@ -159,3 +159,33 @@ The existing unit, blank-value, numeric-text and group-count policies still appl
 A result describes the observed snapshot. It does not certify registration meaning,
 perform formula recalculation or grant write permission. This path still loads the
 whole sheet JSONB value; row-level query storage remains pending.
+
+## Owned table append transactions
+
+`LedgerStore.append_table_owned(user_id, request)` accepts a `TableAppend` with
+stable table ID, observed sheet/catalogue revisions, a stable idempotency key and
+up to 100 named records within a 65,536-byte request budget. Each record must
+supply every registered column exactly; use explicit nulls for intended blanks.
+All-blank records and formula expressions are rejected. Tables already containing
+formula expressions also reject appends until formula propagation exists.
+
+The transaction locks current workbook ownership, then the sheet and catalogue
+entry. It appends after the table's last populated row, consumes reserved blank
+rows first and expands only into empty cells. Registered region collisions and
+unregistered occupied cells both block expansion. It does not shift other tables.
+PostgreSQL patches the cells without rounding unchanged JSONB numbers. Stored-cell
+verification, table bounds, record count, revisions and the receipt commit together.
+Other registered tables on the sheet become stale under the existing sheet-wide
+revision policy; the appended table's metadata remains current.
+
+Idempotency keys are scoped by authenticated user. Replays require the exact
+checked request, including its original revisions; changed payloads conflict.
+Identical concurrent calls commit once. Replays recheck current workbook ownership.
+Receipts survive table deletion while the owned workbook exists; deletion or
+transfer of that workbook denies replay access. Receipts do not claim formula
+recalculation or accounting validation. Retry callers must retain the original
+request and key, including when a response is lost after commit.
+
+This is a backend entry point. Existing MCP tools, HTTP routes and the alternative
+agent do not expose it yet. Agent write integration still needs server-managed
+retry identity and receipt handling; the current agent remains read-only.
