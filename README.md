@@ -161,8 +161,23 @@ supplies immutable user identity and an optional active-workbook hint. Inspectio
 records up to 20 resource references with observed revisions; search alone does
 not select a target. Each inspection rechecks ownership, and failed reinspection
 discards the previous reference. These observations grant no write permission.
-The working set is in memory for one task; durable checkpoints and the new model
-loop remain pending. The legacy chat runtime is still the default.
+The working set is in memory for one task; durable checkpoints remain pending.
+The legacy chat runtime is still the default.
+
+`MainAgent` adds a programmatic, read-only alternative loop. It accepts a
+tool-capable chat model from the existing provider factory and an ownership-checked
+`CatalogueService`. Each `run(message, TaskContext(...))` creates fresh tools and
+state. The stable system prefix lists skill summaries; `load_skill` retrieves
+allowlisted, versioned discovery and schema-inspection procedures on demand.
+Caller-supplied `RunnableConfig` callbacks flow to model and tool calls.
+
+Default limits are 12 model steps, 24 tool calls, 131,072 bytes of serialized
+messages and 120 seconds per run. The byte limit excludes tool schemas and
+provider framing and is not a token estimate. Results distinguish answers,
+exhausted budgets and invalid model output. Unexpected infrastructure failures
+propagate. `answered` records a model response, not proof of financial completion.
+No new chat endpoint or default routing change is enabled. Transaction reads,
+calculations, writes and live-model comparisons remain separate integration work.
 
 ---
 

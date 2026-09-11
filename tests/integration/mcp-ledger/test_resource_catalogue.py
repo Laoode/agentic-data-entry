@@ -368,3 +368,52 @@ async def test_agent_discovery_tools_recheck_real_ownership(catalogue_setup):
     with pytest.raises(ResourceNotFoundError):
         await owner.tools[1].ainvoke({"table_id": registered["table_id"]})
     assert owner.working_set == ()
+
+
+async def test_main_agent_discovers_and_inspects_real_catalogue(catalogue_setup):
+    """A scripted model exercises the full loop against owned catalogue records."""
+    import json
+
+    from langchain_core.messages import AIMessage
+
+    from app.services.catalogue.service import CatalogueService
+    from klaudia.core.agent.agent import MainAgent
+    from klaudia.core.agent.context import TaskContext
+
+    class DiscoveryModel:
+        """Choose inspection from actual search evidence rather than a fixture ID."""
+
+        def bind_tools(self, tools):
+            """Return this tool-capable test model."""
+            return self
+
+        async def ainvoke(self, messages, config=None):
+            """Search, inspect the returned identity, then report the observed schema."""
+            if messages[-1].type == "human":
+                name, arguments = "search_resources", {"intent": "taxi claims"}
+            elif messages[-1].name == "search_resources":
+                candidate = json.loads(messages[-1].content)["candidates"][0]
+                name, arguments = (
+                    "inspect_resource",
+                    {"table_id": candidate["table_id"]},
+                )
+            else:
+                return AIMessage(
+                    content="The claims table has Date, Employee and Amount columns."
+                )
+            return AIMessage(
+                content="",
+                tool_calls=[
+                    {"name": name, "args": arguments, "id": name, "type": "tool_call"}
+                ],
+            )
+
+    _, catalogue, workspace, sheet_id = catalogue_setup
+    registered = await catalogue.register(workspace, registration(sheet_id))
+    outcome = await MainAgent(DiscoveryModel(), CatalogueService(catalogue)).run(
+        "Find the taxi claims schema",
+        TaskContext(user_id=90201),
+    )
+    assert outcome.status == "answered"
+    assert outcome.tools_called == ("search_resources", "inspect_resource")
+    assert outcome.working_set[0].table_id == registered["table_id"]
