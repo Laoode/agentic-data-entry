@@ -1,0 +1,74 @@
+"""Allowlisted packaged procedures with stable summaries and content versions."""
+
+from dataclasses import dataclass
+from pathlib import Path
+
+from pydantic import BaseModel, ConfigDict, Field
+
+MAX_SKILL_BYTES = 8192
+
+
+@dataclass(frozen=True)
+class SkillDescription:
+    """Stable registry metadata; procedure bodies stay outside the initial prompt."""
+
+    name: str
+    version: str
+    description: str
+
+
+_SKILLS = (
+    SkillDescription(
+        "resource-discovery",
+        "1",
+        "Find tables from business intent and resolve ambiguity using evidence.",
+    ),
+    SkillDescription(
+        "schema-inspection",
+        "1",
+        "Inspect registered schemas, paginate columns and interpret freshness.",
+    ),
+)
+
+
+class LoadSkill(BaseModel):
+    """Select a packaged skill by registry name, never by an arbitrary path."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    name: str = Field(min_length=1, max_length=80)
+
+
+class SkillRegistry:
+    """Expose brief descriptions first and load only explicitly requested procedures."""
+
+    @property
+    def descriptions(self) -> tuple[SkillDescription, ...]:
+        """Return the stable list of supported procedural capabilities.
+
+        Returns:
+            Immutable names, versions and short descriptions.
+        """
+        return _SKILLS
+
+    def load(self, name: str) -> dict[str, str]:
+        """Read an allowlisted procedure from the installed package.
+
+        Args:
+            name: Exact registry key from the available descriptions.
+
+        Returns:
+            Versioned procedural text.
+
+        Raises:
+            ValueError: The name is unknown or the packaged content exceeds its budget.
+            OSError: The packaged procedure is missing or unreadable.
+        """
+        skill = next((skill for skill in _SKILLS if skill.name == name), None)
+        if skill is None:
+            raise ValueError("Unknown skill; use a name from the skill registry")
+        content = (
+            Path(__file__).with_name(f"{skill.name}.md").read_text(encoding="utf-8")
+        )
+        if len(content.encode("utf-8")) > MAX_SKILL_BYTES:
+            raise ValueError("Skill exceeds the procedural context budget")
+        return {"name": skill.name, "version": skill.version, "content": content}
