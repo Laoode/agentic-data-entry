@@ -249,9 +249,45 @@ historical hard-bench or behavior reports. Without the explicit flag, these live
 candidate tests skip before service fixtures start.
 
 This is a candidate capability suite, not a same-toolset architecture comparison.
-Shared outcome fixtures, repeated fixed-model runs, further case migration and
-production chat integration remain pending. Keep the historical isolation cases;
+Further case migration and production chat integration remain pending. Keep the historical isolation cases;
 do not rename their bound workbook into an active-resource hint.
+
+### Repeated runtime comparison
+
+The shared sum and append cases grade the same prompt, initial records, exact
+labelled answer lines and final workbook state across both runtimes. Each trial
+gets a new owner and workbook. Fixture fingerprints must match before execution;
+scope checks require that owner to have exactly one workbook before and after it.
+
+```bash
+E2E_RUNTIME_COMPARISON=1 E2E_COMPARISON_REPEATS=3 MEMORY_MODE=off \
+  MOCK_KIE=true SHEETS_BACKEND=ledger \
+  uv run pytest tests/e2e/test_runtime_comparison_e2e.py -q
+```
+
+This explicitly calls the configured live model. It requires sandbox services and
+allows one to ten repeats per runtime. Three repeats mean twelve trials across
+both scenarios. Add `-m 'not mutating'` to select only the sum scenario. Even this
+read scenario creates and deletes its own fixture records. Legacy tools, prompts,
+guardrails and sessions differ from the main agent's path, so the result is not
+an orchestration-only comparison. Reports include both thinking settings and
+runtime limits; the main agent's default deadline is shorter than the outer turn
+deadline. Provider caching and nondeterminism remain uncontrolled.
+
+Unique `outputs/comparison-<scenario>-<UTC time>-<suffix>.json` files record the
+selected schedule before service setup, then update around each trial. Runtime
+order alternates between repeats. Setup failures count as errors; interruption
+preserves interrupted/unrun entries. Failed service setup leaves the schedule
+incomplete. `scheduled_summary` retains the full per-runtime denominator;
+`observed_summary` reports pass counts and p50/nearest-rank p95 only for returned
+turns, with latency sample counts. Do not treat an incomplete run as a final score.
+At three repeats, p95 is the maximum, not a stable tail estimate.
+
+Cleanup removes only the fixture workbook, operation rows and newly created
+account/session records. Unexpected dependent records make cleanup fail instead
+of cascading deletion. Reports retain observations if cleanup fails. A forced
+process kill may leave a `running` entry and fixture records; their exact IDs
+appear in the report once recorded. Historical reports remain untouched.
 
 ## What this suite does not yet do
 

@@ -106,8 +106,9 @@ workbook state for the sum and append cases, without native-tool requirements.
 expectations. `comparison_summary` retains failed trials in pass counts and
 reports median and nearest-rank p95 for positive measured latencies, with the
 sample count. Timing covers the delegated runtime, excluding fixture scope checks.
-These helpers do not yet provide a live repeated-run command or enforce a
-complete trial schedule. No new benchmark score follows from their unit tests.
+The opt-in `test_runtime_comparison_e2e.py` runner records a complete selected
+trial schedule, including errors and unrun trials; see the sandbox README.
+No new benchmark score follows from its unit tests.
 The runtime paths use different tools, so this is not an orchestration-only test.
 
 ### KIE cache assertions
