@@ -1,6 +1,6 @@
-"""Run a dataset case in-process against the real KlaudiaOrchestrator.
+"""Run a dataset case through an explicit sandbox runtime adapter.
 
-Each turn is one orchestrator.process() call. Turns in a case share a session
+Legacy turns use orchestrator.process(). Turns in a legacy case share a session
 (created on the first turn, reused after). The MCP spy captures granular tool
 calls per turn so `mcp_tools_*` assertions can be evaluated — something the HTTP
 layer cannot see. Cleanup prompts run best-effort in a finally block.
@@ -9,16 +9,20 @@ layer cannot see. Cleanup prompts run best-effort in a finally block.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 from pathlib import Path
+from collections.abc import Awaitable, Callable
 
 from app.models.attachment import FileAttachment
 from app.models.chat import KlaudiaMessage
+from klaudia.core.agent.agent import AgentRunCancelled
 from tests.e2e.checks import ResponseView, evaluate
 from tests.e2e.loader import attachment_bytes
 from tests.e2e.report import TurnRecord
 from tests.e2e.schema import Case, Turn
+from tests.e2e.sut import LegacySUT, SystemUnderTest, TurnRequest
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +114,9 @@ async def run_case_inprocess(
     sheet_guard=None,
     container=None,
     spreadsheet_ids: dict[str, str] | None = None,
+    *,
+    sut: SystemUnderTest | None = None,
+    observe_state: Callable[[], Awaitable[dict]] | None = None,
 ) -> list[TurnRecord]:
     """Execute every turn of `case`, returning a TurnRecord per turn.
 
@@ -120,10 +127,36 @@ async def run_case_inprocess(
     read/routing cases.
     spreadsheet_ids: logical name -> real spreadsheet id, for cases whose turns
     set `spreadsheet`. An unmapped name is a dataset error and raises.
+    sut: Explicit adapter; omitted selects the existing legacy orchestrator.
+    observe_state: Optional fixture database probe, never passed to the model.
+    Unsupported contracts return failed records without executing the case.
     Behavioral mismatches do NOT raise — they are recorded in the TurnRecord.
-    Only an exception during process() is captured as a transport error.
+    Runtime and state-observation failures retain a failed report record.
     """
     records: list[TurnRecord] = []
+    runtime = sut if sut is not None else LegacySUT(orchestrator, (spy, extraction_spy))
+    unsupported = runtime.unsupported(case)
+    if unsupported:
+        for index, turn in enumerate(case.turns):
+            view = ResponseView(
+                content="",
+                tools_used=[],
+                latency_ms=0,
+                runtime=runtime.runtime,
+                unsupported=unsupported,
+            )
+            records.append(
+                TurnRecord(
+                    case.id,
+                    case.category,
+                    case.title,
+                    index,
+                    turn.user,
+                    view,
+                    evaluate(turn.expect, view),
+                )
+            )
+        return records
     session_id: int | None = None
     current_user = TEST_USER_ID
 
@@ -146,37 +179,16 @@ async def run_case_inprocess(
             messages = _build_message(turn)
             scope = _resolve_spreadsheet(turn, spreadsheet_ids, case)
             try:
-                with spy.capture() as calls, extraction_spy.capture() as extractions:
-                    resp = await asyncio.wait_for(
-                        orchestrator.process(
-                            messages=messages,
-                            session_id=session_id,
-                            user_id=turn_user,
-                            user_name=TEST_USER_NAME,
-                            spreadsheet_id=scope,
-                        ),
-                        timeout=TURN_TIMEOUT_S,
-                    )
-                session_id = resp.session_id
-                # Aggregate cache result across the turn's attachments; None when
-                # no extraction ran (no attachment this turn).
-                cache_hits = (
-                    sum(e["cache_hits"] for e in extractions) if extractions else None
+                view = await asyncio.wait_for(
+                    runtime.run(
+                        TurnRequest(
+                            messages, turn_user, session_id, scope, TEST_USER_NAME
+                        )
+                    ),
+                    timeout=TURN_TIMEOUT_S,
                 )
-                cache_misses = (
-                    sum(e["cache_misses"] for e in extractions) if extractions else None
-                )
-                view = ResponseView(
-                    content=resp.message.content,
-                    tools_used=list(resp.tools_used),
-                    latency_ms=resp.processing_time_ms,
-                    session_id=resp.session_id,
-                    mcp_calls=list(calls),
-                    cache_hits=cache_hits,
-                    cache_misses=cache_misses,
-                    pending_approvals=list(resp.pending_approvals),
-                )
-            except asyncio.TimeoutError:
+                session_id = view.session_id
+            except asyncio.TimeoutError as exc:
                 logger.error(
                     "case %s turn %d timed out after %.0fs",
                     case.id,
@@ -189,7 +201,13 @@ async def run_case_inprocess(
                     latency_ms=int(TURN_TIMEOUT_S * 1000),
                     session_id=session_id,
                     error=f"timeout after {TURN_TIMEOUT_S:.0f}s (agent hung or looping)",
+                    runtime=runtime.runtime,
                 )
+                if isinstance(exc.__cause__, AgentRunCancelled):
+                    outcome = exc.__cause__.outcome
+                    view.operation_references = list(outcome.operation_references)
+                    view.operation_receipts = list(outcome.operation_receipts)
+                    view.model_steps = outcome.model_steps
             except Exception as exc:  # transport / pipeline failure
                 logger.exception("case %s turn %d crashed", case.id, idx)
                 view = ResponseView(
@@ -198,8 +216,25 @@ async def run_case_inprocess(
                     latency_ms=0,
                     session_id=session_id,
                     error=f"{type(exc).__name__}: {exc}",
+                    runtime=runtime.runtime,
                 )
 
+            if observe_state is not None:
+                try:
+                    observed = await asyncio.wait_for(
+                        observe_state(), timeout=TURN_TIMEOUT_S
+                    )
+                    json.dumps(observed, allow_nan=False)
+                    view.ledger_state = observed
+                except Exception as exc:
+                    observation_error = (
+                        f"state observation: {type(exc).__name__}: {exc}"
+                    )
+                    view.error = (
+                        f"{view.error}; {observation_error}"
+                        if view.error
+                        else observation_error
+                    )
             result = evaluate(turn.expect, view)
             records.append(
                 TurnRecord(

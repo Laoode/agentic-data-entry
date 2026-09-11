@@ -15,6 +15,7 @@ import re
 from dataclasses import dataclass, field
 
 from tests.e2e.schema import Expect
+from tests.e2e.capability_checks import check_capabilities
 
 # ── Semantic helpers (kept aligned with the agent's actual rejection/clarify
 #    vocabulary in app/services/guardrails/prompts.py and the worker prompts) ──
@@ -101,6 +102,14 @@ class ResponseView:
     # Irreversible operations the destructive guard parked for user approval.
     pending_approvals: list[dict] = field(default_factory=list)
     error: str | None = None
+    runtime: str = "legacy"
+    unsupported: str | None = None
+    capabilities_attempted: list[str] = field(default_factory=list)
+    calculations: list[dict] = field(default_factory=list)
+    operation_receipts: list[dict] = field(default_factory=list)
+    operation_references: list[str] = field(default_factory=list)
+    ledger_state: dict | None = None
+    model_steps: int | None = None
 
     @property
     def mcp_tool_names(self) -> list[str]:
@@ -317,6 +326,10 @@ def evaluate(expect: Expect, view: ResponseView) -> CheckResult:
     reasons: list[str] = []
     detail: dict = {}
 
+    if view.unsupported:
+        return CheckResult(
+            False, [f"unsupported: {view.unsupported}"], {"unsupported": True}
+        )
     if view.error:
         return CheckResult(
             passed=False, reasons=[f"transport/error: {view.error}"], detail={}
@@ -326,6 +339,13 @@ def evaluate(expect: Expect, view: ResponseView) -> CheckResult:
     content_ok, c_detail = _content_ok(expect, view, reasons)
     mcp_ok, m_detail = _mcp_ok(expect, view, reasons)
     cache_ok, cache_detail = _cache_ok(expect, view, reasons)
+    capability_detail = check_capabilities(expect, view)
+    reasons.extend(
+        f"{name}: required evidence missing or incorrect"
+        for name, passed in capability_detail.items()
+        if not passed
+    )
+    detail.update(capability_detail)
     detail.update(c_detail)
     detail.update(m_detail)
     detail.update(cache_detail)
@@ -338,7 +358,13 @@ def evaluate(expect: Expect, view: ResponseView) -> CheckResult:
             reasons.append(msg)
         # soft budgets are reported via latency_warn, not as a failure reason
 
-    passed = route_ok and content_ok and mcp_ok and cache_ok
+    passed = (
+        route_ok
+        and content_ok
+        and mcp_ok
+        and cache_ok
+        and all(capability_detail.values())
+    )
     if latency_warn and expect.latency_hard:
         passed = False
 

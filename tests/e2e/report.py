@@ -46,6 +46,14 @@ class TurnRecord:
             "mcp_tools": self.view.mcp_tool_names,
             "session_id": self.view.session_id,
             "error": self.view.error,
+            "runtime": self.view.runtime,
+            "unsupported": self.view.unsupported,
+            "capabilities_attempted": self.view.capabilities_attempted,
+            "calculations": self.view.calculations,
+            "operation_receipts": self.view.operation_receipts,
+            "operation_references": self.view.operation_references,
+            "model_steps": self.view.model_steps,
+            "ledger_state": self.view.ledger_state,
             "response_snippet": (self.view.content or "")[:240],
         }
 
@@ -53,6 +61,7 @@ class TurnRecord:
 @dataclass
 class Report:
     records: list[TurnRecord] = field(default_factory=list)
+    metadata: dict = field(default_factory=dict)
 
     def add(self, rec: TurnRecord) -> None:
         self.records.append(rec)
@@ -71,6 +80,7 @@ class Report:
         lat = [r.view.latency_ms for r in self.records if r.view.latency_ms]
         return {
             "total_turns": total,
+            "unsupported": sum(bool(r.view.unsupported) for r in self.records),
             "passed": passed,
             "failed": total - passed,
             "pass_rate": round(passed / total, 4) if total else 0.0,
@@ -130,6 +140,7 @@ class Report:
 
     def to_json(self) -> dict:
         return {
+            "metadata": self.metadata,
             "summary": self.summary(),
             "by_category": {
                 cat: {

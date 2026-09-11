@@ -36,6 +36,11 @@ no Python changes needed. The loader validates every case against `schema.py`
 ## Expect
 
 All fields optional. Empty list / null = "no assertion of this kind".
+Unknown case and expectation keys fail validation, so a typo cannot disable a check.
+
+Cases may declare `resource_scope: owned_workbooks` for the optional main-agent
+adapter. The default remains `bound_workbook` for historical chat isolation cases.
+Adapters reject unsupported contracts before execution and retain failed report rows.
 
 | Field | Layer | Meaning |
 |-------|-------|---------|
@@ -56,6 +61,33 @@ All fields optional. Empty list / null = "no assertion of this kind".
 | `cache_misses` | in-process only | KIE pages freshly extracted |
 | `latency_ms_max` | both | soft budget; breach is reported (warn), not failed |
 | `latency_hard` | both | make `latency_ms_max` a hard failure |
+| `capabilities_all` | observed adapters | Require all named capability attempts; this alone does not prove completion |
+| `metric_evidence` | native calculation observer | Match table ID, column, operation, group keys and exact signed value |
+| `committed_operations_min` | receipt observer | Minimum distinct committed operation IDs; replays count once |
+| `ledger_state` | fixture database probe | Exact full snapshot keyed by fixture sheet title, including detection of extra sheets |
+
+Capability names are `read_records`, `discover_resources`, `inspect_resource`,
+`calculate`, `append_records` and `search_documents`. A name is not a claim that
+every adapter supports it. Missing required observations fail rather than skip.
+Native metric and receipt checks do not infer evidence from legacy worker names.
+Metric checks grade tool evidence separately from final-response content checks.
+
+For generated cases, construct expectations from fixture truth and registered IDs:
+
+```yaml
+expect:
+  capabilities_all: [calculate]
+  metric_evidence:
+    - table_id: tbl_fixture_id
+      column: Amount
+      operation: sum
+      value: "-20"
+      group: {}
+```
+
+The runner's `observe_state` callback reads the fixture database after the turn.
+It never enters the model context. A requested state check without that observer
+fails. State-read failures preserve the report row and any observed receipts.
 
 ### KIE cache assertions
 

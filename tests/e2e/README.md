@@ -214,6 +214,45 @@ a silent fallback would score a leak case against the wrong workspace).
   tables. With the sandbox it now hits a different database, but only while the
   sandbox is actually on.
 
+## Candidate runtime evaluation
+
+`sut.py` defines `LegacySUT` and `MainAgentSUT`. The shared in-process runner
+defaults to the legacy adapter, preserving its sessions, extraction and bound
+workbook. An explicit main-agent adapter runs supported single-turn text cases
+with `resource_scope: owned_workbooks`. It rejects legacy routing/MCP assertions,
+bound-workbook isolation, attachments, cache expectations and multi-turn sessions
+as unsupported. These cases remain non-passing report rows, not successful skips.
+
+New expectations can require capability attempts, exact labelled calculation
+evidence, distinct committed receipts and full fixture workbook state. Attempts
+are not proof of execution. Calculation checks match table, column, operation,
+group keys and signed decimal value; they do not validate every claim in the
+final prose. Write checks use receipts and database state to detect duplicates,
+wrong destinations and unexpected sheets. Missing or malformed required evidence
+fails. State-read errors and runner timeouts retain observed write receipts.
+
+The first candidate cases reuse seeded financial records: a 1,000-row Amount sum
+and a checked append. `tests/integration/mcp-ledger/test_capability_runner.py`
+exercises the same runner with a scripted model and real Postgres. To measure the
+configured live model explicitly:
+
+```bash
+E2E_MAIN_AGENT_BENCH=1 MOCK_KIE=true SHEETS_BACKEND=ledger \
+  uv run pytest tests/e2e/test_capability_e2e.py -q
+```
+
+This suite requires the isolated sandbox and fails on unmet expectations. The
+append case carries the `mutating` marker. Each run writes a unique
+`outputs/capability-main-<UTC time>-<suffix>.json` file with model settings, source
+revision, fixture seed, runtime, observations and state. It does not overwrite the
+historical hard-bench or behavior reports. Without the explicit flag, these live
+candidate tests skip before service fixtures start.
+
+This is a candidate capability suite, not a same-toolset architecture comparison.
+Shared outcome fixtures, repeated fixed-model runs, further case migration and
+production chat integration remain pending. Keep the historical isolation cases;
+do not rename their bound workbook into an active-resource hint.
+
 ## What this suite does not yet do
 
 - **No LLM judge.** Everything is exact-match, so qualitative properties
@@ -221,5 +260,5 @@ a silent fallback would score a leak case against the wrong workspace).
   are not graded at all. Design in `docs/PLAN.md` Part 3, section 2.
 - **No tiering.** Cases are flat; there is no difficulty ladder separating a
   one-sheet lookup from a multi-entity consolidation.
-- **Coupled to agent names.** Cases assert `route: data_entry_team` directly, so
-  renaming or removing an agent breaks the dataset rather than just the adapter.
+- **Historical cases still name agents.** Their existing routing assertions remain
+  legacy-specific. New capability cases avoid those names; full migration remains.

@@ -253,6 +253,13 @@ many rows drifts, and gets worse with volume. Long compound workflows drop tool
 calls. Given a journal that does not balance, it has reported one that does. Each
 of these has an open engineering lead. See `tests/e2e/README.md`.
 
+The sandbox now also has runtime adapters and an opt-in candidate suite for the
+main agent's labelled 1,000-row sum and checked append. It grades native tool
+evidence and full fixture workbook state, keeps unsupported contracts visible,
+and writes separate reports. Scripted Postgres tests cover this path; the saved
+scores above remain historical. See the candidate evaluation instructions in
+`tests/e2e/README.md` before running a live model comparison.
+
 ---
 
 ## 📄 Document intelligence

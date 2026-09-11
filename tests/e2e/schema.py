@@ -16,7 +16,31 @@ sub-agent names (`sql_agent`, `data_entry_team`), not the granular MCP tools:
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, model_validator
+from decimal import Decimal
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
+
+Capability = Literal[
+    "read_records",
+    "discover_resources",
+    "inspect_resource",
+    "calculate",
+    "append_records",
+    "search_documents",
+]
+
+
+class MetricExpectation(BaseModel):
+    """Exact labelled calculation evidence, distinct from final-answer grading."""
+
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    table_id: str
+    column: str
+    operation: Literal["sum", "count"]
+    value: Decimal
+    group: dict[str, JsonValue] = Field(default_factory=dict)
+
 
 # Sub-agent node names that can appear in KlaudiaResponse.tools_used.
 ROUTE_AGENTS = ("data_entry_team", "sql_agent")
@@ -32,6 +56,13 @@ class Expect(BaseModel):
     phrasing differences do not create false negatives — we are measuring
     behavior, not exact strings.
     """
+
+    model_config = ConfigDict(extra="forbid")
+
+    capabilities_all: list[Capability] = Field(default_factory=list)
+    metric_evidence: list[MetricExpectation] = Field(default_factory=list)
+    committed_operations_min: int | None = Field(default=None, ge=1)
+    ledger_state: dict[str, list[list[JsonValue]]] = Field(default_factory=dict)
 
     # ── Routing (sub-agent level, assertable over HTTP) ──────────────────────
     # "none"           → tools_used must be empty (FINISH / answered from context)
@@ -139,10 +170,13 @@ class Turn(BaseModel):
 class Case(BaseModel):
     """A full scenario. Turns share one session (created on the first turn)."""
 
+    model_config = ConfigDict(extra="forbid")
+
     id: str
     category: str
     title: str
     tags: list[str] = Field(default_factory=list)
+    resource_scope: Literal["bound_workbook", "owned_workbooks"] = "bound_workbook"
     # True when the case mutates the real Google Sheet (write/sheet ops). Lets
     # callers deselect destructive cases without running them.
     mutating: bool = False
