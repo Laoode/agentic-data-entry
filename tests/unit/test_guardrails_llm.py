@@ -143,21 +143,15 @@ async def test_deepseek_leaves_thinking_untouched_when_not_disabled():
         api_key="sk-test",
         disable_thinking=False,
     )
-    await llm.chat(
-        messages=[{"role": "user", "content": "hi"}], model="deepseek-flash"
-    )
+    await llm.chat(messages=[{"role": "user", "content": "hi"}], model="deepseek-flash")
     kwargs = _FakeAsyncOpenAI.instances[0]._completions.last_kwargs
     assert kwargs["extra_body"] is None
 
 
 async def test_deepseek_reuses_single_client_across_calls():
     llm = DeepSeekGuardrailLLM("https://api.deepseek.com/v1", "sk-test")
-    await llm.chat(
-        messages=[{"role": "user", "content": "a"}], model="deepseek-flash"
-    )
-    await llm.chat(
-        messages=[{"role": "user", "content": "b"}], model="deepseek-flash"
-    )
+    await llm.chat(messages=[{"role": "user", "content": "a"}], model="deepseek-flash")
+    await llm.chat(messages=[{"role": "user", "content": "b"}], model="deepseek-flash")
     assert len(_FakeAsyncOpenAI.instances) == 1
 
 
