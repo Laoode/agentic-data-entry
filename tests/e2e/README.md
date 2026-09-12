@@ -254,6 +254,11 @@ do not rename their bound workbook into an active-resource hint.
 
 ### Repeated runtime comparison
 
+The [first live comparison](outputs/comparison-2026-09-12.md), at revision
+`152bc5e`, measured main at 3/3 sums and 2/3 appends; legacy passed neither strict
+case. One main append changed an explicit merchant value. Redis and MinIO were
+unavailable during this text-only run. This is not a production cutover gate pass.
+
 The shared sum and append cases grade the same prompt, initial records, exact
 labelled answer lines and final workbook state across both runtimes. Each trial
 gets a new owner and workbook. Fixture fingerprints must match before execution;
