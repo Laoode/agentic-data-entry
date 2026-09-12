@@ -241,6 +241,15 @@ legacy views and outer cancellations where these diagnostics are unavailable;
 an empty list then does not prove no attempt occurred. Normal main-agent outcomes
 include loaded skill versions. These fields do not change the grading checks.
 
+`tests/integration/mcp-ledger/test_append_field_fidelity.py` adds 14 offline
+scripted cases for punctuation, whitespace, Unicode forms, leading-zero category
+codes, signed fractions and numeric/string/boolean/null distinctions. It compares
+tool arguments, persisted proposals and final cells, then replays the original
+operation reference. Six cases preserve the requested values; eight deliberately
+change them and must fail the unchanged exact-state grader even after commit.
+These test the deterministic path and grader, not live-model interpretation or
+natural-language conversion. They do not add scores to the live comparison.
+
 The first candidate cases reuse seeded financial records: a 1,000-row Amount sum
 and a checked append. `tests/integration/mcp-ledger/test_capability_runner.py`
 exercises the same runner with a scripted model and real Postgres. To measure the
