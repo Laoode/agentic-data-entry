@@ -22,3 +22,14 @@ def test_packaged_procedures_match_registry_versions():
         assert loaded["version"] == description.version
         assert loaded["content"].startswith("Procedure:")
         assert "Procedure:" not in description.description
+
+
+def test_append_procedure_versions_literal_value_preservation():
+    """The packaged append contract includes complete-value and type checks."""
+    procedure = SkillRegistry().load("table-append")
+    assert procedure["version"] == "2"
+    assert "Do not shorten, paraphrase, translate or normalise" in procedure["content"]
+    assert "Compare every proposed field" in procedure["content"]
+    assert (
+        "not proof that the proposal matches the user's request" in procedure["content"]
+    )

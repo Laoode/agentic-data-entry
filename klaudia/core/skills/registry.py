@@ -20,7 +20,7 @@ class SkillDescription:
 _SKILLS = (
     SkillDescription(
         "table-append",
-        "1",
+        "2",
         "Prepare and execute complete literal records when optional append tools are enabled; retry stored references and report committed receipts.",
     ),
     SkillDescription(

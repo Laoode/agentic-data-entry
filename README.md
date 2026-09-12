@@ -171,6 +171,12 @@ state. The stable system prefix lists skill summaries; `load_skill` retrieves
 allowlisted, versioned discovery, schema-inspection, calculation and append procedures on demand.
 Caller-supplied `RunnableConfig` callbacks flow to model and tool calls.
 
+The append procedure now instructs the agent to preserve complete supplied text
+values, check proposed fields against the request, retain numeric types and
+disclose any mismatch found after commit. This is procedural guidance, not a
+backend check of natural-language intent. Its effect on live-model fidelity still
+requires measurement against the saved comparison baseline.
+
 Default limits are 12 model steps, 24 tool calls, 131,072 bytes of serialized
 messages and 120 seconds per run. The byte limit excludes tool schemas and
 provider framing and is not a token estimate. Results distinguish answers,
