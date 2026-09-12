@@ -174,8 +174,10 @@ Caller-supplied `RunnableConfig` callbacks flow to model and tool calls.
 The append procedure now instructs the agent to preserve complete supplied text
 values, check proposed fields against the request, retain numeric types and
 disclose any mismatch found after commit. This is procedural guidance, not a
-backend check of natural-language intent. Its effect on live-model fidelity still
-requires measurement against the saved comparison baseline.
+backend check of natural-language intent. A small live rerun passed three of three
+exact append trials with v2 loaded, up from two of three in the first sample.
+Broader fidelity and full-service validation remain pending; see the
+[comparison report](tests/e2e/outputs/comparison-2026-09-12-append-v2.md).
 
 Default limits are 12 model steps, 24 tool calls, 131,072 bytes of serialized
 messages and 120 seconds per run. The byte limit excludes tool schemas and

@@ -269,6 +269,11 @@ The [first live comparison](outputs/comparison-2026-09-12.md), at revision
 case. One main append changed an explicit merchant value. Redis and MinIO were
 unavailable during this text-only run. This is not a production cutover gate pass.
 
+The [append-v2 rerun](outputs/comparison-2026-09-12-append-v2.md), at `204c51f`,
+recorded main at 3/3 sums and 3/3 appends. All main append trials loaded v2 and
+preserved the exact proposed values. Legacy remained at 0/3 for both strict cases.
+Three trials do not establish reliability; Redis and MinIO remained unavailable.
+
 The shared sum and append cases grade the same prompt, initial records, exact
 labelled answer lines and final workbook state across both runtimes. Each trial
 gets a new owner and workbook. Fixture fingerprints must match before execution;
