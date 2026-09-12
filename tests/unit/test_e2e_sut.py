@@ -9,6 +9,120 @@ from tests.e2e.schema import Case, Turn, Expect
 from tests.unit.test_main_agent import ScriptedModel, call
 
 
+async def test_main_adapter_records_submitted_append_values_without_repairing_them():
+    """Reports distinguish the user's request from a shortened model proposal."""
+    from app.models.chat import KlaudiaMessage
+    from tests.e2e.sut import MainAgentSUT, TurnRequest
+    from tests.unit.test_agent_discovery_tools import descriptor
+    from klaudia.core.skills.registry import SkillRegistry
+
+    service = AsyncMock()
+    service.inspect.return_value = descriptor()
+    operations = AsyncMock()
+    operations.prepare.return_value = {
+        "operation_ref": "prepared:one",
+        "status": "prepared",
+    }
+    submitted = {
+        "table_id": "tbl_claims",
+        "records": [{"Merchant": "Taxi", "Amount": 185000}],
+    }
+    model = ScriptedModel(
+        [
+            call("load_skill", {"name": "table-append"}, "procedure"),
+            call("inspect_resource", {"table_id": "tbl_claims"}),
+            call("prepare_table_append", submitted, "prepare"),
+            AIMessage(content="Prepared"),
+        ]
+    )
+    adapter = MainAgentSUT(MainAgent(model, service, operations=operations))
+    view = await adapter.run(
+        TurnRequest(
+            [
+                KlaudiaMessage(
+                    role="user", content="Append Merchant Taxi vendor, Amount 185000"
+                )
+            ],
+            42,
+        )
+    )
+    assert view.append_attempts == [
+        {"arguments": submitted, "operation_ref": "prepared:one"}
+    ]
+    assert view.operation_receipts == []
+    assert view.loaded_skills == {
+        "table-append": SkillRegistry().load("table-append")["version"]
+    }
+    assert view.append_attempts_observable
+    assert operations.prepare.await_args.args[1].records == submitted["records"]
+
+
+def test_append_observer_bounds_input_and_exposes_omissions():
+    """Oversized diagnostic input cannot grow reports without a visible omission."""
+    from uuid import uuid4
+    from tests.e2e.sut import _FinancialToolObserver
+
+    observer = _FinancialToolObserver()
+    observer.on_tool_start(
+        {"name": "prepare_table_append"},
+        "",
+        run_id=uuid4(),
+        inputs={"records": [{"Merchant": "x" * 70000}]},
+    )
+    assert observer.append_attempts == []
+    assert observer.append_attempts_omitted == 1
+
+
+def test_append_observer_counts_missing_invalid_and_excess_attempts():
+    """Diagnostic limits and unencodable input remain visible without tool failure."""
+    from uuid import uuid4
+    from tests.e2e.sut import MAX_APPEND_ATTEMPTS, _FinancialToolObserver
+
+    observer = _FinancialToolObserver()
+    for arguments in (None, {"Amount": float("nan")}):
+        observer.on_tool_start(
+            {"name": "prepare_table_append"}, "", run_id=uuid4(), inputs=arguments
+        )
+    for _ in range(MAX_APPEND_ATTEMPTS + 1):
+        run_id = uuid4()
+        observer.on_tool_start(
+            {"name": "prepare_table_append"}, "", run_id=run_id, inputs={"records": []}
+        )
+        observer.on_tool_end({"operation_ref": "x" * 129}, run_id=run_id)
+    assert len(observer.append_attempts) == MAX_APPEND_ATTEMPTS
+    assert observer.append_attempts_omitted == 3
+    assert all(attempt["operation_ref"] is None for attempt in observer.append_attempts)
+
+
+def test_append_observation_is_a_snapshot_and_tool_errors_do_not_certify_preparation():
+    """Failed tool calls retain their original inputs without a stored reference."""
+    from uuid import uuid4
+    from tests.e2e.sut import _FinancialToolObserver
+    from tests.e2e.report import Report, TurnRecord
+    from tests.e2e.checks import ResponseView, evaluate
+
+    observer = _FinancialToolObserver()
+    run_id = uuid4()
+    arguments = {"records": [{"Merchant": "Taxi vendor"}]}
+    observer.on_tool_start(
+        {"name": "prepare_table_append"}, "", run_id=run_id, inputs=arguments
+    )
+    arguments["records"][0]["Merchant"] = "Changed"
+    observer.on_tool_error(ValueError("invalid records"), run_id=run_id)
+    assert observer.append_attempts == [
+        {"arguments": {"records": [{"Merchant": "Taxi vendor"}]}, "operation_ref": None}
+    ]
+    view = ResponseView("", [], 1, append_attempts=observer.append_attempts)
+    report = Report(
+        [
+            TurnRecord(
+                "append", "write", "Append", 0, "Append", view, evaluate(Expect(), view)
+            )
+        ]
+    )
+    assert report.to_json()["turns"][0]["append_attempts"] == observer.append_attempts
+
+
 async def test_main_adapter_observes_calculation_evidence():
     """The adapter captures tool results without exposing expected answers to the model."""
     from tests.e2e.sut import MainAgentSUT, TurnRequest
@@ -139,6 +253,7 @@ async def test_outer_timeout_retains_committed_operation_evidence(monkeypatch):
     assert not records[0].result.passed
     assert records[0].view.operation_receipts == [receipt]
     assert records[0].view.operation_references == ["prepared:old"]
+    assert not records[0].view.append_attempts_observable
 
 
 async def test_state_observation_failure_retains_receipts_and_report_row():

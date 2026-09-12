@@ -106,10 +106,14 @@ class ResponseView:
     unsupported: str | None = None
     capabilities_attempted: list[str] = field(default_factory=list)
     calculations: list[dict] = field(default_factory=list)
+    append_attempts: list[dict] = field(default_factory=list)
+    append_attempts_omitted: int = 0
+    append_attempts_observable: bool = False
     operation_receipts: list[dict] = field(default_factory=list)
     operation_references: list[str] = field(default_factory=list)
     ledger_state: dict | None = None
     model_steps: int | None = None
+    loaded_skills: dict[str, str] = field(default_factory=dict)
 
     @property
     def mcp_tool_names(self) -> list[str]:

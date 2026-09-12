@@ -1,6 +1,7 @@
 """Sandbox runtime adapters with explicit scope and observation contracts."""
 
 from dataclasses import dataclass
+import json
 from time import perf_counter
 from typing import Any, Protocol
 from uuid import UUID
@@ -24,6 +25,9 @@ _CAPABILITY_TOOLS = {
         "tool_append_rows_checked",
     },
 }
+
+MAX_APPEND_INPUT_BYTES = 65536
+MAX_APPEND_ATTEMPTS = 24
 
 
 def attempted_capabilities(names: list[str]) -> list[str]:
@@ -149,16 +153,28 @@ class LegacySUT:
         )
 
 
-class _CalculationObserver(BaseCallbackHandler):
-    """Capture calculation tool output without changing the agent or its prompt."""
+class _FinancialToolObserver(BaseCallbackHandler):
+    """Capture financial tool evidence without changing the agent or its prompt."""
+
+    run_inline = True
 
     def __init__(self) -> None:
         """Create fresh callback state for one turn."""
         self._names: dict[UUID, str] = {}
         self.calculations: list[dict] = []
+        self.append_attempts: list[dict] = []
+        self.append_attempts_omitted = 0
+        self._append_runs: dict[UUID, dict] = {}
+        self._append_input_bytes = 0
 
     def on_tool_start(
-        self, serialized: dict, input_str: str, *, run_id: UUID, **kwargs: Any
+        self,
+        serialized: dict,
+        input_str: str,
+        *,
+        run_id: UUID,
+        inputs: dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> None:
         """Record the tool name for its result callback.
 
@@ -166,9 +182,28 @@ class _CalculationObserver(BaseCallbackHandler):
             serialized: Tool metadata from LangChain.
             input_str: Tool input text, unused by the grader.
             run_id: Callback identity for this invocation.
+            inputs: Structured model arguments before tool validation.
             kwargs: Additional callback context.
         """
         self._names[run_id] = serialized.get("name", "")
+        if self._names[run_id] != "prepare_table_append":
+            return
+        if inputs is None or len(self.append_attempts) >= MAX_APPEND_ATTEMPTS:
+            self.append_attempts_omitted += 1
+            return
+        try:
+            encoded = json.dumps(inputs, ensure_ascii=False, allow_nan=False)
+        except (TypeError, ValueError):
+            self.append_attempts_omitted += 1
+            return
+        input_bytes = len(encoded.encode("utf-8"))
+        if self._append_input_bytes + input_bytes > MAX_APPEND_INPUT_BYTES:
+            self.append_attempts_omitted += 1
+            return
+        attempt = {"arguments": json.loads(encoded), "operation_ref": None}
+        self.append_attempts.append(attempt)
+        self._append_runs[run_id] = attempt
+        self._append_input_bytes += input_bytes
 
     def on_tool_end(self, output: Any, *, run_id: UUID, **kwargs: Any) -> None:
         """Retain successful native calculation output at the callback boundary.
@@ -178,13 +213,32 @@ class _CalculationObserver(BaseCallbackHandler):
             run_id: Matching invocation identity.
             kwargs: Additional callback context.
         """
+        name = self._names.pop(run_id, None)
+        attempt = self._append_runs.pop(run_id, None)
+        if attempt is not None and isinstance(output, dict):
+            reference = output.get("operation_ref")
+            if isinstance(reference, str) and len(reference) <= 128:
+                attempt["operation_ref"] = reference
         if (
-            self._names.pop(run_id, None) == "calculate"
+            name == "calculate"
             and isinstance(output, dict)
             and "source" in output
             and "groups" in output
         ):
             self.calculations.append(output)
+
+    def on_tool_error(
+        self, error: BaseException, *, run_id: UUID, **kwargs: Any
+    ) -> None:
+        """Retain attempted arguments without inventing a returned reference.
+
+        Args:
+            error: Tool failure; exception text is not stored in diagnostics.
+            run_id: Failed invocation identity.
+            kwargs: Additional callback context.
+        """
+        self._names.pop(run_id, None)
+        self._append_runs.pop(run_id, None)
 
 
 class MainAgentSUT:
@@ -252,7 +306,7 @@ class MainAgentSUT:
             raise ValueError(
                 "Main agent adapter requires one text turn without session history"
             )
-        observer = _CalculationObserver()
+        observer = _FinancialToolObserver()
         started = perf_counter()
         error = None
         try:
@@ -276,8 +330,12 @@ class MainAgentSUT:
             error=error,
             capabilities_attempted=attempted_capabilities(list(outcome.tools_called)),
             calculations=observer.calculations,
+            append_attempts=observer.append_attempts,
+            append_attempts_omitted=observer.append_attempts_omitted,
+            append_attempts_observable=True,
             operation_receipts=list(outcome.operation_receipts),
             operation_references=list(outcome.operation_references),
             model_steps=outcome.model_steps,
+            loaded_skills=dict(outcome.loaded_skills),
             cache_observable=False,
         )

@@ -231,6 +231,16 @@ final prose. Write checks use receipts and database state to detect duplicates,
 wrong destinations and unexpected sheets. Missing or malformed required evidence
 fails. State-read errors and runner timeouts retain observed write receipts.
 
+Main-agent reports also retain `append_attempts`: snapshots of submitted
+`prepare_table_append` arguments and any returned operation reference. These are
+attempts, not proof of preparation, commitment or intent fidelity. Diagnostics
+keep at most 24 attempts and 65,536 UTF-8 bytes of JSON arguments per run, plus
+bounded references and report metadata. Missing, oversized or non-JSON inputs
+increment `append_attempts_omitted`. `append_attempts_observable` is false for
+legacy views and outer cancellations where these diagnostics are unavailable;
+an empty list then does not prove no attempt occurred. Normal main-agent outcomes
+include loaded skill versions. These fields do not change the grading checks.
+
 The first candidate cases reuse seeded financial records: a 1,000-row Amount sum
 and a checked append. `tests/integration/mcp-ledger/test_capability_runner.py`
 exercises the same runner with a scripted model and real Postgres. To measure the

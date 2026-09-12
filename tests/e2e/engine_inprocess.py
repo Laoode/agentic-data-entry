@@ -208,6 +208,7 @@ async def run_case_inprocess(
                     view.operation_references = list(outcome.operation_references)
                     view.operation_receipts = list(outcome.operation_receipts)
                     view.model_steps = outcome.model_steps
+                    view.loaded_skills = dict(outcome.loaded_skills)
             except Exception as exc:  # transport / pipeline failure
                 logger.exception("case %s turn %d crashed", case.id, idx)
                 view = ResponseView(

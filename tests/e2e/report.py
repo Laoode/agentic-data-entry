@@ -50,9 +50,13 @@ class TurnRecord:
             "unsupported": self.view.unsupported,
             "capabilities_attempted": self.view.capabilities_attempted,
             "calculations": self.view.calculations,
+            "append_attempts": self.view.append_attempts,
+            "append_attempts_omitted": self.view.append_attempts_omitted,
+            "append_attempts_observable": self.view.append_attempts_observable,
             "operation_receipts": self.view.operation_receipts,
             "operation_references": self.view.operation_references,
             "model_steps": self.view.model_steps,
+            "loaded_skills": self.view.loaded_skills,
             "ledger_state": self.view.ledger_state,
             "response_snippet": (self.view.content or "")[:240],
         }

@@ -21,13 +21,15 @@ from tests.unit.test_main_agent import call
 class CapabilityModel:
     """Follow tool evidence without access to expected totals or resource IDs."""
 
-    def __init__(self, scenario: str) -> None:
+    def __init__(self, scenario: str, merchant: str = "Taxi vendor") -> None:
         """Select the financial operation to exercise.
 
         Args:
             scenario: Sum or append behavior, with answers read only from tools.
+            merchant: Literal merchant submitted by the scripted model.
         """
         self.scenario = scenario
+        self.merchant = merchant
 
     def bind_tools(self, tools):
         """Accept the runtime's declared tool set."""
@@ -71,7 +73,7 @@ class CapabilityModel:
                     "records": [
                         {
                             "Date": "2026-06-30",
-                            "Merchant": "Taxi vendor",
+                            "Merchant": self.merchant,
                             "Category": "Transport",
                             "Amount": 185000,
                         }
@@ -136,5 +138,43 @@ async def test_comparison_fixtures_match_across_distinct_owners(scenario):
                 assert expected.committed_operations_min is None
                 second.case.turns[0].user += " Changed request."
                 assert await fixture_digest(first) != await fixture_digest(second)
+    finally:
+        await store.close()
+
+
+@pytest.mark.parametrize("merchant", ["Taxi vendor", "Taxi"])
+async def test_append_diagnostics_locate_literal_mismatch_before_persistence(merchant):
+    """Submitted values survive preparation and execution; altered intent still fails."""
+    store = LedgerStore(POSTGRES_TEST_URL)
+    await store.connect()
+    try:
+        async with seeded_capability_case(store, "append") as fixture:
+            agent = MainAgent(
+                CapabilityModel("append", merchant),
+                CatalogueService(CatalogueStore(store.pool)),
+                operations=OperationService(store),
+            )
+            records = await run_case_inprocess(
+                None,
+                None,
+                None,
+                fixture.case,
+                spreadsheet_ids={"active": fixture.workbook_id},
+                sut=MainAgentSUT(agent),
+                observe_state=fixture.observe_state,
+            )
+            observation = records[0].view.append_attempts[0]
+            proposal = json.loads(
+                await store.pool.fetchval(
+                    "SELECT request_payload FROM ledger_table_operation WHERE user_id = $1 AND idempotency_key = $2",
+                    fixture.case.turns[0].as_user,
+                    observation["operation_ref"],
+                )
+            )
+            assert observation["arguments"]["records"][0]["Merchant"] == merchant
+            assert proposal["records"] == observation["arguments"]["records"]
+            assert records[0].view.ledger_state["Claims"][-1][1] == merchant
+            assert records[0].result.passed == (merchant == "Taxi vendor")
+            assert records[0].view.operation_receipts[0]["status"] == "committed"
     finally:
         await store.close()
