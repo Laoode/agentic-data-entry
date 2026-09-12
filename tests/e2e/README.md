@@ -21,7 +21,7 @@ misses into failures when you want a gate.
 ## Quick start
 
 ```bash
-docker compose --profile sandbox up -d postgres-sandbox   # once
+docker compose --profile sandbox up -d postgres-sandbox redis minio
 MOCK_KIE=true SHEETS_BACKEND=ledger uv run pytest tests/e2e -q
 ```
 
@@ -55,10 +55,23 @@ Schemas need no migration step: the app and ledger tables are
 database populates itself. `scripts/sandbox_init.sql` adds only the `vector`
 extension, which the application role cannot create for itself.
 
+Do not use `docker compose --profile sandbox down -v` as a sandbox-only reset.
+It can remove other project volumes, including development data.
+
+### Service checks without model calls
+
 ```bash
-docker compose --profile sandbox down -v    # wipe the sandbox entirely
-docker compose --profile sandbox up -d      # rebuild it empty
+E2E_INFRA_CHECK=1 uv run pytest tests/e2e/test_sandbox_services.py -q
 ```
+
+These opt-in checks require sandbox mode and fail when a service is unavailable.
+They read PostgreSQL without changing tables and test Redis and MinIO through
+the application adapters. Each write uses a unique probe key or object and
+removes it afterwards. They do not reset tables or flush Redis. The MinIO check
+creates the sandbox bucket if absent and leaves the bucket in place.
+
+Passing these checks confirms service access, not extraction, queue processing
+or agent behaviour. They make no model calls.
 
 ## Layout
 
